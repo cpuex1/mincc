@@ -36,9 +36,11 @@ library
   build-depends:
       Cabal
     , base >=4.7 && <5
+    , optparse-applicative
+    , text
   default-language: Haskell2010
 
-executable mincc-exe
+executable mincc
   main-is: Main.hs
   other-modules:
       Paths_mincc
@@ -51,6 +53,8 @@ executable mincc-exe
       Cabal
     , base >=4.7 && <5
     , mincc
+    , optparse-applicative
+    , text
   default-language: Haskell2010
 
 test-suite mincc-test
@@ -67,4 +71,6 @@ test-suite mincc-test
       Cabal
     , base >=4.7 && <5
     , mincc
+    , optparse-applicative
+    , text
   default-language: Haskell2010

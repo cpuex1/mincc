@@ -18,7 +18,7 @@
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2023-01-01.yaml
 resolver:
-  ghc-9.8.2
+  nightly-2024-10-11
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
