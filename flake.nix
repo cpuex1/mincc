@@ -19,6 +19,7 @@
             hsPkgs.ghc
             hsPkgs.haskell-language-server
             hsPkgs.cabal-install
+            hsPkgs.fourmolu
           ];
         };
       }
