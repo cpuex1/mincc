@@ -1,10 +1,10 @@
 name:                mincc
 version:             0.1.0.0
-github:              "githubuser/mincc"
+github:              "cpuex1/mincc"
 license:             BSD-3-Clause
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2024 Author name here"
+author:              "Akihisa Yagi"
+maintainer:          "caphosra@gmail.com"
+copyright:           "2024 Akihisa Yagi"
 
 extra-source-files:
 - README.md
@@ -17,7 +17,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/githubuser/mincc#readme>
+description: A compiler that transforms MinCaml sources into RINANA, an original assembly language inspired by RISC-V.
 
 dependencies:
 - base >= 4.7 && < 5

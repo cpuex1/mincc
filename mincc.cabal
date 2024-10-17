@@ -6,12 +6,12 @@ cabal-version: 2.2
 
 name:           mincc
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/mincc#readme>
-homepage:       https://github.com/githubuser/mincc#readme
-bug-reports:    https://github.com/githubuser/mincc/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2024 Author name here
+description:    A compiler that transforms MinCaml sources into RINANA, an original assembly language inspired by RISC-V.
+homepage:       https://github.com/cpuex1/mincc#readme
+bug-reports:    https://github.com/cpuex1/mincc/issues
+author:         Akihisa Yagi
+maintainer:     caphosra@gmail.com
+copyright:      2024 Akihisa Yagi
 license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
@@ -21,7 +21,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/mincc
+  location: https://github.com/cpuex1/mincc
 
 library
   exposed-modules:
