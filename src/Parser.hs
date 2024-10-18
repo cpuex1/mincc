@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (parseLiteral, parseIdent, parseUnaryOp) where
+module Parser (parseLiteral, parseIdent, parseExpr) where
 
 import Data.Char (isDigit)
 import Data.Text (cons, pack)
@@ -66,11 +66,201 @@ parseIdent =
             )
             <?> "not an identifier"
 
--- | A unary operator parser
-parseUnaryOp :: Parser (SourcePos, UnaryOp)
-parseUnaryOp = do
-    pos <- getPosition
-    try (string "not" >> return (pos, Not))
-        <|> try (string "-." >> return (pos, FNeg))
-        <|> try (string "-" >> return (pos, Neg))
-        <?> "not an unary operator"
+parseRelationBinOp :: Parser BinaryOp
+parseRelationBinOp =
+    try (string "=" >> return (RelationOp Eq))
+        <|> try (string "<=" >> return (RelationOp Le))
+        <|> try (string ">=" >> return (RelationOp Ge))
+        <|> try (string "<>" >> return (RelationOp Ne))
+        <|> try (string "<" >> return (RelationOp Lt))
+        <|> try (string ">" >> return (RelationOp Gt))
+        <?> "not a relation binary operator"
+
+parseTermOp :: Parser BinaryOp
+parseTermOp =
+    try (string "+." >> return (FloatOp FAdd))
+        <|> try (string "-." >> return (FloatOp FSub))
+        <|> try (string "+" >> return (IntOp Add))
+        <|> try (string "-" >> return (IntOp Sub))
+        <?> "not a term operator"
+
+parseFactorOp :: Parser BinaryOp
+parseFactorOp =
+    try (string "*." >> return (FloatOp FMul))
+        <|> try (string "/." >> return (FloatOp FDiv))
+        <|> try (string "*" >> return (IntOp Mul))
+        <|> try (string "/" >> return (IntOp Div))
+        <?> "not a factor operator"
+
+parseExpr :: Parser Expr
+parseExpr = do
+    parseExprWithPrecedence 8
+  where
+    parseExprWithPrecedence :: Int -> Parser Expr
+    parseExprWithPrecedence precedence
+        | precedence > 8 = error "Invalid precedence"
+        | precedence == 8 =
+            -- Then
+            try
+                ( getPosition >>= \pos ->
+                    chainr1 (parseExprWithPrecedence 7) (spaces >> char ';' >> spaces >> return (\left right -> (pos, Then left right)))
+                )
+                <|> parseExprWithPrecedence 7
+        | precedence == 7 =
+            -- If
+            try
+                ( getPosition >>= \pos ->
+                    string "if"
+                        >> spaces
+                        >> parseExprWithPrecedence 7
+                        >>= \cond ->
+                            spaces
+                                >> string "then"
+                                >> spaces
+                                >> parseExprWithPrecedence 7
+                                >>= \then' ->
+                                    spaces
+                                        >> string "else"
+                                        >> spaces
+                                        >> parseExprWithPrecedence 7
+                                        >>= \else' -> return (pos, If cond then' else')
+                )
+                <|> parseExprWithPrecedence 6
+        | precedence == 6 =
+            -- Set
+            try
+                ( getPosition
+                    >>= \pos ->
+                        parseSimpleExpr
+                            >>= \left ->
+                                spaces
+                                    >> string "<-"
+                                    >> spaces
+                                    >> parseExprWithPrecedence 5
+                                    >>= \right -> return (pos, Set left right)
+                )
+                <|> parseExprWithPrecedence 5
+        | precedence == 5 =
+            -- RelationBinOp
+            try
+                ( getPosition
+                    >>= \pos ->
+                        chainl1
+                            (parseExprWithPrecedence 4)
+                            ( spaces
+                                >> parseRelationBinOp
+                                >>= \op -> spaces >> return (\left right -> (pos, Binary op left right))
+                            )
+                )
+                <|> parseExprWithPrecedence 4
+        | precedence == 4 =
+            -- TermOp
+            try
+                ( getPosition
+                    >>= \pos ->
+                        chainl1
+                            (parseExprWithPrecedence 3)
+                            ( spaces
+                                >> parseTermOp
+                                >>= \op -> spaces >> return (\left right -> (pos, Binary op left right))
+                            )
+                )
+                <|> parseExprWithPrecedence 3
+        | precedence == 3 =
+            -- FactorOp
+            try
+                ( getPosition
+                    >>= \pos ->
+                        chainl1
+                            (parseExprWithPrecedence 2)
+                            ( spaces
+                                >> parseFactorOp
+                                >>= \op -> spaces >> return (\left right -> (pos, Binary op left right))
+                            )
+                )
+                <|> parseExprWithPrecedence 2
+        | precedence == 2 =
+            getPosition >>= \pos ->
+                -- FNeg
+                try
+                    ( string "-."
+                        >> spaces
+                        >> parseExprWithPrecedence 2
+                        >>= \expr -> return (pos, Unary FNeg expr)
+                    )
+                    -- Neg
+                    <|> try
+                        ( char '-'
+                            >> spaces
+                            >> parseExprWithPrecedence 2
+                            >>= \expr -> return (pos, Unary Neg expr)
+                        )
+                    <|> parseExprWithPrecedence 1
+        | precedence == 1 =
+            getPosition >>= \pos ->
+                -- App
+                try
+                    ( parseSimpleExpr
+                        >>= \func -> sepBy1 parseSimpleExpr spaces
+                        >>= \exprs -> return (pos, App func exprs)
+                    )
+                    -- ArrayMake
+                    <|> try
+                        ( string "Array.create"
+                            >> spaces
+                            >> parseSimpleExpr
+                            >>= \expr1 ->
+                                spaces
+                                    >> parseExprWithPrecedence 1
+                                    >>= \expr2 -> return (pos, ArrayMake expr1 expr2)
+                        )
+                    -- Not
+                    <|> try
+                        ( string "not"
+                            >> spaces
+                            >> parseExprWithPrecedence 1
+                            >>= \expr -> return (pos, Unary Not expr)
+                        )
+                    <|> parseExprWithPrecedence 0
+        | precedence == 0 = parseSimpleExpr
+        | otherwise = error "Invalid precedence"
+
+    parseSimpleExpr :: Parser Expr
+    parseSimpleExpr = do
+        pos <- getPosition
+        -- Expr with parentheses
+        expr <-
+            try (char '(' >> spaces >> parseExpr >>= \expr -> spaces >> char ')' >> return expr)
+                -- Tuple
+                <|> try
+                    ( char '('
+                        >> sepBy1 parseExpr (spaces >> char ',' >> spaces)
+                        >>= \exprs -> char ')' >> return (pos, Tuple exprs)
+                    )
+                -- Const
+                <|> try (parseLiteral >>= \lit -> return (pos, Const lit))
+                -- Var
+                <|> try (parseIdent >>= \ident -> return (pos, Var ident))
+        -- Remaining tokens can be components of Get.
+        parseSimpleExpr' expr
+      where
+        -- \| This function was implemented in order to remove a left recursion.
+        -- Since `persec` uses recursive decent parsing, the original implementation never halts.
+        parseSimpleExpr' :: Expr -> Parser Expr
+        parseSimpleExpr' expr1 = do
+            -- Get
+            try
+                ( getPosition
+                    >>= \pos ->
+                        char '.'
+                            >> spaces
+                            >> char '('
+                            >> spaces
+                            >> parseExpr
+                            >>= \expr2 ->
+                                spaces
+                                    >> char ')'
+                                    >> parseSimpleExpr' (pos, Get expr1 expr2)
+                )
+                -- ... or None
+                <|> return expr1

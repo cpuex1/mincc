@@ -1,6 +1,18 @@
-module Syntax (Literal, LiteralKind (LUnit, LBool, LInt, LFloat), UnaryOp (Not, Neg, FNeg), Ident) where
-import Text.Parsec.Pos (SourcePos)
+module Syntax (
+    Literal,
+    LiteralKind (LUnit, LBool, LInt, LFloat),
+    UnaryOp (Not, Neg, FNeg),
+    RelationBinOp (Eq, Le, Ge, Ne, Lt, Gt),
+    IntBinOp (Add, Sub, Mul, Div),
+    FloatBinOp (FAdd, FSub, FMul, FDiv),
+    BinaryOp (RelationOp, IntOp, FloatOp),
+    Ident,
+    Expr,
+    ExprKind (Const, Unary, Binary, If, Let, Then, Var, App, Tuple, ArrayMake, Get, Set),
+) where
+
 import Data.Text (Text)
+import Text.Parsec.Pos (SourcePos)
 
 type Literal = (SourcePos, LiteralKind)
 
@@ -17,20 +29,21 @@ data UnaryOp
     | FNeg
     deriving (Show, Eq)
 
-data RelationBinOp = Eq | Le | Ge | Ne | Lt | Gt
-data IntBinOp = Add | Sub | Mul | Div
-data FloatBinOp = FAdd | FSub | FMul | FDiv
+data RelationBinOp = Eq | Le | Ge | Ne | Lt | Gt deriving (Show, Eq)
+data IntBinOp = Add | Sub | Mul | Div  deriving (Show, Eq)
+data FloatBinOp = FAdd | FSub | FMul | FDiv  deriving (Show, Eq)
 data BinaryOp
     = RelationOp {relop :: RelationBinOp}
     | IntOp {intop :: IntBinOp}
     | FloatOp {floatop :: FloatBinOp}
+    deriving (Show, Eq)
 
 type Ident = (SourcePos, IdentKind)
 type IdentKind = Text
 
-data Pattern = PVar { var :: Ident, args :: [Ident] } | PTuple [Ident]
+data Pattern = PVar {var :: Ident, args :: [Ident]} | PTuple [Ident]  deriving (Show, Eq)
 
-data LetBinder = LetBinder {pat :: Pattern, value :: Expr}
+data LetBinder = LetBinder {pat :: Pattern, value :: Expr}  deriving (Show, Eq)
 
 type Expr = (SourcePos, ExprKind)
 
@@ -39,11 +52,12 @@ data ExprKind
     | Unary {unop :: UnaryOp, child :: Expr}
     | Binary {binop :: BinaryOp, left :: Expr, right :: Expr}
     | If {cond :: Expr, then' :: Expr, else' :: Expr}
-    | Let { binder :: LetBinder, body :: Expr }
-    | Then { expr1 :: Expr, expr2 :: Expr }
-    | Var { ident :: Ident }
-    | App { expr1 :: Expr, expr2 :: Expr }
-    | Tuple { exprs :: [Expr] }
-    | ArrayMake { expr1 :: Expr, expr2 :: Expr }
-    | Get { expr1 :: Expr, expr2 :: Expr }
-    | Set { expr1 :: Expr, expr2 :: Expr }
+    | Let {binder :: LetBinder, body :: Expr}
+    | Then {expr1 :: Expr, expr2 :: Expr}
+    | Var {ident :: Ident}
+    | App {expr1 :: Expr, exprs :: [Expr]}
+    | Tuple {exprs :: [Expr]}
+    | ArrayMake {expr1 :: Expr, expr2 :: Expr}
+    | Get {expr1 :: Expr, expr2 :: Expr}
+    | Set {expr1 :: Expr, expr2 :: Expr}
+    deriving (Show, Eq)

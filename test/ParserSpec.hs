@@ -33,12 +33,3 @@ spec = do
             parse parseIdent "" "CamelCase" `shouldSatisfy` isLeft
         it "Invalid2" $ do
             parse parseIdent "" "123Doom" `shouldSatisfy` isLeft
-    describe "parseUnaryOp" $ do
-        it "Not" $ do
-            parse parseUnaryOp "" "not" `shouldBe` Right (newPos "" 1 1,  Not)
-        it "Neg" $ do
-            parse parseUnaryOp "" "-" `shouldBe` Right (newPos "" 1 1,  Neg)
-        it "FNeg" $ do
-            parse parseUnaryOp "" "-." `shouldBe` Right (newPos "" 1 1,  FNeg)
-        it "Never" $ do
-            parse parseUnaryOp "" "*" `shouldSatisfy` isLeft
