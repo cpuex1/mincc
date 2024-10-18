@@ -1,4 +1,4 @@
-module Syntax (UnaryOp (Not, Neg, FNeg)) where
+module Syntax (LiteralKind (LUnit, LBool, LInt, LFloat), UnaryOp (Not, Neg, FNeg)) where
 
 data LiteralKind
     = LUnit
