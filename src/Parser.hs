@@ -94,16 +94,37 @@ parseFactorOp =
 
 parseExpr :: Parser Expr
 parseExpr = do
-    parseExprWithPrecedence 8
+    parseExprWithPrecedence 9
   where
     parseExprWithPrecedence :: Int -> Parser Expr
     parseExprWithPrecedence precedence
-        | precedence > 8 = error "Invalid precedence"
+        | precedence > 9 = error "Invalid precedence"
+        | precedence == 9 =
+            -- Let
+            try
+                ( getPosition >>= \pos ->
+                    string "let"
+                        >> spaces
+                        >> parseLetBinder
+                        >>= \binder ->
+                            spaces
+                                >> string "in"
+                                >> spaces
+                                >> parseExprWithPrecedence 9
+                                >>= \expr -> return (pos, Let binder expr)
+                )
+                <|> parseExprWithPrecedence 8
         | precedence == 8 =
             -- Then
             try
                 ( getPosition >>= \pos ->
-                    chainr1 (parseExprWithPrecedence 7) (spaces >> char ';' >> spaces >> return (\left right -> (pos, Then left right)))
+                    chainr1
+                        (parseExprWithPrecedence 7)
+                        ( spaces
+                            >> char ';'
+                            >> spaces
+                            >> return (\left right -> (pos, Then left right))
+                        )
                 )
                 <|> parseExprWithPrecedence 7
         | precedence == 7 =
@@ -201,8 +222,9 @@ parseExpr = do
                 -- App
                 try
                     ( parseSimpleExpr
-                        >>= \func -> sepBy1 parseSimpleExpr spaces
-                        >>= \exprs -> return (pos, App func exprs)
+                        >>= \func ->
+                            sepBy1 parseSimpleExpr spaces
+                                >>= \exprs -> return (pos, App func exprs)
                     )
                     -- ArrayMake
                     <|> try
@@ -264,3 +286,35 @@ parseExpr = do
                 )
                 -- ... or None
                 <|> return expr1
+
+    parseLetBinder :: Parser LetBinder
+    parseLetBinder =
+        parsePattern
+            >>= \pat ->
+                spaces
+                    >> char '='
+                    >> spaces
+                    >> parseExpr
+                    >>= \value -> return $ LetBinder pat value
+
+    parsePattern :: Parser Pattern
+    parsePattern =
+        -- PRec
+        try
+            ( string "rec"
+                >> spaces
+                >> parseIdent
+                >>= \ident ->
+                    spaces
+                        >> sepBy1 parseIdent spaces
+                        >>= \idents -> return (PRec ident idents)
+            )
+            -- PTuple
+            <|> try
+                ( char '('
+                    >> sepBy1 parseIdent spaces
+                    >>= \idents -> char ')' >> return (PTuple idents)
+                )
+            -- PVar
+            <|> try (parseIdent >>= \ident -> return (PVar ident))
+            <?> "not a pattern"

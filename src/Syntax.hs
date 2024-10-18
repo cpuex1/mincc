@@ -7,6 +7,8 @@ module Syntax (
     FloatBinOp (FAdd, FSub, FMul, FDiv),
     BinaryOp (RelationOp, IntOp, FloatOp),
     Ident,
+    Pattern (PVar, PRec, PTuple),
+    LetBinder (LetBinder),
     Expr,
     ExprKind (Const, Unary, Binary, If, Let, Then, Var, App, Tuple, ArrayMake, Get, Set),
 ) where
@@ -30,8 +32,8 @@ data UnaryOp
     deriving (Show, Eq)
 
 data RelationBinOp = Eq | Le | Ge | Ne | Lt | Gt deriving (Show, Eq)
-data IntBinOp = Add | Sub | Mul | Div  deriving (Show, Eq)
-data FloatBinOp = FAdd | FSub | FMul | FDiv  deriving (Show, Eq)
+data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq)
+data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq)
 data BinaryOp
     = RelationOp {relop :: RelationBinOp}
     | IntOp {intop :: IntBinOp}
@@ -41,9 +43,13 @@ data BinaryOp
 type Ident = (SourcePos, IdentKind)
 type IdentKind = Text
 
-data Pattern = PVar {var :: Ident, args :: [Ident]} | PTuple [Ident]  deriving (Show, Eq)
+data Pattern
+    = PVar Ident
+    | PRec Ident [Ident]
+    | PTuple [Ident]
+    deriving (Show, Eq)
 
-data LetBinder = LetBinder {pat :: Pattern, value :: Expr}  deriving (Show, Eq)
+data LetBinder = LetBinder {pat :: Pattern, value :: Expr} deriving (Show, Eq)
 
 type Expr = (SourcePos, ExprKind)
 
