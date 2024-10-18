@@ -17,7 +17,7 @@ spec = do
         it "LBool" $ do
             parse parseLiteral "" "true" `shouldBe` Right (newPos "" 1 1, LBool True)
         it "LInt" $ do
-            parse parseLiteral "" "245" `shouldBe` Right (newPos "" 1 1, LInt 245)
+            parse parseLiteral "" "123" `shouldBe` Right (newPos "" 1 1, LInt 123)
         it "LFloat1" $ do
             parse parseLiteral "" "3.1415" `shouldBe` Right (newPos "" 1 1, LFloat 3.1415)
         it "LFloat2" $ do
@@ -25,7 +25,14 @@ spec = do
         it "LFloat3" $ do
             parse parseLiteral "" "123.E-12" `shouldBe` Right (newPos "" 1 1, LFloat 123e-12)
         it "Never" $ do
-            parse parseLiteral "" ".45" `shouldSatisfy` isLeft
+            parse parseLiteral "" ".99" `shouldSatisfy` isLeft
+    describe "parseIdent" $ do
+        it "Valid" $ do
+            parse parseIdent "" "_test314" `shouldBe` Right (newPos "" 1 1, "_test314")
+        it "Invalid1" $ do
+            parse parseIdent "" "CamelCase" `shouldSatisfy` isLeft
+        it "Invalid2" $ do
+            parse parseIdent "" "123Doom" `shouldSatisfy` isLeft
     describe "parseUnaryOp" $ do
         it "Not" $ do
             parse parseUnaryOp "" "not" `shouldBe` Right (newPos "" 1 1,  Not)

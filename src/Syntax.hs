@@ -1,4 +1,8 @@
-module Syntax (LiteralKind (LUnit, LBool, LInt, LFloat), UnaryOp (Not, Neg, FNeg)) where
+module Syntax (Literal, LiteralKind (LUnit, LBool, LInt, LFloat), UnaryOp (Not, Neg, FNeg), Ident) where
+import Text.Parsec.Pos (SourcePos)
+import Data.Text (Text)
+
+type Literal = (SourcePos, LiteralKind)
 
 data LiteralKind
     = LUnit
@@ -21,8 +25,25 @@ data BinaryOp
     | IntOp {intop :: IntBinOp}
     | FloatOp {floatop :: FloatBinOp}
 
+type Ident = (SourcePos, IdentKind)
+type IdentKind = Text
+
+data Pattern = PVar { var :: Ident, args :: [Ident] } | PTuple [Ident]
+
+data LetBinder = LetBinder {pat :: Pattern, value :: Expr}
+
+type Expr = (SourcePos, ExprKind)
+
 data ExprKind
-    = Const {lit :: LiteralKind}
-    | Unary {unop :: UnaryOp, child :: ExprKind}
-    | Binary {binop :: BinaryOp, left :: ExprKind, right :: ExprKind}
-    | If {cond :: ExprKind, then' :: ExprKind, else' :: ExprKind}
+    = Const {lit :: Literal}
+    | Unary {unop :: UnaryOp, child :: Expr}
+    | Binary {binop :: BinaryOp, left :: Expr, right :: Expr}
+    | If {cond :: Expr, then' :: Expr, else' :: Expr}
+    | Let { binder :: LetBinder, body :: Expr }
+    | Then { expr1 :: Expr, expr2 :: Expr }
+    | Var { ident :: Ident }
+    | App { expr1 :: Expr, expr2 :: Expr }
+    | Tuple { exprs :: [Expr] }
+    | ArrayMake { expr1 :: Expr, expr2 :: Expr }
+    | Get { expr1 :: Expr, expr2 :: Expr }
+    | Set { expr1 :: Expr, expr2 :: Expr }

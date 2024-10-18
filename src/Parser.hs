@@ -1,14 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (parseLiteral, parseUnaryOp) where
+module Parser (parseLiteral, parseIdent, parseUnaryOp) where
 
 import Data.Char (isDigit)
+import Data.Text (cons, pack)
 import Syntax
 import Text.Parsec
 import Text.Parsec.Text (Parser)
 
 -- | A literal parser
-parseLiteral :: Parser (SourcePos, LiteralKind)
+parseLiteral :: Parser Literal
 parseLiteral =
     getPosition >>= \pos ->
         try (char '(' >> spaces >> char ')' >> return (pos, LUnit))
@@ -52,6 +53,18 @@ parseLiteral =
                         many digit
                             >>= \num -> return $ "e" ++ sign ++ num
                 )
+
+-- | An identifier parser
+parseIdent :: Parser Ident
+parseIdent =
+    getPosition >>= \pos ->
+        try
+            ( (lower <|> char '_')
+                >>= \c ->
+                    many (digit <|> letter <|> char '_')
+                        >>= \name -> return (pos, cons c $ pack name)
+            )
+            <?> "not an identifier"
 
 -- | A unary operator parser
 parseUnaryOp :: Parser (SourcePos, UnaryOp)
