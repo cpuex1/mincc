@@ -1,13 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (parseLiteral, parseIdent, parsePattern, parseLetBinder, parseSimpleExpr, parseExpr) where
+module Parser (lexeme, parseLiteral, parseIdent, parsePattern, parseLetBinder, parseSimpleExpr, parseExpr) where
 
 import Control.Monad.Combinators.Expr
-import Data.Char (isDigit)
-import Data.Text (Text, cons, pack, unpack)
+import Data.Char (isAlphaNum, isDigit)
+import Data.Text (Text, cons, unpack)
 import Syntax
 import Text.Megaparsec
 import Text.Megaparsec.Char
+import qualified Text.Megaparsec.Char.Lexer as L
 
 type Parser = Parsec (ErrorFancy Text) Text
 
@@ -17,16 +18,54 @@ The words "true" and "false" are regarded as literals.
 reservedWords :: [Text]
 reservedWords = ["let", "in", "rec", "if", "then", "else", "not"]
 
+-- | A space consumer
+spaced :: Parser ()
+spaced = L.space space1 empty (L.skipBlockCommentNested "(*" "*)")
+
+{- | A lexeme parser.
+Consumes trailing white spaces.
+-}
+lexeme :: Parser a -> Parser a
+lexeme = L.lexeme spaced
+
+symbol :: Text -> Parser Text
+symbol = L.symbol spaced
+
+cSymbol :: Char -> Parser Char
+cSymbol = lexeme . char
+
+-- | An identifier parser
+parseIdent :: Parser Ident
+parseIdent =
+    try
+        ( lexeme $ do
+            pos <- getSourcePos
+            firstChar <- lowerChar <|> char '_'
+            name <- takeWhileP (Just "an identifier") (\c -> isAlphaNum c || c == '_')
+            let ident = cons firstChar name
+            if ident `elem` reservedWords
+                then customFailure $ ErrorCustom "reserved word"
+                else return (pos, ident)
+        )
+        <?> "an identifier"
+
+-- | A specified identifier parser
+parseKeyword :: Text -> Parser ()
+parseKeyword word =
+    lexeme $ string word >> notFollowedBy (alphaNumChar <|> char '_')
+
 -- | A literal parser
 parseLiteral :: Parser Literal
 parseLiteral =
-    getSourcePos >>= \pos ->
-        try (char '(' >> space >> char ')' >> return (pos, LUnit))
-            <|> try (string "true" >> return (pos, LBool True))
-            <|> try (string "false" >> return (pos, LBool False))
-            <|> try (parseFloat >>= \num -> return (pos, LFloat num))
-            <|> try (parseNum >>= \num -> return (pos, LInt num))
-            <?> "not a literal"
+    lexeme
+        ( getSourcePos >>= \pos ->
+            try (cSymbol '(' >> cSymbol ')' >> return (pos, LUnit))
+                <|> try (parseKeyword "true" >> return (pos, LBool True))
+                <|> try (parseKeyword "false" >> return (pos, LBool False))
+                <|> try (parseFloat >>= \num -> return (pos, LFloat num))
+                <|> try (parseNum >>= \num -> return (pos, LInt num))
+        )
+        <?> "a literal"
   where
     isNonZero :: Char -> Bool
     isNonZero c = isDigit c && c /= '0'
@@ -37,8 +76,8 @@ parseLiteral =
             <|> try
                 ( do
                     num <- satisfy isNonZero
-                    rest <- many digitChar
-                    return $ num : rest
+                    rest <- takeWhileP Nothing isDigit
+                    return $ num : unpack rest
                 )
 
     parseNum :: Parser Int
@@ -63,67 +102,59 @@ parseLiteral =
                             >>= \num -> return $ "e" ++ unpack sign ++ num
                 )
 
--- | An identifier parser
-parseIdent :: Parser Ident
-parseIdent =
-    try
-        ( do
-            pos <- getSourcePos
-            c <- lowerChar <|> char '_'
-            name <- many (digitChar <|> letterChar <|> char '_')
-            let ident = cons c $ pack name
-            if ident `elem` reservedWords
-                then customFailure $ ErrorCustom "reserved word"
-                else return (pos, ident)
-        )
-        <?> "not an identifier"
-
 parseRelationBinOp :: Parser BinaryOp
 parseRelationBinOp =
-    try (string "=" >> return (RelationOp Eq))
-        <|> try (string "<=" >> return (RelationOp Le))
-        <|> try (string ">=" >> return (RelationOp Ge))
-        <|> try (string "<>" >> return (RelationOp Ne))
-        <|> try (string "<" >> return (RelationOp Lt))
-        <|> try (string ">" >> return (RelationOp Gt))
-        <?> "not a relation binary operator"
+    lexeme
+        ( try (string "=" >> return (RelationOp Eq))
+            <|> try (string "<=" >> return (RelationOp Le))
+            <|> try (string ">=" >> return (RelationOp Ge))
+            <|> try (string "<>" >> return (RelationOp Ne))
+            <|> try (string "<" >> return (RelationOp Lt))
+            <|> try (string ">" >> return (RelationOp Gt))
+        )
+        <?> "a relation binary operator"
 
 parseTermOp :: Parser BinaryOp
 parseTermOp =
-    try (string "+." >> return (FloatOp FAdd))
-        <|> try (string "-." >> return (FloatOp FSub))
-        <|> try (string "+" >> return (IntOp Add))
-        <|> try (string "-" >> return (IntOp Sub))
-        <?> "not a term operator"
+    lexeme
+        ( try (string "+." >> return (FloatOp FAdd))
+            <|> try (string "-." >> return (FloatOp FSub))
+            <|> try (string "+" >> return (IntOp Add))
+            <|> try (string "-" >> return (IntOp Sub))
+        )
+        <?> "a term operator"
 
 parseFactorOp :: Parser BinaryOp
 parseFactorOp =
-    try (string "*." >> return (FloatOp FMul))
-        <|> try (string "/." >> return (FloatOp FDiv))
-        <|> try (string "*" >> return (IntOp Mul))
-        <|> try (string "/" >> return (IntOp Div))
-        <?> "not a factor operator"
+    lexeme
+        ( try (string "*." >> return (FloatOp FMul))
+            <|> try (string "/." >> return (FloatOp FDiv))
+            <|> try (string "*" >> return (IntOp Mul))
+            <|> try (string "/" >> return (IntOp Div))
+        )
+        <?> "a factor operator"
 
 -- | A pattern parser
 parsePattern :: Parser Pattern
 parsePattern =
-    -- PRec
-    try
-        ( string "rec"
-            >> space1
-            >> parseIdent
-            >>= \ident ->
-                some (try (space1 >> parseIdent))
-                    >>= \idents -> return (PRec ident idents)
-        )
-        -- PTuple
-        <|> try
-            ( char '('
-                >> sepBy1 parseIdent (space >> char ',' >> space)
-                >>= \idents -> char ')' >> return (PTuple idents)
+    lexeme
+        ( -- PRec
+          try
+            ( parseKeyword "rec"
+                >> parseIdent
+                >>= \ident ->
+                    some parseIdent
+                        >>= \idents -> return (PRec ident idents)
             )
-        -- PVar
-        <|> try (parseIdent >>= \ident -> return (PVar ident))
+            -- PTuple
+            <|> try
+                ( cSymbol '('
+                    >> sepBy1 parseIdent (cSymbol ',')
+                    >>= \idents -> cSymbol ')' >> return (PTuple idents)
+                )
+            -- PVar
+            <|> try (parseIdent >>= \ident -> return (PVar ident))
+        )
         <?> "not a pattern"
 
 -- | A let binder parser
@@ -131,218 +162,207 @@ parseLetBinder :: Parser LetBinder
 parseLetBinder =
     parsePattern
         >>= \pat ->
-            space
-                >> char '='
-                >> space
+            cSymbol '='
                 >> parseExpr
                 >>= \value -> return $ LetBinder pat value
 
 -- | Parses a simple expression
 parseSimpleExpr :: Parser Expr
-parseSimpleExpr = do
-    pos <- getSourcePos
-    -- Expr with parentheses
-    expr <-
-        try (char '(' >> space >> parseExpr >>= \expr -> space >> char ')' >> return expr)
-            -- Tuple
-            <|> try
-                ( char '('
-                    >> sepBy1 parseExpr (try (space >> char ',' >> space))
-                    >>= \exprs -> char ')' >> return (pos, Tuple exprs)
-                )
-            -- Const
-            <|> try (parseLiteral >>= \lit -> return (pos, Const lit))
-            -- Var
-            <|> try (parseIdent >>= \ident -> return (pos, Var ident))
-    -- Remaining tokens can be components of Get.
-    parseSimpleExpr' expr
+parseSimpleExpr =
+    ( do
+        pos <- getSourcePos
+        -- Expr with parentheses
+        expr <-
+            lexeme $
+                try (between (cSymbol '(') (cSymbol ')') parseExpr)
+                    -- Tuple
+                    <|> try
+                        ( between
+                            (cSymbol '(')
+                            (cSymbol ')')
+                            (sepBy1 parseExpr (cSymbol ','))
+                            >>= \exprs -> return (pos, Tuple exprs)
+                        )
+                    -- Const
+                    <|> try (parseLiteral >>= \lit -> return (pos, Const lit))
+                    -- Var
+                    <|> try (parseIdent >>= \ident -> return (pos, Var ident))
+        -- Remaining tokens can be components of Get.
+        parseSimpleExpr' expr
+    )
+        <?> "a simple expression"
   where
     -- \| This function was implemented in order to remove a left recursion.
     -- Since `persec` uses recursive decent parsing, the original implementation never halts.
     parseSimpleExpr' :: Expr -> Parser Expr
-    parseSimpleExpr' expr1 = do
+    parseSimpleExpr' expr1 =
         -- Get
-        try
-            ( getSourcePos
-                >>= \pos ->
-                    char '.'
-                        >> space
-                        >> char '('
-                        >> space
-                        >> parseExpr
-                        >>= \expr2 ->
-                            space
-                                >> char ')'
-                                >> parseSimpleExpr' (pos, Get expr1 expr2)
-            )
-            -- ... or None
-            <|> return expr1
+        lexeme $
+            try
+                ( getSourcePos
+                    >>= \pos ->
+                        cSymbol '.'
+                            >> between (cSymbol '(') (cSymbol ')') parseExpr
+                            >>= \expr2 -> parseSimpleExpr' (pos, Get expr1 expr2)
+                )
+                -- ... or None
+                <|> return expr1
 
 -- | Parses a general expression
 parseExpr :: Parser Expr
-parseExpr = do
-    parseExprWithPrecedence 9
+parseExpr =
+    do
+        parseExprWithPrecedence 9
+        <?> "expression"
   where
     parseExprWithPrecedence :: Int -> Parser Expr
     parseExprWithPrecedence precedence
         | precedence > 9 = error "Invalid precedence"
         | precedence == 9 =
             -- Let
-            try
-                ( getSourcePos >>= \pos ->
-                    string "let"
-                        >> space
-                        >> parseLetBinder
-                        >>= \binder ->
-                            space
-                                >> string "in"
-                                >> space
-                                >> parseExprWithPrecedence 9
-                                >>= \expr -> return (pos, Let binder expr)
-                )
-                <|> parseExprWithPrecedence 8
+            lexeme $
+                try
+                    ( getSourcePos >>= \pos ->
+                        parseKeyword "let"
+                            >> parseLetBinder
+                            >>= \binder ->
+                                parseKeyword "in"
+                                    >> parseExprWithPrecedence 9
+                                    >>= \expr -> return (pos, Let binder expr)
+                    )
+                    <|> parseExprWithPrecedence 8
         | precedence == 8 =
             -- Then
-            try
-                ( getSourcePos >>= \pos ->
-                    makeExprParser
-                        (parseExprWithPrecedence 7)
-                        [
-                            [ InfixR
-                                ( space
-                                    >> char ';'
-                                    >> space
-                                    >> return (\left right -> (pos, Then left right))
-                                )
+            lexeme $
+                try
+                    ( getSourcePos >>= \pos ->
+                        makeExprParser
+                            (parseExprWithPrecedence 7)
+                            [
+                                [ InfixR
+                                    ( cSymbol ';'
+                                        >> return (\left right -> (pos, Then left right))
+                                    )
+                                ]
                             ]
-                        ]
-                )
-                <|> parseExprWithPrecedence 7
+                    )
+                    <|> parseExprWithPrecedence 7
         | precedence == 7 =
             -- If
-            try
-                ( getSourcePos >>= \pos ->
-                    string "if"
-                        >> space
-                        >> parseExprWithPrecedence 7
-                        >>= \cond ->
-                            space
-                                >> string "then"
-                                >> space
-                                >> parseExprWithPrecedence 7
-                                >>= \then' ->
-                                    space
-                                        >> string "else"
-                                        >> space
-                                        >> parseExprWithPrecedence 7
-                                        >>= \else' -> return (pos, If cond then' else')
-                )
-                <|> parseExprWithPrecedence 6
+            lexeme $
+                try
+                    ( getSourcePos >>= \pos ->
+                        parseKeyword "if"
+                            >> parseExprWithPrecedence 6
+                            >>= \cond ->
+                                parseKeyword "then"
+                                    >> parseExprWithPrecedence 6
+                                    >>= \then' ->
+                                        parseKeyword "else"
+                                            >> parseExprWithPrecedence 6
+                                            >>= \else' -> return (pos, If cond then' else')
+                    )
+                    <|> parseExprWithPrecedence 6
         | precedence == 6 =
             -- Set
-            try
-                ( getSourcePos
-                    >>= \pos ->
-                        parseSimpleExpr
-                            >>= \left ->
-                                space
-                                    >> string "<-"
-                                    >> space
-                                    >> parseExprWithPrecedence 5
-                                    >>= \right -> return (pos, Set left right)
-                )
-                <|> parseExprWithPrecedence 5
+            lexeme $
+                try
+                    ( getSourcePos
+                        >>= \pos ->
+                            parseSimpleExpr
+                                >>= \left ->
+                                    string "<-"
+                                        >> parseExprWithPrecedence 5
+                                        >>= \right -> return (pos, Set left right)
+                    )
+                    <|> parseExprWithPrecedence 5
         | precedence == 5 =
             -- RelationBinOp
-            try
-                ( getSourcePos
-                    >>= \pos ->
-                        makeExprParser
-                            (parseExprWithPrecedence 4)
-                            [
-                                [ InfixL
-                                    ( space
-                                        >> parseRelationBinOp
-                                        >>= \op -> space >> return (\left right -> (pos, Binary op left right))
-                                    )
+            lexeme $
+                try
+                    ( getSourcePos
+                        >>= \pos ->
+                            makeExprParser
+                                (parseExprWithPrecedence 4)
+                                [
+                                    [ InfixL
+                                        ( parseRelationBinOp
+                                            >>= \op -> return (\left right -> (pos, Binary op left right))
+                                        )
+                                    ]
                                 ]
-                            ]
-                )
-                <|> parseExprWithPrecedence 4
+                    )
+                    <|> parseExprWithPrecedence 4
         | precedence == 4 =
             -- TermOp
-            try
-                ( getSourcePos
-                    >>= \pos ->
-                        makeExprParser
-                            (parseExprWithPrecedence 3)
-                            [
-                                [ InfixL
-                                    ( space
-                                        >> parseTermOp
-                                        >>= \op -> space >> return (\left right -> (pos, Binary op left right))
-                                    )
+            lexeme $
+                try
+                    ( getSourcePos
+                        >>= \pos ->
+                            makeExprParser
+                                (parseExprWithPrecedence 3)
+                                [
+                                    [ InfixL
+                                        ( parseTermOp
+                                            >>= \op -> return (\left right -> (pos, Binary op left right))
+                                        )
+                                    ]
                                 ]
-                            ]
-                )
-                <|> parseExprWithPrecedence 3
+                    )
+                    <|> parseExprWithPrecedence 3
         | precedence == 3 =
             -- FactorOp
-            try
-                ( getSourcePos
-                    >>= \pos ->
-                        makeExprParser
-                            (parseExprWithPrecedence 2)
-                            [
-                                [ InfixL
-                                    ( space
-                                        >> parseFactorOp
-                                        >>= \op -> space >> return (\left right -> (pos, Binary op left right))
-                                    )
+            lexeme $
+                try
+                    ( getSourcePos
+                        >>= \pos ->
+                            makeExprParser
+                                (parseExprWithPrecedence 2)
+                                [
+                                    [ InfixL
+                                        ( parseFactorOp
+                                            >>= \op -> return (\left right -> (pos, Binary op left right))
+                                        )
+                                    ]
                                 ]
-                            ]
-                )
-                <|> parseExprWithPrecedence 2
+                    )
+                    <|> parseExprWithPrecedence 2
         | precedence == 2 =
             getSourcePos >>= \pos ->
                 -- FNeg
-                try
-                    ( string "-."
-                        >> space
-                        >> parseExprWithPrecedence 2
-                        >>= \expr -> return (pos, Unary FNeg expr)
-                    )
-                    -- Neg
-                    <|> try
-                        ( char '-'
-                            >> space
+                lexeme $
+                    try
+                        ( symbol "-."
                             >> parseExprWithPrecedence 2
-                            >>= \expr -> return (pos, Unary Neg expr)
+                            >>= \expr -> return (pos, Unary FNeg expr)
                         )
-                    <|> parseExprWithPrecedence 1
+                        -- Neg
+                        <|> try
+                            ( cSymbol '-'
+                                >> parseExprWithPrecedence 2
+                                >>= \expr -> return (pos, Unary Neg expr)
+                            )
+                        <|> parseExprWithPrecedence 1
         | precedence == 1 =
             getSourcePos >>= \pos ->
                 -- App
                 try
                     ( parseSimpleExpr
                         >>= \func ->
-                            many (space1 >> parseSimpleExpr)
+                            some parseSimpleExpr
                                 >>= \exprs -> return (pos, App func exprs)
                     )
                     -- ArrayMake
                     <|> try
-                        ( string "Array.create"
-                            >> space
+                        ( parseKeyword "Array.create"
                             >> parseSimpleExpr
                             >>= \expr1 ->
-                                space
-                                    >> parseExprWithPrecedence 1
+                                parseExprWithPrecedence 1
                                     >>= \expr2 -> return (pos, ArrayMake expr1 expr2)
                         )
                     -- Not
                     <|> try
-                        ( string "not"
-                            >> space
+                        ( parseKeyword "not"
                             >> parseExprWithPrecedence 1
                             >>= \expr -> return (pos, Unary Not expr)
                         )
