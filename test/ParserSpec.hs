@@ -4,10 +4,13 @@ module ParserSpec (spec) where
 
 import Test.Hspec
 import Parser
-import Text.Parsec (parse)
+import Text.Megaparsec (parse)
 import Syntax
-import Text.Parsec.Pos
-import Data.Either (isLeft)
+import Text.Megaparsec.Pos
+import Data.Either (isLeft, isRight)
+
+newPos :: String -> Int -> Int -> SourcePos
+newPos source line col = SourcePos source (mkPos line) (mkPos col)
 
 spec :: Spec
 spec = do

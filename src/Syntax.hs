@@ -14,7 +14,7 @@ module Syntax (
 ) where
 
 import Data.Text (Text)
-import Text.Parsec.Pos (SourcePos)
+import Text.Megaparsec.Pos (SourcePos)
 
 type Literal = (SourcePos, LiteralKind)
 

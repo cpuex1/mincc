@@ -2,22 +2,26 @@
 
 module Parser (parseLiteral, parseIdent, parsePattern, parseLetBinder, parseSimpleExpr, parseExpr) where
 
+import Control.Monad.Combinators.Expr
 import Data.Char (isDigit)
-import Data.Text (Text, cons, pack)
+import Data.Text (Text, cons, pack, unpack)
 import Syntax
-import Text.Parsec
-import Text.Parsec.Text (Parser)
+import Text.Megaparsec
+import Text.Megaparsec.Char
 
--- | Reserved words.
--- The words "true" and "false" are regarded as literals.
+type Parser = Parsec (ErrorFancy Text) Text
+
+{- | Reserved words.
+The words "true" and "false" are regarded as literals.
+-}
 reservedWords :: [Text]
 reservedWords = ["let", "in", "rec", "if", "then", "else", "not"]
 
 -- | A literal parser
 parseLiteral :: Parser Literal
 parseLiteral =
-    getPosition >>= \pos ->
-        try (char '(' >> spaces >> char ')' >> return (pos, LUnit))
+    getSourcePos >>= \pos ->
+        try (char '(' >> space >> char ')' >> return (pos, LUnit))
             <|> try (string "true" >> return (pos, LBool True))
             <|> try (string "false" >> return (pos, LBool False))
             <|> try (parseFloat >>= \num -> return (pos, LFloat num))
@@ -33,7 +37,7 @@ parseLiteral =
             <|> try
                 ( do
                     num <- satisfy isNonZero
-                    rest <- many digit
+                    rest <- many digitChar
                     return $ num : rest
                 )
 
@@ -44,7 +48,7 @@ parseLiteral =
     parseFloat =
         try
             ( parseNumStr >>= \num ->
-                char '.' >> many digit >>= \num2 ->
+                char '.' >> many digitChar >>= \num2 ->
                     option "" parseExp >>= \e ->
                         return $ read $ (if null num2 then num else num ++ "." ++ num2) ++ e
             )
@@ -55,23 +59,22 @@ parseLiteral =
                 ( (char 'e' <|> char 'E')
                     >> option "" (string "+" <|> string "-")
                     >>= \sign ->
-                        many digit
-                            >>= \num -> return $ "e" ++ sign ++ num
+                        many digitChar
+                            >>= \num -> return $ "e" ++ unpack sign ++ num
                 )
 
 -- | An identifier parser
 parseIdent :: Parser Ident
 parseIdent =
-    getPosition >>= \pos ->
+    getSourcePos >>= \pos ->
         try
-            (
-                do
-                    c <- lower <|> char '_'
-                    name <- many (digit <|> letter <|> char '_')
-                    let ident = cons c $ pack name
-                    if ident `elem` reservedWords
-                        then unexpected $ show ident ++ " is a reserved word"
-                        else return (pos, ident)
+            ( do
+                c <- lowerChar <|> char '_'
+                name <- many (digitChar <|> letterChar <|> char '_')
+                let ident = cons c $ pack name
+                if ident `elem` reservedWords
+                    then customFailure $ ErrorCustom "reserved word"
+                    else return (pos, ident)
             )
             <?> "not an identifier"
 
@@ -107,17 +110,17 @@ parsePattern =
     -- PRec
     try
         ( string "rec"
-            >> spaces
+            >> space1
             >> parseIdent
             >>= \ident ->
-                spaces
-                    >> sepBy1 parseIdent spaces
+                space1
+                    >> sepBy1 parseIdent space1
                     >>= \idents -> return (PRec ident idents)
         )
         -- PTuple
         <|> try
             ( char '('
-                >> sepBy1 parseIdent (spaces >> char ',' >> spaces)
+                >> sepBy1 parseIdent (space >> char ',' >> space)
                 >>= \idents -> char ')' >> return (PTuple idents)
             )
         -- PVar
@@ -129,23 +132,23 @@ parseLetBinder :: Parser LetBinder
 parseLetBinder =
     parsePattern
         >>= \pat ->
-            spaces
+            space
                 >> char '='
-                >> spaces
+                >> space
                 >> parseExpr
                 >>= \value -> return $ LetBinder pat value
 
 -- | Parses a simple expression
 parseSimpleExpr :: Parser Expr
 parseSimpleExpr = do
-    pos <- getPosition
+    pos <- getSourcePos
     -- Expr with parentheses
     expr <-
-        try (char '(' >> spaces >> parseExpr >>= \expr -> spaces >> char ')' >> return expr)
+        try (char '(' >> space >> parseExpr >>= \expr -> space >> char ')' >> return expr)
             -- Tuple
             <|> try
                 ( char '('
-                    >> sepBy1 parseExpr (spaces >> char ',' >> spaces)
+                    >> sepBy1 parseExpr (space >> char ',' >> space)
                     >>= \exprs -> char ')' >> return (pos, Tuple exprs)
                 )
             -- Const
@@ -161,15 +164,15 @@ parseSimpleExpr = do
     parseSimpleExpr' expr1 = do
         -- Get
         try
-            ( getPosition
+            ( getSourcePos
                 >>= \pos ->
                     char '.'
-                        >> spaces
+                        >> space
                         >> char '('
-                        >> spaces
+                        >> space
                         >> parseExpr
                         >>= \expr2 ->
-                            spaces
+                            space
                                 >> char ')'
                                 >> parseSimpleExpr' (pos, Get expr1 expr2)
             )
@@ -187,14 +190,14 @@ parseExpr = do
         | precedence == 9 =
             -- Let
             try
-                ( getPosition >>= \pos ->
+                ( getSourcePos >>= \pos ->
                     string "let"
-                        >> spaces
+                        >> space
                         >> parseLetBinder
                         >>= \binder ->
-                            spaces
+                            space
                                 >> string "in"
-                                >> spaces
+                                >> space
                                 >> parseExprWithPrecedence 9
                                 >>= \expr -> return (pos, Let binder expr)
                 )
@@ -202,32 +205,36 @@ parseExpr = do
         | precedence == 8 =
             -- Then
             try
-                ( getPosition >>= \pos ->
-                    chainr1
+                ( getSourcePos >>= \pos ->
+                    makeExprParser
                         (parseExprWithPrecedence 7)
-                        ( spaces
-                            >> char ';'
-                            >> spaces
-                            >> return (\left right -> (pos, Then left right))
-                        )
+                        [
+                            [ InfixR
+                                ( space
+                                    >> char ';'
+                                    >> space
+                                    >> return (\left right -> (pos, Then left right))
+                                )
+                            ]
+                        ]
                 )
                 <|> parseExprWithPrecedence 7
         | precedence == 7 =
             -- If
             try
-                ( getPosition >>= \pos ->
+                ( getSourcePos >>= \pos ->
                     string "if"
-                        >> spaces
+                        >> space
                         >> parseExprWithPrecedence 7
                         >>= \cond ->
-                            spaces
+                            space
                                 >> string "then"
-                                >> spaces
+                                >> space
                                 >> parseExprWithPrecedence 7
                                 >>= \then' ->
-                                    spaces
+                                    space
                                         >> string "else"
-                                        >> spaces
+                                        >> space
                                         >> parseExprWithPrecedence 7
                                         >>= \else' -> return (pos, If cond then' else')
                 )
@@ -235,13 +242,13 @@ parseExpr = do
         | precedence == 6 =
             -- Set
             try
-                ( getPosition
+                ( getSourcePos
                     >>= \pos ->
                         parseSimpleExpr
                             >>= \left ->
-                                spaces
+                                space
                                     >> string "<-"
-                                    >> spaces
+                                    >> space
                                     >> parseExprWithPrecedence 5
                                     >>= \right -> return (pos, Set left right)
                 )
@@ -249,82 +256,94 @@ parseExpr = do
         | precedence == 5 =
             -- RelationBinOp
             try
-                ( getPosition
+                ( getSourcePos
                     >>= \pos ->
-                        chainl1
-                            (parseExprWithPrecedence 4)
-                            ( spaces
+                        makeExprParser
+                        (parseExprWithPrecedence 4)
+                        [
+                            [ InfixL
+                                ( space
                                 >> parseRelationBinOp
-                                >>= \op -> spaces >> return (\left right -> (pos, Binary op left right))
-                            )
+                                >>= \op -> space >> return (\left right -> (pos, Binary op left right))
+                                )
+                            ]
+                        ]
                 )
                 <|> parseExprWithPrecedence 4
         | precedence == 4 =
             -- TermOp
             try
-                ( getPosition
+                ( getSourcePos
                     >>= \pos ->
-                        chainl1
-                            (parseExprWithPrecedence 3)
-                            ( spaces
+                        makeExprParser
+                        (parseExprWithPrecedence 3)
+                        [
+                            [ InfixL
+                                ( space
                                 >> parseTermOp
-                                >>= \op -> spaces >> return (\left right -> (pos, Binary op left right))
-                            )
+                                >>= \op -> space >> return (\left right -> (pos, Binary op left right))
+                                )
+                            ]
+                        ]
                 )
                 <|> parseExprWithPrecedence 3
         | precedence == 3 =
             -- FactorOp
             try
-                ( getPosition
+                ( getSourcePos
                     >>= \pos ->
-                        chainl1
-                            (parseExprWithPrecedence 2)
-                            ( spaces
+                        makeExprParser
+                        (parseExprWithPrecedence 2)
+                        [
+                            [ InfixL
+                                ( space
                                 >> parseFactorOp
-                                >>= \op -> spaces >> return (\left right -> (pos, Binary op left right))
-                            )
+                                >>= \op -> space >> return (\left right -> (pos, Binary op left right))
+                                )
+                            ]
+                        ]
                 )
                 <|> parseExprWithPrecedence 2
         | precedence == 2 =
-            getPosition >>= \pos ->
+            getSourcePos >>= \pos ->
                 -- FNeg
                 try
                     ( string "-."
-                        >> spaces
+                        >> space
                         >> parseExprWithPrecedence 2
                         >>= \expr -> return (pos, Unary FNeg expr)
                     )
                     -- Neg
                     <|> try
                         ( char '-'
-                            >> spaces
+                            >> space
                             >> parseExprWithPrecedence 2
                             >>= \expr -> return (pos, Unary Neg expr)
                         )
                     <|> parseExprWithPrecedence 1
         | precedence == 1 =
-            getPosition >>= \pos ->
+            getSourcePos >>= \pos ->
                 -- App
                 try
                     ( parseSimpleExpr
                         >>= \func ->
-                            sepBy1 parseSimpleExpr spaces
+                            sepBy1 parseSimpleExpr space
                                 >>= \exprs -> return (pos, App func exprs)
                     )
                     -- ArrayMake
                     <|> try
                         ( string "Array.create"
-                            >> spaces
+                            >> space
                             >> parseSimpleExpr
                             >>= \expr1 ->
-                                spaces
+                                space
                                     >> parseExprWithPrecedence 1
                                     >>= \expr2 -> return (pos, ArrayMake expr1 expr2)
                         )
                     -- Not
                     <|> try
                         ( string "not"
-                            >> spaces
+                            >> space
                             >> parseExprWithPrecedence 1
                             >>= \expr -> return (pos, Unary Not expr)
                         )

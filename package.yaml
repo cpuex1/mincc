@@ -24,8 +24,9 @@ dependencies:
 - Cabal
 - text
 - optparse-applicative
-- parsec
+- megaparsec
 - hspec
+- parser-combinators
 
 ghc-options:
 - -Wall
