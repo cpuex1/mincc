@@ -73,3 +73,30 @@ spec = do
             parse parseSimpleExpr "" "( 3 * 4 + 5" `shouldSatisfy` isLeft
         it "Invalid2" $ do
             parse (parseSimpleExpr >>= \expr -> eof >> return expr) "" "314ident" `shouldSatisfy` isLeft
+    describe "parseExpr" $ do
+        it "Let" $ do
+            parse parseExpr "" "let x = let y = 15 in y in x" `shouldSatisfy` isRight
+        it "Then" $ do
+            parse parseExpr "" "314; x; f y" `shouldSatisfy` isRight
+        it "If" $ do
+            parse parseExpr "" "if x = 3 then y else z" `shouldSatisfy` isRight
+        it "Set" $ do
+            parse parseExpr "" "x <- 123 + y" `shouldSatisfy` isRight
+        it "RelationBinOp1" $ do
+            parse parseExpr "" "x < 314 <> true" `shouldSatisfy` isRight
+        it "RelationBinOp2" $ do
+            parse parseExpr "" "x = 3" `shouldSatisfy` isRight
+        it "TermOp" $ do
+            parse parseExpr "" "x + 314 * y" `shouldSatisfy` isRight
+        it "FactorOp" $ do
+            parse parseExpr "" "314 * x * y" `shouldSatisfy` isRight
+        it "FNeg" $ do
+            parse parseExpr "" "-. 3.1415" `shouldSatisfy` isRight
+        it "Neg" $ do
+            parse parseExpr "" "-123" `shouldSatisfy` isRight
+        it "App" $ do
+            parse parseExpr "" "f x y (g a b)" `shouldSatisfy` isRight
+        it "ArrayMake" $ do
+            parse parseExpr "" "Array.create 3 x" `shouldSatisfy` isRight
+        it "Not" $ do
+            parse parseExpr "" "not true" `shouldSatisfy` isRight
