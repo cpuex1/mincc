@@ -1,12 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (parseLiteral, parseIdent, parseExpr) where
+module Parser (parseLiteral, parseIdent, parsePattern, parseLetBinder, parseSimpleExpr, parseExpr) where
 
 import Data.Char (isDigit)
-import Data.Text (cons, pack)
+import Data.Text (Text, cons, pack)
 import Syntax
 import Text.Parsec
 import Text.Parsec.Text (Parser)
+
+-- | Reserved words.
+-- The words "true" and "false" are regarded as literals.
+reservedWords :: [Text]
+reservedWords = ["let", "in", "rec", "if", "then", "else", "not"]
 
 -- | A literal parser
 parseLiteral :: Parser Literal
@@ -59,10 +64,14 @@ parseIdent :: Parser Ident
 parseIdent =
     getPosition >>= \pos ->
         try
-            ( (lower <|> char '_')
-                >>= \c ->
-                    many (digit <|> letter <|> char '_')
-                        >>= \name -> return (pos, cons c $ pack name)
+            (
+                do
+                    c <- lower <|> char '_'
+                    name <- many (digit <|> letter <|> char '_')
+                    let ident = cons c $ pack name
+                    if ident `elem` reservedWords
+                        then unexpected $ show ident ++ " is a reserved word"
+                        else return (pos, ident)
             )
             <?> "not an identifier"
 
@@ -92,6 +101,82 @@ parseFactorOp =
         <|> try (string "/" >> return (IntOp Div))
         <?> "not a factor operator"
 
+-- | A pattern parser
+parsePattern :: Parser Pattern
+parsePattern =
+    -- PRec
+    try
+        ( string "rec"
+            >> spaces
+            >> parseIdent
+            >>= \ident ->
+                spaces
+                    >> sepBy1 parseIdent spaces
+                    >>= \idents -> return (PRec ident idents)
+        )
+        -- PTuple
+        <|> try
+            ( char '('
+                >> sepBy1 parseIdent (spaces >> char ',' >> spaces)
+                >>= \idents -> char ')' >> return (PTuple idents)
+            )
+        -- PVar
+        <|> try (parseIdent >>= \ident -> return (PVar ident))
+        <?> "not a pattern"
+
+-- | A let binder parser
+parseLetBinder :: Parser LetBinder
+parseLetBinder =
+    parsePattern
+        >>= \pat ->
+            spaces
+                >> char '='
+                >> spaces
+                >> parseExpr
+                >>= \value -> return $ LetBinder pat value
+
+-- | Parses a simple expression
+parseSimpleExpr :: Parser Expr
+parseSimpleExpr = do
+    pos <- getPosition
+    -- Expr with parentheses
+    expr <-
+        try (char '(' >> spaces >> parseExpr >>= \expr -> spaces >> char ')' >> return expr)
+            -- Tuple
+            <|> try
+                ( char '('
+                    >> sepBy1 parseExpr (spaces >> char ',' >> spaces)
+                    >>= \exprs -> char ')' >> return (pos, Tuple exprs)
+                )
+            -- Const
+            <|> try (parseLiteral >>= \lit -> return (pos, Const lit))
+            -- Var
+            <|> try (parseIdent >>= \ident -> return (pos, Var ident))
+    -- Remaining tokens can be components of Get.
+    parseSimpleExpr' expr
+  where
+    -- \| This function was implemented in order to remove a left recursion.
+    -- Since `persec` uses recursive decent parsing, the original implementation never halts.
+    parseSimpleExpr' :: Expr -> Parser Expr
+    parseSimpleExpr' expr1 = do
+        -- Get
+        try
+            ( getPosition
+                >>= \pos ->
+                    char '.'
+                        >> spaces
+                        >> char '('
+                        >> spaces
+                        >> parseExpr
+                        >>= \expr2 ->
+                            spaces
+                                >> char ')'
+                                >> parseSimpleExpr' (pos, Get expr1 expr2)
+            )
+            -- ... or None
+            <|> return expr1
+
+-- | Parses a general expression
 parseExpr :: Parser Expr
 parseExpr = do
     parseExprWithPrecedence 9
@@ -246,75 +331,3 @@ parseExpr = do
                     <|> parseExprWithPrecedence 0
         | precedence == 0 = parseSimpleExpr
         | otherwise = error "Invalid precedence"
-
-    parseSimpleExpr :: Parser Expr
-    parseSimpleExpr = do
-        pos <- getPosition
-        -- Expr with parentheses
-        expr <-
-            try (char '(' >> spaces >> parseExpr >>= \expr -> spaces >> char ')' >> return expr)
-                -- Tuple
-                <|> try
-                    ( char '('
-                        >> sepBy1 parseExpr (spaces >> char ',' >> spaces)
-                        >>= \exprs -> char ')' >> return (pos, Tuple exprs)
-                    )
-                -- Const
-                <|> try (parseLiteral >>= \lit -> return (pos, Const lit))
-                -- Var
-                <|> try (parseIdent >>= \ident -> return (pos, Var ident))
-        -- Remaining tokens can be components of Get.
-        parseSimpleExpr' expr
-      where
-        -- \| This function was implemented in order to remove a left recursion.
-        -- Since `persec` uses recursive decent parsing, the original implementation never halts.
-        parseSimpleExpr' :: Expr -> Parser Expr
-        parseSimpleExpr' expr1 = do
-            -- Get
-            try
-                ( getPosition
-                    >>= \pos ->
-                        char '.'
-                            >> spaces
-                            >> char '('
-                            >> spaces
-                            >> parseExpr
-                            >>= \expr2 ->
-                                spaces
-                                    >> char ')'
-                                    >> parseSimpleExpr' (pos, Get expr1 expr2)
-                )
-                -- ... or None
-                <|> return expr1
-
-    parseLetBinder :: Parser LetBinder
-    parseLetBinder =
-        parsePattern
-            >>= \pat ->
-                spaces
-                    >> char '='
-                    >> spaces
-                    >> parseExpr
-                    >>= \value -> return $ LetBinder pat value
-
-    parsePattern :: Parser Pattern
-    parsePattern =
-        -- PRec
-        try
-            ( string "rec"
-                >> spaces
-                >> parseIdent
-                >>= \ident ->
-                    spaces
-                        >> sepBy1 parseIdent spaces
-                        >>= \idents -> return (PRec ident idents)
-            )
-            -- PTuple
-            <|> try
-                ( char '('
-                        >> sepBy1 parseIdent (spaces >> char ',' >> spaces)
-                        >>= \idents -> char ')' >> return (PTuple idents)
-                )
-            -- PVar
-            <|> try (parseIdent >>= \ident -> return (PVar ident))
-            <?> "not a pattern"

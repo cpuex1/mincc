@@ -33,3 +33,16 @@ spec = do
             parse parseIdent "" "CamelCase" `shouldSatisfy` isLeft
         it "Invalid2" $ do
             parse parseIdent "" "123Doom" `shouldSatisfy` isLeft
+        it "Invalid3" $ do
+            parse parseIdent "" "rec" `shouldSatisfy` isLeft
+    describe "parsePattern" $ do
+        it "PRec" $ do
+            parse parsePattern "" "rec x y z" `shouldBe` Right (PRec (newPos "" 1 5, "x") [(newPos "" 1 7, "y"), (newPos "" 1 9, "z")])
+        it "PTuple" $ do
+            parse parsePattern "" "(x, y, z)" `shouldBe` Right (PTuple [(newPos "" 1 2, "x"), (newPos "" 1 5, "y"), (newPos "" 1 8, "z")])
+        it "PVar" $ do
+            parse parsePattern "" "x" `shouldBe` Right (PVar (newPos "" 1 1, "x"))
+        it "Invalid1" $ do
+            parse parsePattern "" "rec x" `shouldSatisfy` isLeft
+        it "Invalid2" $ do
+            parse parsePattern "" "()" `shouldSatisfy` isLeft
