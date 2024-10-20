@@ -4,7 +4,7 @@ module ParserSpec (spec) where
 
 import Test.Hspec
 import Parser
-import Text.Megaparsec (parse)
+import Text.Megaparsec (parse, MonadParsec (eof))
 import Syntax
 import Text.Megaparsec.Pos
 import Data.Either (isLeft, isRight)
@@ -49,3 +49,27 @@ spec = do
             parse parsePattern "" "rec x" `shouldSatisfy` isLeft
         it "Invalid2" $ do
             parse parsePattern "" "()" `shouldSatisfy` isLeft
+    describe "parseLetBinder" $ do
+        it "PRec" $ do
+            parse parsePattern "" "rec x y z = y + z" `shouldSatisfy` isRight
+        it "PTuple" $ do
+            parse parsePattern "" "(x, y, z) = (2, 3, 4)" `shouldSatisfy` isRight
+        it "PVar" $ do
+            parse parsePattern "" "x = f 3" `shouldSatisfy` isRight
+        it "Invalid1" $ do
+            parse parsePattern "" "rec x = 0" `shouldSatisfy` isLeft
+        it "Invalid2" $ do
+            parse parsePattern "" "() = ()" `shouldSatisfy` isLeft
+    describe "parseSimpleExpr" $ do
+        it "Parentheses" $ do
+            parse parseSimpleExpr "" "(3 + 4 * (5 + 6))" `shouldSatisfy` isRight
+        it "Tuple" $ do
+            parse parseSimpleExpr "" "(2, f 3, 4 * 5)" `shouldSatisfy` isRight
+        it "Var" $ do
+            parse parseSimpleExpr "" "ident314" `shouldSatisfy` isRight
+        it "Get" $ do
+            parse parseSimpleExpr "" "ident314.(foo).(bar)" `shouldSatisfy` isRight
+        it "Invalid1" $ do
+            parse parseSimpleExpr "" "( 3 * 4 + 5" `shouldSatisfy` isLeft
+        it "Invalid2" $ do
+            parse (parseSimpleExpr >>= \expr -> eof >> return expr) "" "314ident" `shouldSatisfy` isLeft

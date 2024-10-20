@@ -66,17 +66,17 @@ parseLiteral =
 -- | An identifier parser
 parseIdent :: Parser Ident
 parseIdent =
-    getSourcePos >>= \pos ->
-        try
-            ( do
-                c <- lowerChar <|> char '_'
-                name <- many (digitChar <|> letterChar <|> char '_')
-                let ident = cons c $ pack name
-                if ident `elem` reservedWords
-                    then customFailure $ ErrorCustom "reserved word"
-                    else return (pos, ident)
-            )
-            <?> "not an identifier"
+    try
+        ( do
+            pos <- getSourcePos
+            c <- lowerChar <|> char '_'
+            name <- many (digitChar <|> letterChar <|> char '_')
+            let ident = cons c $ pack name
+            if ident `elem` reservedWords
+                then customFailure $ ErrorCustom "reserved word"
+                else return (pos, ident)
+        )
+        <?> "not an identifier"
 
 parseRelationBinOp :: Parser BinaryOp
 parseRelationBinOp =
@@ -113,8 +113,7 @@ parsePattern =
             >> space1
             >> parseIdent
             >>= \ident ->
-                space1
-                    >> sepBy1 parseIdent space1
+                some (try (space1 >> parseIdent))
                     >>= \idents -> return (PRec ident idents)
         )
         -- PTuple
@@ -148,7 +147,7 @@ parseSimpleExpr = do
             -- Tuple
             <|> try
                 ( char '('
-                    >> sepBy1 parseExpr (space >> char ',' >> space)
+                    >> sepBy1 parseExpr (try (space >> char ',' >> space))
                     >>= \exprs -> char ')' >> return (pos, Tuple exprs)
                 )
             -- Const
@@ -259,15 +258,15 @@ parseExpr = do
                 ( getSourcePos
                     >>= \pos ->
                         makeExprParser
-                        (parseExprWithPrecedence 4)
-                        [
-                            [ InfixL
-                                ( space
-                                >> parseRelationBinOp
-                                >>= \op -> space >> return (\left right -> (pos, Binary op left right))
-                                )
+                            (parseExprWithPrecedence 4)
+                            [
+                                [ InfixL
+                                    ( space
+                                        >> parseRelationBinOp
+                                        >>= \op -> space >> return (\left right -> (pos, Binary op left right))
+                                    )
+                                ]
                             ]
-                        ]
                 )
                 <|> parseExprWithPrecedence 4
         | precedence == 4 =
@@ -276,15 +275,15 @@ parseExpr = do
                 ( getSourcePos
                     >>= \pos ->
                         makeExprParser
-                        (parseExprWithPrecedence 3)
-                        [
-                            [ InfixL
-                                ( space
-                                >> parseTermOp
-                                >>= \op -> space >> return (\left right -> (pos, Binary op left right))
-                                )
+                            (parseExprWithPrecedence 3)
+                            [
+                                [ InfixL
+                                    ( space
+                                        >> parseTermOp
+                                        >>= \op -> space >> return (\left right -> (pos, Binary op left right))
+                                    )
+                                ]
                             ]
-                        ]
                 )
                 <|> parseExprWithPrecedence 3
         | precedence == 3 =
@@ -293,15 +292,15 @@ parseExpr = do
                 ( getSourcePos
                     >>= \pos ->
                         makeExprParser
-                        (parseExprWithPrecedence 2)
-                        [
-                            [ InfixL
-                                ( space
-                                >> parseFactorOp
-                                >>= \op -> space >> return (\left right -> (pos, Binary op left right))
-                                )
+                            (parseExprWithPrecedence 2)
+                            [
+                                [ InfixL
+                                    ( space
+                                        >> parseFactorOp
+                                        >>= \op -> space >> return (\left right -> (pos, Binary op left right))
+                                    )
+                                ]
                             ]
-                        ]
                 )
                 <|> parseExprWithPrecedence 2
         | precedence == 2 =
@@ -327,7 +326,7 @@ parseExpr = do
                 try
                     ( parseSimpleExpr
                         >>= \func ->
-                            sepBy1 parseSimpleExpr space
+                            many (space1 >> parseSimpleExpr)
                                 >>= \exprs -> return (pos, App func exprs)
                     )
                     -- ArrayMake
