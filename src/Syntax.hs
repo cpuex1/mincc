@@ -20,9 +20,9 @@ type Literal = (SourcePos, LiteralKind)
 
 data LiteralKind
     = LUnit
-    | LBool {bval :: Bool}
-    | LInt {ival :: Int}
-    | LFloat {fval :: Float}
+    | LBool Bool
+    | LInt Int
+    | LFloat Float
     deriving (Show, Eq)
 
 data UnaryOp
@@ -35,9 +35,9 @@ data RelationBinOp = Eq | Le | Ge | Ne | Lt | Gt deriving (Show, Eq)
 data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq)
 data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq)
 data BinaryOp
-    = RelationOp {relop :: RelationBinOp}
-    | IntOp {intop :: IntBinOp}
-    | FloatOp {floatop :: FloatBinOp}
+    = RelationOp RelationBinOp
+    | IntOp IntBinOp
+    | FloatOp FloatBinOp
     deriving (Show, Eq)
 
 type Ident = (SourcePos, IdentKind)
@@ -54,16 +54,16 @@ data LetBinder = LetBinder {pat :: Pattern, value :: Expr} deriving (Show, Eq)
 type Expr = (SourcePos, ExprKind)
 
 data ExprKind
-    = Const {lit :: Literal}
-    | Unary {unop :: UnaryOp, child :: Expr}
-    | Binary {binop :: BinaryOp, left :: Expr, right :: Expr}
-    | If {cond :: Expr, then' :: Expr, else' :: Expr}
-    | Let {binder :: LetBinder, body :: Expr}
-    | Then {expr1 :: Expr, expr2 :: Expr}
-    | Var {ident :: Ident}
-    | App {expr1 :: Expr, exprs :: [Expr]}
-    | Tuple {exprs :: [Expr]}
-    | ArrayMake {expr1 :: Expr, expr2 :: Expr}
-    | Get {expr1 :: Expr, expr2 :: Expr}
-    | Set {expr1 :: Expr, expr2 :: Expr}
+    = Const Literal
+    | Unary UnaryOp Expr
+    | Binary BinaryOp Expr Expr
+    | If Expr Expr Expr
+    | Let LetBinder Expr
+    | Then Expr Expr
+    | Var Ident
+    | App Expr [Expr]
+    | Tuple [Expr]
+    | ArrayMake Expr Expr
+    | Get Expr Expr
+    | Set Expr Expr
     deriving (Show, Eq)
