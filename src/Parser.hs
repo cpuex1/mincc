@@ -312,8 +312,8 @@ parseExpr = do
             -- PTuple
             <|> try
                 ( char '('
-                    >> sepBy1 parseIdent spaces
-                    >>= \idents -> char ')' >> return (PTuple idents)
+                        >> sepBy1 parseIdent (spaces >> char ',' >> spaces)
+                        >>= \idents -> char ')' >> return (PTuple idents)
                 )
             -- PVar
             <|> try (parseIdent >>= \ident -> return (PVar ident))
