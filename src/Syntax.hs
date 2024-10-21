@@ -9,7 +9,7 @@ module Syntax (
     Pattern (PVar, PRec, PTuple),
     LetBinder (LetBinder),
     Expr,
-    ExprKind (Const, Unary, Binary, If, Let, Then, Var, App, Tuple, ArrayCreate, Get, Set),
+    ExprKind (Const, Unary, Binary, If, Let, Then, Var, App, Tuple, ArrayCreate, Get, Put),
 ) where
 
 import Data.Text (Text)
@@ -62,5 +62,5 @@ data ExprKind
     | Tuple [Expr]
     | ArrayCreate Expr Expr
     | Get Expr Expr
-    | Set Expr Expr
+    | Put Expr Expr Expr
     deriving (Show, Eq)

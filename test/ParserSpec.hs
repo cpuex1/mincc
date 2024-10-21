@@ -82,8 +82,8 @@ spec = do
             parse parseExpr "" "314; x; f y" `shouldSatisfy` isRight
         it "If" $ do
             parse parseExpr "" "if x = 3 then y else z" `shouldSatisfy` isRight
-        it "Set" $ do
-            parse parseExpr "" "x <- 123 + y" `shouldSatisfy` isRight
+        it "Put" $ do
+            parse (parseExpr <* eof) "" "array.(x) <- 123 + y" `shouldSatisfy` isRight
         it "RelationBinOp1" $ do
             parse parseExpr "" "x < 314 <> true" `shouldSatisfy` isRight
         it "RelationBinOp2" $ do

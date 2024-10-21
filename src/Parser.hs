@@ -263,16 +263,17 @@ parseExpr =
                     )
                     <|> parseExprWithPrecedence 6
         | precedence == 6 =
-            -- Set
+            -- Put
             lexeme $
                 try
-                    ( getSourcePos
-                        >>= \pos ->
-                            parseSimpleExpr
-                                >>= \left ->
-                                    string "<-"
-                                        >> parseExprWithPrecedence 5
-                                        >>= \right -> return (pos, Set left right)
+                    ( do
+                        pos <- getSourcePos
+                        left <- parseSimpleExpr
+                        case left of
+                            (_, Get a idx) -> do
+                                right <- symbol "<-" >> parseExprWithPrecedence 5
+                                return (pos, Put a idx right)
+                            _ -> customFailure $ ErrorCustom "not a Put expression"
                     )
                     <|> parseExprWithPrecedence 5
         | precedence == 5 =
