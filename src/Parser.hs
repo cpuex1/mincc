@@ -58,12 +58,11 @@ parseKeyword word =
 parseLiteral :: Parser Literal
 parseLiteral =
     lexeme
-        ( getSourcePos >>= \pos ->
-            try (cSymbol '(' >> cSymbol ')' >> return (pos, LUnit))
-                <|> try (parseKeyword "true" >> return (pos, LBool True))
-                <|> try (parseKeyword "false" >> return (pos, LBool False))
-                <|> try (parseFloat >>= \num -> return (pos, LFloat num))
-                <|> try (parseNum >>= \num -> return (pos, LInt num))
+        ( try (cSymbol '(' >> cSymbol ')' >> return LUnit)
+            <|> try (parseKeyword "true" >> return (LBool True))
+            <|> try (parseKeyword "false" >> return (LBool False))
+            <|> try (parseFloat >>= \num -> return $ LFloat num)
+            <|> try (parseNum >>= \num -> return $ LInt num)
         )
         <?> "a literal"
   where
@@ -352,13 +351,13 @@ parseExpr =
                             some parseSimpleExpr
                                 >>= \exprs -> return (pos, App func exprs)
                     )
-                    -- ArrayMake
+                    -- ArrayCreate
                     <|> try
                         ( parseKeyword "Array.create"
                             >> parseSimpleExpr
                             >>= \expr1 ->
                                 parseExprWithPrecedence 1
-                                    >>= \expr2 -> return (pos, ArrayMake expr1 expr2)
+                                    >>= \expr2 -> return (pos, ArrayCreate expr1 expr2)
                         )
                     -- Not
                     <|> try

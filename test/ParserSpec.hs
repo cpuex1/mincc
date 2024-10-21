@@ -16,17 +16,17 @@ spec :: Spec
 spec = do
     describe "parseLiteral" $ do
         it "LUnit" $ do
-            parse parseLiteral "" "( )" `shouldBe` Right (newPos "" 1 1, LUnit)
+            parse parseLiteral "" "( )" `shouldBe` Right LUnit
         it "LBool" $ do
-            parse parseLiteral "" "true" `shouldBe` Right (newPos "" 1 1, LBool True)
+            parse parseLiteral "" "true" `shouldBe` Right (LBool True)
         it "LInt" $ do
-            parse parseLiteral "" "123" `shouldBe` Right (newPos "" 1 1, LInt 123)
+            parse parseLiteral "" "123" `shouldBe` Right (LInt 123)
         it "LFloat1" $ do
-            parse parseLiteral "" "3.1415" `shouldBe` Right (newPos "" 1 1, LFloat 3.1415)
+            parse parseLiteral "" "3.1415" `shouldBe` Right (LFloat 3.1415)
         it "LFloat2" $ do
-            parse parseLiteral "" "123." `shouldBe` Right (newPos "" 1 1, LFloat 123)
+            parse parseLiteral "" "123." `shouldBe` Right (LFloat 123)
         it "LFloat3" $ do
-            parse parseLiteral "" "123.E-12" `shouldBe` Right (newPos "" 1 1, LFloat 123e-12)
+            parse parseLiteral "" "123.E-12" `shouldBe` Right (LFloat 123e-12)
         it "Invalid1" $ do
             parse parseLiteral "" ".99" `shouldSatisfy` isLeft
         it "Invalid2" $ do
@@ -98,7 +98,7 @@ spec = do
             parse parseExpr "" "-123" `shouldSatisfy` isRight
         it "App" $ do
             parse parseExpr "" "f x y (g a b)" `shouldSatisfy` isRight
-        it "ArrayMake" $ do
+        it "ArrayCreate" $ do
             parse parseExpr "" "Array.create 3 x" `shouldSatisfy` isRight
         it "Not" $ do
             parse parseExpr "" "not true" `shouldSatisfy` isRight

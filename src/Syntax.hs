@@ -1,6 +1,5 @@
 module Syntax (
-    Literal,
-    LiteralKind (LUnit, LBool, LInt, LFloat),
+    Literal (LUnit, LBool, LInt, LFloat),
     UnaryOp (Not, Neg, FNeg),
     RelationBinOp (Eq, Le, Ge, Ne, Lt, Gt),
     IntBinOp (Add, Sub, Mul, Div),
@@ -10,15 +9,13 @@ module Syntax (
     Pattern (PVar, PRec, PTuple),
     LetBinder (LetBinder),
     Expr,
-    ExprKind (Const, Unary, Binary, If, Let, Then, Var, App, Tuple, ArrayMake, Get, Set),
+    ExprKind (Const, Unary, Binary, If, Let, Then, Var, App, Tuple, ArrayCreate, Get, Set),
 ) where
 
 import Data.Text (Text)
 import Text.Megaparsec.Pos (SourcePos)
 
-type Literal = (SourcePos, LiteralKind)
-
-data LiteralKind
+data Literal
     = LUnit
     | LBool Bool
     | LInt Int
@@ -63,7 +60,7 @@ data ExprKind
     | Var Ident
     | App Expr [Expr]
     | Tuple [Expr]
-    | ArrayMake Expr Expr
+    | ArrayCreate Expr Expr
     | Get Expr Expr
     | Set Expr Expr
     deriving (Show, Eq)
