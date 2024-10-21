@@ -3,10 +3,16 @@
 module Main (main) where
 
 import Options.Applicative
+import Data.Text
+import Data.Text.IO as TIO
+import Parser (parseExpr)
+import Syntax (Expr)
+import Text.Megaparsec (parse, ParseErrorBundle (bundlePosState, bundleErrors), PosState (pstateSourcePos), errorBundlePretty, parseErrorTextPretty, parseErrorPretty)
 
 data CommandLineArg = CommandLineArg
     { input :: [String]
     , output :: String
+    , intermediate :: Bool
     , verbose :: Bool
     , optimize :: Int
     }
@@ -28,6 +34,10 @@ parseArg =
                 <> short 'o'
                 <> help "An output file"
                 <> metavar "OUTFILE"
+            )
+        <*> switch
+            ( long "intermediate"
+                <> help "Export intermediate files"
             )
         <*> switch
             ( long "verbose"
@@ -55,4 +65,18 @@ main = execParser opts >>= execArgs
             )
 
 execArgs :: CommandLineArg -> IO ()
-execArgs arg = print $ input arg
+execArgs arg = do
+    args <- mapM compile $ input arg
+    return ()
+
+compile :: FilePath -> IO (Maybe Expr)
+compile path = do
+    content <- TIO.readFile path
+    case parse parseExpr path content of
+        Left err -> do
+            let errs = bundleErrors err
+            mapM_ (Prelude.putStrLn . parseErrorPretty) errs
+            Prelude.putStrLn "error"
+            return Nothing
+        Right expr ->
+            return (Just expr)

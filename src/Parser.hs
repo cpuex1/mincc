@@ -9,8 +9,9 @@ import Syntax
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
+import GHC.Base (Void)
 
-type Parser = Parsec (ErrorFancy Text) Text
+type Parser = Parsec Void Text
 
 {- | Reserved words.
 The words "true" and "false" are regarded as literals.
@@ -44,7 +45,7 @@ parseIdent =
             name <- takeWhileP (Just "an identifier") (\c -> isAlphaNum c || c == '_')
             let ident = cons firstChar name
             if ident `elem` reservedWords
-                then customFailure $ ErrorCustom "reserved word"
+                then fail "reserved word"
                 else return (pos, ident)
         )
         <?> "an identifier"
@@ -273,7 +274,7 @@ parseExpr =
                             (_, Get a idx) -> do
                                 right <- symbol "<-" >> parseExprWithPrecedence 5
                                 return (pos, Put a idx right)
-                            _ -> customFailure $ ErrorCustom "not a Put expression"
+                            _ -> fail "not a Put expression"
                     )
                     <|> parseExprWithPrecedence 5
         | precedence == 5 =
