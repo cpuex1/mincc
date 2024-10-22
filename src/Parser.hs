@@ -213,7 +213,7 @@ parseExpr :: Parser Expr
 parseExpr =
     do
         parseExprWithPrecedence 9
-        <?> "expression"
+        <?> "an expression"
   where
     parseExprWithPrecedence :: Int -> Parser Expr
     parseExprWithPrecedence precedence

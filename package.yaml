@@ -27,6 +27,7 @@ dependencies:
 - megaparsec
 - hspec
 - parser-combinators
+- containers
 
 ghc-options:
 - -Wall

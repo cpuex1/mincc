@@ -3,11 +3,7 @@
 module Main (main) where
 
 import Options.Applicative
-import Data.Text
-import Data.Text.IO as TIO
-import Parser (parseExpr)
-import Syntax (Expr)
-import Text.Megaparsec (parse, ParseErrorBundle (bundlePosState, bundleErrors), PosState (pstateSourcePos), errorBundlePretty, parseErrorTextPretty, parseErrorPretty)
+import Compile
 
 data CommandLineArg = CommandLineArg
     { input :: [String]
@@ -66,17 +62,4 @@ main = execParser opts >>= execArgs
 
 execArgs :: CommandLineArg -> IO ()
 execArgs arg = do
-    args <- mapM compile $ input arg
-    return ()
-
-compile :: FilePath -> IO (Maybe Expr)
-compile path = do
-    content <- TIO.readFile path
-    case parse parseExpr path content of
-        Left err -> do
-            let errs = bundleErrors err
-            mapM_ (Prelude.putStrLn . parseErrorPretty) errs
-            Prelude.putStrLn "error"
-            return Nothing
-        Right expr ->
-            return (Just expr)
+    mapM_ compile $ input arg

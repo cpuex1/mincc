@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Display
+      Error
       Lib
       Parser
       Syntax
@@ -39,6 +40,7 @@ library
   build-depends:
       Cabal
     , base >=4.7 && <5
+    , containers
     , hspec
     , megaparsec
     , optparse-applicative
@@ -49,6 +51,7 @@ library
 executable mincc
   main-is: Main.hs
   other-modules:
+      Compile
       Paths_mincc
   autogen-modules:
       Paths_mincc
@@ -58,6 +61,7 @@ executable mincc
   build-depends:
       Cabal
     , base >=4.7 && <5
+    , containers
     , hspec
     , megaparsec
     , mincc
@@ -80,6 +84,7 @@ test-suite mincc-test
   build-depends:
       Cabal
     , base >=4.7 && <5
+    , containers
     , hspec
     , megaparsec
     , mincc
