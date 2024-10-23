@@ -28,6 +28,7 @@ dependencies:
 - hspec
 - parser-combinators
 - containers
+- transformers
 
 ghc-options:
 - -Wall

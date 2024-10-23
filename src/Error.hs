@@ -26,7 +26,7 @@ displayError err =
             map (formatParserError errors . (\e -> (errorOffset e, displayParserError e))) (Data.List.NonEmpty.toList (bundleErrors errors))
   where
     formatParserError :: ParseErrorBundle Text Void -> (Int, Text) -> Text
-    formatParserError errors (pos, msg) = "[ERROR] Parser: " <> msg <> displaySourcePos position
+    formatParserError errors (pos, msg) = "Parser: " <> msg <> displaySourcePos position
       where
         position = pstateSourcePos (snd (reachOffset pos (bundlePosState errors)))
 

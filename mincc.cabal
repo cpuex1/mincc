@@ -46,12 +46,15 @@ library
     , optparse-applicative
     , parser-combinators
     , text
+    , transformers
   default-language: Haskell2010
 
 executable mincc
   main-is: Main.hs
   other-modules:
+      CommandLine
       Compile
+      Log
       Paths_mincc
   autogen-modules:
       Paths_mincc
