@@ -50,28 +50,28 @@ displayExpr = displayExpr' 0
         "(" <> displayExpr' depth expr1 <> " " <> displayBinaryOp op <> " " <> displayExpr' depth expr2 <> ")"
     displayExpr' depth (_, If cond thenExpr elseExpr) =
         "(if " <> displayExpr' depth cond <> " then\n"
-            <> (insertIndent (depth + 1)) <> displayExpr' (depth + 1) thenExpr <> "\n"
-            <> (insertIndent depth) <> "else\n"
-            <> (insertIndent (depth + 1)) <> displayExpr' (depth + 1) elseExpr <> ")"
+            <> insertIndent (depth + 1) <> displayExpr' (depth + 1) thenExpr <> "\n"
+            <> insertIndent depth <> "else\n"
+            <> insertIndent (depth + 1) <> displayExpr' (depth + 1) elseExpr <> ")"
     displayExpr' depth (_, Let binder body) =
         "(let " <> displayBinder depth binder <> " in\n"
-            <> (insertIndent (depth + 1)) <> displayExpr' (depth + 1) body <> ")"
+            <> insertIndent (depth + 1) <> displayExpr' (depth + 1) body <> ")"
       where
         displayBinder :: Int -> LetBinder -> Text
         displayBinder depth' (LetBinder (PVar v) value) =
-            (displayIdent v) <> " = " <> displayExpr' depth' value
+            displayIdent v <> " = " <> displayExpr' depth' value
         displayBinder depth' (LetBinder (PRec f args) value) =
-            displayIdent f <> (intercalate " " $ Prelude.map displayIdent args) <> " = " <> displayExpr' depth' value
+            "rec " <> displayIdent f <> " " <> Data.Text.unwords (Prelude.map displayIdent args) <> " = " <> displayExpr' depth' value
         displayBinder depth' (LetBinder (PTuple values) value) =
-            (intercalate " " $ Prelude.map displayIdent values) <> " = " <> displayExpr' depth' value
+            Data.Text.unwords (Prelude.map displayIdent values) <> " = " <> displayExpr' depth' value
     displayExpr' depth (_, Then expr1 expr2) =
         "(" <> displayExpr' depth expr1 <> ";\n"
-            <> (insertIndent (depth + 1)) <> displayExpr' (depth + 1) expr2 <> ")"
+            <> insertIndent (depth + 1) <> displayExpr' (depth + 1) expr2 <> ")"
     displayExpr' _ (_, Var v) = displayIdent v
     displayExpr' depth (_, App func args) =
-        "(" <> displayExpr' depth func <> " " <> (intercalate " " $ Prelude.map (displayExpr' depth) args) <> ")"
+        "(" <> displayExpr' depth func <> " " <> Data.Text.unwords (Prelude.map (displayExpr' depth) args) <> ")"
     displayExpr' depth (_, Tuple values) =
-        "(" <> (intercalate ", " $ Prelude.map (displayExpr' depth) values) <> ")"
+        "(" <> intercalate ", " (Prelude.map (displayExpr' depth) values) <> ")"
     displayExpr' depth (_, ArrayCreate size initVal) =
         "(Array.create " <> displayExpr' depth size <> " " <> displayExpr' depth initVal <> ")"
     displayExpr' depth (_, Get array idx) =
