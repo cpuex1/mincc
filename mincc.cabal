@@ -55,6 +55,7 @@ executable mincc
       CommandLine
       Compile
       Log
+      Path
       Paths_mincc
   autogen-modules:
       Paths_mincc
@@ -71,6 +72,7 @@ executable mincc
     , optparse-applicative
     , parser-combinators
     , text
+    , transformers
   default-language: Haskell2010
 
 test-suite mincc-test
@@ -94,4 +96,5 @@ test-suite mincc-test
     , optparse-applicative
     , parser-combinators
     , text
+    , transformers
   default-language: Haskell2010
