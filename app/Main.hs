@@ -7,7 +7,7 @@ import Compile
 import Control.Monad.Trans.Reader
 import Data.Text (intercalate)
 import qualified Data.Text.IO as TIO
-import Display (displayExpr)
+import Display
 import Options.Applicative
 
 import Control.Monad.Trans.Class
@@ -39,7 +39,7 @@ execArgs = do
             case parsedExprs of
                 Just exprs -> do
                     printLog Info "Parsing succeeded"
-                    lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map displayExpr exprs
+                    lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map display exprs
                     printLog Info "Compilation succeeded"
                 Nothing ->
                     printLog Info "Compilation failed"

@@ -1,15 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (lexeme, parseLiteral, parseIdent, parsePattern, parseLetBinder, parseSimpleExpr, parseExpr) where
+module Parser (lexeme, parseLiteral, parseIdent, parsePattern, parseSimpleExpr, parseExpr) where
 
 import Control.Monad.Combinators.Expr
 import Data.Char (isAlphaNum, isDigit)
 import Data.Text (Text, cons, unpack)
+import GHC.Base (Void)
 import Syntax
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
-import GHC.Base (Void)
 
 type Parser = Parsec Void Text
 
@@ -36,7 +36,7 @@ cSymbol :: Char -> Parser Char
 cSymbol = lexeme . char
 
 -- | An identifier parser
-parseIdent :: Parser Ident
+parseIdent :: Parser RawIdent
 parseIdent =
     try
         ( lexeme $ do
@@ -46,7 +46,7 @@ parseIdent =
             let ident = cons firstChar name
             if ident `elem` reservedWords
                 then fail "reserved word"
-                else return (pos, ident)
+                else return $ RawIdent pos ident
         )
         <?> "an identifier"
 
@@ -135,7 +135,7 @@ parseFactorOp =
         <?> "a factor operator"
 
 -- | A pattern parser
-parsePattern :: Parser Pattern
+parsePattern :: Parser (Pattern RawIdent)
 parsePattern =
     lexeme
         ( -- PRec
@@ -157,17 +157,8 @@ parsePattern =
         )
         <?> "not a pattern"
 
--- | A let binder parser
-parseLetBinder :: Parser LetBinder
-parseLetBinder =
-    parsePattern
-        >>= \pat ->
-            cSymbol '='
-                >> parseExpr
-                >>= \value -> return $ LetBinder pat value
-
 -- | Parses a simple expression
-parseSimpleExpr :: Parser Expr
+parseSimpleExpr :: Parser ParsedExpr
 parseSimpleExpr =
     ( do
         pos <- getSourcePos
@@ -181,12 +172,12 @@ parseSimpleExpr =
                             (cSymbol '(')
                             (cSymbol ')')
                             (sepBy1 parseExpr (cSymbol ','))
-                            >>= \exprs -> return (pos, Tuple exprs)
+                            >>= \exprs -> return (PGuard (Tuple pos exprs))
                         )
                     -- Const
-                    <|> try (parseLiteral >>= \lit -> return (pos, Const lit))
+                    <|> try (parseLiteral >>= \lit -> return (PGuard (Const pos lit)))
                     -- Var
-                    <|> try (parseIdent >>= \ident -> return (pos, Var ident))
+                    <|> try (parseIdent >>= \ident -> return (PGuard (Var pos ident)))
         -- Remaining tokens can be components of Get.
         parseSimpleExpr' expr
     )
@@ -194,7 +185,7 @@ parseSimpleExpr =
   where
     -- \| This function was implemented in order to remove a left recursion.
     -- Since `persec` uses recursive decent parsing, the original implementation never halts.
-    parseSimpleExpr' :: Expr -> Parser Expr
+    parseSimpleExpr' :: ParsedExpr -> Parser ParsedExpr
     parseSimpleExpr' expr1 =
         -- Get
         lexeme $
@@ -203,19 +194,19 @@ parseSimpleExpr =
                     >>= \pos ->
                         cSymbol '.'
                             >> between (cSymbol '(') (cSymbol ')') parseExpr
-                            >>= \expr2 -> parseSimpleExpr' (pos, Get expr1 expr2)
+                            >>= \expr2 -> parseSimpleExpr' (PGuard (Get pos expr1 expr2))
                 )
                 -- ... or None
                 <|> return expr1
 
 -- | Parses a general expression
-parseExpr :: Parser Expr
+parseExpr :: Parser ParsedExpr
 parseExpr =
     do
         parseExprWithPrecedence 9
         <?> "an expression"
   where
-    parseExprWithPrecedence :: Int -> Parser Expr
+    parseExprWithPrecedence :: Int -> Parser ParsedExpr
     parseExprWithPrecedence precedence
         | precedence > 9 = error "Invalid precedence"
         | precedence == 9 =
@@ -224,11 +215,14 @@ parseExpr =
                 try
                     ( getSourcePos >>= \pos ->
                         parseKeyword "let"
-                            >> parseLetBinder
-                            >>= \binder ->
-                                parseKeyword "in"
-                                    >> parseExprWithPrecedence 9
-                                    >>= \expr -> return (pos, Let binder expr)
+                            >> parsePattern
+                            >>= \pat ->
+                                cSymbol '='
+                                    >> parseExpr
+                                    >>= \value ->
+                                        parseKeyword "in"
+                                            >> parseExprWithPrecedence 9
+                                            >>= \expr -> return (PGuard (Let pos pat (pExp value) (pExp expr)))
                     )
                     <|> parseExprWithPrecedence 8
         | precedence == 8 =
@@ -241,7 +235,7 @@ parseExpr =
                             [
                                 [ InfixR
                                     ( cSymbol ';'
-                                        >> return (\left right -> (pos, Let (LetBinder PUnit left) right))
+                                        >> return (\left right -> PGuard (Let pos PUnit (pExp left) (pExp right)))
                                     )
                                 ]
                             ]
@@ -260,7 +254,7 @@ parseExpr =
                                     >>= \then' ->
                                         parseKeyword "else"
                                             >> parseExprWithPrecedence 6
-                                            >>= \else' -> return (pos, If cond then' else')
+                                            >>= \else' -> return (PGuard (If pos cond (pExp then') (pExp else')))
                     )
                     <|> parseExprWithPrecedence 6
         | precedence == 6 =
@@ -271,9 +265,9 @@ parseExpr =
                         pos <- getSourcePos
                         left <- parseSimpleExpr
                         case left of
-                            (_, Get a idx) -> do
+                            PGuard (Get _ a idx) -> do
                                 right <- symbol "<-" >> parseExprWithPrecedence 5
-                                return (pos, Put a idx right)
+                                return $ PGuard (Put pos a idx right)
                             _ -> fail "not a Put expression"
                     )
                     <|> parseExprWithPrecedence 5
@@ -288,7 +282,7 @@ parseExpr =
                                 [
                                     [ InfixL
                                         ( parseRelationBinOp
-                                            >>= \op -> return (\left right -> (pos, Binary op left right))
+                                            >>= \op -> return (\left right -> PGuard (Binary pos op left right))
                                         )
                                     ]
                                 ]
@@ -305,7 +299,7 @@ parseExpr =
                                 [
                                     [ InfixL
                                         ( parseTermOp
-                                            >>= \op -> return (\left right -> (pos, Binary op left right))
+                                            >>= \op -> return (\left right -> PGuard (Binary pos op left right))
                                         )
                                     ]
                                 ]
@@ -322,7 +316,7 @@ parseExpr =
                                 [
                                     [ InfixL
                                         ( parseFactorOp
-                                            >>= \op -> return (\left right -> (pos, Binary op left right))
+                                            >>= \op -> return (\left right -> PGuard (Binary pos op left right))
                                         )
                                     ]
                                 ]
@@ -335,13 +329,13 @@ parseExpr =
                     try
                         ( symbol "-."
                             >> parseExprWithPrecedence 2
-                            >>= \expr -> return (pos, Unary FNeg expr)
+                            >>= \expr -> return $ PGuard (Unary pos FNeg expr)
                         )
                         -- Neg
                         <|> try
                             ( cSymbol '-'
                                 >> parseExprWithPrecedence 2
-                                >>= \expr -> return (pos, Unary Neg expr)
+                                >>= \expr -> return $ PGuard (Unary pos Neg expr)
                             )
                         <|> parseExprWithPrecedence 1
         | precedence == 1 =
@@ -351,7 +345,7 @@ parseExpr =
                     ( parseSimpleExpr
                         >>= \func ->
                             some parseSimpleExpr
-                                >>= \exprs -> return (pos, App func exprs)
+                                >>= \exprs -> return $ PGuard (App pos func exprs)
                     )
                     -- ArrayCreate
                     <|> try
@@ -359,13 +353,13 @@ parseExpr =
                             >> parseSimpleExpr
                             >>= \expr1 ->
                                 parseExprWithPrecedence 1
-                                    >>= \expr2 -> return (pos, ArrayCreate expr1 expr2)
+                                    >>= \expr2 -> return $ PGuard (ArrayCreate pos expr1 expr2)
                         )
                     -- Not
                     <|> try
                         ( parseKeyword "not"
                             >> parseExprWithPrecedence 1
-                            >>= \expr -> return (pos, Unary Not expr)
+                            >>= \expr -> return $ PGuard (Unary pos Not expr)
                         )
                     <|> parseExprWithPrecedence 0
         | precedence == 0 = parseSimpleExpr
