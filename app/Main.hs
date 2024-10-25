@@ -13,6 +13,7 @@ import Options.Applicative
 import Control.Monad.Trans.Class
 import Log
 import Path
+import NameRes (resolveNames)
 
 main :: IO ()
 main = execParser opts >>= \arg -> runReaderT execArgs arg
@@ -40,6 +41,7 @@ execArgs = do
                 Just exprs -> do
                     printLog Info "Parsing succeeded"
                     lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map display exprs
+                    lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ intercalate "\n" $ map (display . resolveNames) exprs
                     printLog Info "Compilation succeeded"
                 Nothing ->
                     printLog Info "Compilation failed"

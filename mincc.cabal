@@ -28,6 +28,7 @@ library
       Display
       Error
       Lib
+      NameRes
       Parser
       Syntax
   other-modules:

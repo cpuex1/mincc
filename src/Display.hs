@@ -4,7 +4,7 @@ module Display (display) where
 
 import Data.Text
 import Syntax
-import Text.Megaparsec.Pos (SourcePos)
+import Text.Megaparsec.Pos (SourcePos (sourceLine, sourceColumn), unPos)
 
 class DisplayI a where
     displayI :: a -> Int -> Text
@@ -44,9 +44,14 @@ instance Display RawIdent where
     display (RawIdent _ ident) = ident
 
 instance Display Ident where
-    display (UserDefined _ ident) = ident
-    display (CompilerGenerated ident) = ident
-    display (ExternalIdent ident) = ident
+    display (UserDefined pos ident) =
+        "__" <> (pack . show . unPos . sourceLine) pos
+            <> "_" <> (pack . show . unPos . sourceColumn) pos
+            <> "_" <> ident
+    display (CompilerGenerated ident) =
+        "__gen_" <> ident
+    display (ExternalIdent ident) =
+        "__ext_" <> ident
 
 insertIndent :: Int -> Text
 insertIndent depth = Data.Text.replicate depth "    "
