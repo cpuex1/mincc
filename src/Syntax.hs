@@ -6,10 +6,10 @@ module Syntax (
     FloatBinOp (FAdd, FSub, FMul, FDiv),
     BinaryOp (RelationOp, IntOp, FloatOp),
     Ident,
-    Pattern (PVar, PRec, PTuple),
+    Pattern (PUnit, PVar, PRec, PTuple),
     LetBinder (LetBinder),
     Expr,
-    ExprKind (Const, Unary, Binary, If, Let, Then, Var, App, Tuple, ArrayCreate, Get, Put),
+    ExprKind (Const, Unary, Binary, If, Let, Var, App, Tuple, ArrayCreate, Get, Put),
 ) where
 
 import Data.Text (Text)
@@ -41,7 +41,8 @@ type Ident = (SourcePos, IdentKind)
 type IdentKind = Text
 
 data Pattern
-    = PVar Ident
+    = PUnit
+    | PVar Ident
     | PRec Ident [Ident]
     | PTuple [Ident]
     deriving (Show, Eq)
@@ -56,7 +57,6 @@ data ExprKind
     | Binary BinaryOp Expr Expr
     | If Expr Expr Expr
     | Let LetBinder Expr
-    | Then Expr Expr
     | Var Ident
     | App Expr [Expr]
     | Tuple [Expr]

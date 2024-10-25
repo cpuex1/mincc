@@ -58,15 +58,14 @@ displayExpr = displayExpr' 0
             <> insertIndent (depth + 1) <> displayExpr' (depth + 1) body <> ")"
       where
         displayBinder :: Int -> LetBinder -> Text
+        displayBinder depth' (LetBinder PUnit value) =
+            "() = " <> displayExpr' depth' value
         displayBinder depth' (LetBinder (PVar v) value) =
             displayIdent v <> " = " <> displayExpr' depth' value
         displayBinder depth' (LetBinder (PRec f args) value) =
             "rec " <> displayIdent f <> " " <> Data.Text.unwords (Prelude.map displayIdent args) <> " = " <> displayExpr' depth' value
         displayBinder depth' (LetBinder (PTuple values) value) =
             Data.Text.unwords (Prelude.map displayIdent values) <> " = " <> displayExpr' depth' value
-    displayExpr' depth (_, Then expr1 expr2) =
-        "(" <> displayExpr' depth expr1 <> ";\n"
-            <> insertIndent (depth + 1) <> displayExpr' (depth + 1) expr2 <> ")"
     displayExpr' _ (_, Var v) = displayIdent v
     displayExpr' depth (_, App func args) =
         "(" <> displayExpr' depth func <> " " <> Data.Text.unwords (Prelude.map (displayExpr' depth) args) <> ")"

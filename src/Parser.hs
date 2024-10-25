@@ -241,7 +241,7 @@ parseExpr =
                             [
                                 [ InfixR
                                     ( cSymbol ';'
-                                        >> return (\left right -> (pos, Then left right))
+                                        >> return (\left right -> (pos, Let (LetBinder PUnit left) right))
                                     )
                                 ]
                             ]
