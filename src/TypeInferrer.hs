@@ -2,11 +2,18 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module TypeInferrer (inferType) where
+module TypeInferrer (
+    genNewId,
+    defaultEnv,
+    inferType,
+    TypeEnv (TypeEnv, assigned, table, variables),
+    registerIdent,
+    registerAll,
+) where
 
 import Control.Monad (void)
 import Control.Monad.Except (ExceptT, MonadError (catchError, throwError), runExceptT)
-import Control.Monad.State.Lazy
+import Control.Monad.State
 import Data.Foldable (find, for_)
 import Display
 import Error (CompilerError (TypeError))
@@ -25,13 +32,17 @@ data TypeEnv = TypeEnv
     , table :: [Maybe ITy]
     , variables :: [(Ident, TypeId)]
     }
+    deriving (Show, Eq)
 
 type TypingM = ExceptT CompilerError (State TypeEnv)
+
+defaultEnv :: TypeEnv
+defaultEnv = TypeEnv 0 [] []
 
 genNewId :: TypingM TypeId
 genNewId =
     get >>= \env ->
-        put env{assigned = assigned env + 1, table = table env ++ [Nothing]}
+        modify (\e -> e{assigned = assigned env + 1, table = table env ++ [Nothing]})
             >> return (assigned env)
 
 fromTypeId :: TypeId -> TypingM (Maybe ITy)
@@ -44,11 +55,11 @@ registerIdent ident = do
         Just _ -> pure ()
         Nothing -> do
             tId <- genNewId
-            put env{variables = (ident, tId) : variables env}
+            modify (\e -> e{variables = (ident, tId) : variables env})
 
 registerAll :: ResolvedExpr -> TypingM ()
 registerAll (RGuard expr) =
-    void $ visitExprM pure (\ident -> registerIdent ident >> pure ident) pure expr
+    void $ visitExprM pure (\ident -> registerIdent ident >> pure ident) registerAll expr
 
 getTyOfIdent :: Ident -> TypingM TypeId
 getTyOfIdent ident = do
@@ -68,7 +79,7 @@ updateEnv typeId ty = do
                     Nothing -> Nothing
                 )
                 $ replaceWithIdx typeId ty (table env)
-     in put env{table = env'}
+     in modify (\e -> e{table = env'})
     pure ()
   where
     replaceWithIdx :: Int -> ITy -> [Maybe ITy] -> [Maybe ITy]
@@ -164,10 +175,19 @@ doUnify pos ty1 ty2 = do
             )
 
 inferType :: ResolvedExpr -> Either CompilerError TypedExpr
-inferType expr = evalState (runExceptT $ inferE expr) (TypeEnv 0 [] [])
+inferType expr = evalState (runExceptT $ inferE expr) defaultEnv
 
 inferE :: ResolvedExpr -> TypingM TypedExpr
-inferE expr = registerAll expr >> inferIE expr >>= applyEnvE
+inferE expr = do
+    registerAll expr
+    expr' <- inferIE expr
+    if getTy expr' == TUnit
+        then
+            applyEnvE expr'
+        else
+            throwError $
+                TypeError (Just $ snd $ getExprState $ iTExp expr') $
+                    "A main expression must return unit, not " <> display (getTy expr')
 
 inferIE :: ResolvedExpr -> TypingM ITypedExpr
 inferIE (RGuard (Const pos LUnit)) = pure $ ITGuard $ Const (TUnit, pos) LUnit
@@ -181,11 +201,11 @@ inferIE (RGuard (Unary pos Not expr)) = do
 inferIE (RGuard (Unary pos Neg expr)) = do
     expr' <- inferIE expr
     doUnify (getExprState $ rExp expr) TInt $ getTy expr'
-    pure $ ITGuard $ Unary (TInt, pos) Not expr'
+    pure $ ITGuard $ Unary (TInt, pos) Neg expr'
 inferIE (RGuard (Unary pos FNeg expr)) = do
     expr' <- inferIE expr
     doUnify (getExprState $ rExp expr) TFloat $ getTy expr'
-    pure $ ITGuard $ Unary (TFloat, pos) Not expr'
+    pure $ ITGuard $ Unary (TFloat, pos) FNeg expr'
 inferIE (RGuard (Binary pos (RelationOp op) expr1 expr2)) = do
     expr1' <- inferIE expr1
     expr2' <- inferIE expr2
