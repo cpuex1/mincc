@@ -17,12 +17,14 @@ module CommandLine (
     toCompilerConfig,
 ) where
 
+import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
+import Error (CompilerError)
 import Options.Applicative
 import System.Console.ANSI (hNowSupportsANSI)
 import System.IO (stdout)
 
-type ConfigIO a = ReaderT CompilerConfig IO a
+type ConfigIO = ReaderT CompilerConfig (ExceptT CompilerError IO)
 
 data CompilerConfig = CompilerConfig
     { cInput :: [String]

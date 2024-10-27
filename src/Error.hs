@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Error (CompilerError (ParserError, TypeError), displayError) where
+module Error (CompilerError (ParserError, TypeError, OtherError), displayError) where
 
 import Data.List.NonEmpty (toList)
 import Data.Proxy
@@ -10,50 +10,54 @@ import GHC.Base (Void)
 import Text.Megaparsec
 
 data CompilerError
-  = ParserError (ParseErrorBundle Text Void)
-  | TypeError (Maybe SourcePos) Text
+    = ParserError (ParseErrorBundle Text Void)
+    | TypeError (Maybe SourcePos) Text
+    | OtherError Text
+    deriving (Show, Eq)
 
 displaySourcePos :: SourcePos -> Text
 displaySourcePos pos =
-  pack $ " @ " ++ sourceName pos ++ ":" ++ lineNum ++ ":" ++ colNum
- where
-  lineNum = show $ unPos $ sourceLine pos
-  colNum = show $ unPos $ sourceColumn pos
+    pack $ " @ " ++ sourceName pos ++ ":" ++ lineNum ++ ":" ++ colNum
+  where
+    lineNum = show $ unPos $ sourceLine pos
+    colNum = show $ unPos $ sourceColumn pos
 
 displayError :: CompilerError -> [Text]
 displayError err =
-  case err of
-    ParserError errors ->
-      map (formatParserError errors . (\e -> (errorOffset e, displayParserError e))) (Data.List.NonEmpty.toList (bundleErrors errors))
-    TypeError (Just pos) msg ->
-      ["Type error: " <> msg <> displaySourcePos pos]
-    TypeError Nothing msg ->
-      ["Type error: " <> msg]
- where
-  formatParserError :: ParseErrorBundle Text Void -> (Int, Text) -> Text
-  formatParserError errors (pos, msg) = "Parser error: " <> msg <> displaySourcePos position
-   where
-    position = pstateSourcePos (snd (reachOffset pos (bundlePosState errors)))
+    case err of
+        ParserError errors ->
+            map (formatParserError errors . (\e -> (errorOffset e, displayParserError e))) (Data.List.NonEmpty.toList (bundleErrors errors))
+        TypeError (Just pos) msg ->
+            ["Type error: " <> msg <> displaySourcePos pos]
+        TypeError Nothing msg ->
+            ["Type error: " <> msg]
+        OtherError msg ->
+            [msg]
+  where
+    formatParserError :: ParseErrorBundle Text Void -> (Int, Text) -> Text
+    formatParserError errors (pos, msg) = "Parser error: " <> msg <> displaySourcePos position
+      where
+        position = pstateSourcePos (snd (reachOffset pos (bundlePosState errors)))
 
-  displayParserError :: ParseError Text Void -> Text
-  displayParserError (TrivialError _ found expectedTokens) =
-    case found of
-      (Just item) ->
-        "Expected " <> intercalate ", " expectedTokens' <> " but found " <> pack (showErrorItem (Proxy :: Proxy Text) item) <> "."
-      Nothing ->
-        "Expected " <> intercalate ", " expectedTokens' <> " but not found."
-   where
-    toTokenList :: S.Set (ErrorItem (Token Text)) -> [ErrorItem (Token Text)]
-    toTokenList = S.toAscList
+    displayParserError :: ParseError Text Void -> Text
+    displayParserError (TrivialError _ found expectedTokens) =
+        case found of
+            (Just item) ->
+                "Expected " <> intercalate ", " expectedTokens' <> " but found " <> pack (showErrorItem (Proxy :: Proxy Text) item) <> "."
+            Nothing ->
+                "Expected " <> intercalate ", " expectedTokens' <> " but not found."
+      where
+        toTokenList :: S.Set (ErrorItem (Token Text)) -> [ErrorItem (Token Text)]
+        toTokenList = S.toAscList
 
-    expectedTokens' = map (pack . showErrorItem (Proxy :: Proxy Text)) $ toTokenList expectedTokens
-  displayParserError (FancyError _ failures) =
-    intercalate "; " (map pack $ toFailList failures) <> "."
-   where
-    toFailList :: S.Set (ErrorFancy Void) -> [String]
-    toFailList = filterMapFail . S.toAscList
-     where
-      filterMapFail :: [ErrorFancy Void] -> [String]
-      filterMapFail [] = []
-      filterMapFail ((ErrorFail reason) : remains) = reason : filterMapFail remains
-      filterMapFail (_ : remains) = filterMapFail remains
+        expectedTokens' = map (pack . showErrorItem (Proxy :: Proxy Text)) $ toTokenList expectedTokens
+    displayParserError (FancyError _ failures) =
+        intercalate "; " (map pack $ toFailList failures) <> "."
+      where
+        toFailList :: S.Set (ErrorFancy Void) -> [String]
+        toFailList = filterMapFail . S.toAscList
+          where
+            filterMapFail :: [ErrorFancy Void] -> [String]
+            filterMapFail [] = []
+            filterMapFail ((ErrorFail reason) : remains) = reason : filterMapFail remains
+            filterMapFail (_ : remains) = filterMapFail remains

@@ -35,7 +35,8 @@ printLogGeneral printFunc level message =
     ask >>= \config ->
         when (cVerbose config || level > Debug) $
             lift $
-                printFunc level (cANSI config) message
+                lift $
+                    printFunc level (cANSI config) message
 
 printLog :: LogLevel -> String -> ConfigIO ()
 printLog =

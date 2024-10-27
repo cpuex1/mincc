@@ -1,30 +1,38 @@
-module Compile (compileAll) where
+module Compile (parseAllIO, resolveAllIO, inferTypeIO) where
 
 import CommandLine
+import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.Trans.Class
 import qualified Data.Text.IO as TIO
 import Error
 import Log
+import NameRes (resolveNames)
 import Parser
 import Syntax
 import Text.Megaparsec
+import TypeInferrer (inferType)
 
-compile :: FilePath -> ConfigIO (Maybe ParsedExpr)
-compile path = do
-    content <- lift $ TIO.readFile path
+parseIO :: FilePath -> ConfigIO ParsedExpr
+parseIO path = do
+    content <- lift $ lift $ TIO.readFile path
     case parse (parseExpr <* eof) path content of
-        Left err -> do
-            mapM_ (printTextLog Error) $ displayError (ParserError err)
-            return Nothing
-        Right expr ->
-            return (Just expr)
+        Left err ->
+            throwError $ ParserError err
+        Right expr -> do
+            printLog Info $ "Parsed " ++ path
+            return expr
 
-compileAll :: [FilePath] -> ConfigIO (Maybe [ParsedExpr])
-compileAll paths = do
-    exprs <- mapM compile paths
-    return $ allValid exprs
-  where
-    allValid :: [Maybe ParsedExpr] -> Maybe [ParsedExpr]
-    allValid [] = Just []
-    allValid (Just x : xs) = (x :) <$> allValid xs
-    allValid _ = Nothing
+parseAllIO :: [FilePath] -> ConfigIO [ParsedExpr]
+parseAllIO = mapM parseIO
+
+resolveAllIO :: [ParsedExpr] -> ConfigIO [ResolvedExpr]
+resolveAllIO exprs = pure $ map resolveNames exprs
+
+inferTypeIO :: [ResolvedExpr] -> ConfigIO [TypedExpr]
+inferTypeIO [] = pure []
+inferTypeIO (expr : rest) = do
+    case inferType expr of
+        Left err -> throwError err
+        Right typedExpr -> do
+            rest' <- inferTypeIO rest
+            return (typedExpr : rest')
