@@ -53,6 +53,7 @@ execArgs = do
                             printLog Done "Parsing succeeded"
                             lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map display exprs
                             lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ intercalate "\n" $ map (display . resolveNames) exprs
+                            printLog Done "Name resolution succeeded"
                             printLog Done "Compilation succeeded"
                         Nothing ->
                             printLog Error "Compilation failed"

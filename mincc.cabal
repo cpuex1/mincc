@@ -31,6 +31,8 @@ library
       NameRes
       Parser
       Syntax
+      TypeInferrer
+      Typing
   other-modules:
       Paths_mincc
   autogen-modules:

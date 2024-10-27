@@ -13,12 +13,14 @@ module Syntax (
     ResolvedExpr (RGuard, rExp),
     RawIdent (RawIdent),
     KExpr,
+    TypedExpr (TGuard, tExp),
     Expr (Const, Unary, Binary, If, Let, Var, App, Tuple, ArrayCreate, Get, Put),
     getExprState,
 ) where
 
 import Data.Text (Text)
 import Text.Megaparsec.Pos (SourcePos)
+import Typing (Ty)
 
 data Literal
     = LUnit
@@ -72,6 +74,9 @@ newtype ParsedExpr = PGuard {pExp :: Expr SourcePos RawIdent ParsedExpr}
 RGuard is used for avoiding invalid recursive type definition.
 -}
 newtype ResolvedExpr = RGuard {rExp :: Expr SourcePos Ident ResolvedExpr}
+    deriving (Show, Eq)
+
+newtype TypedExpr = TGuard {tExp :: Expr (Ty, SourcePos) Ident TypedExpr}
     deriving (Show, Eq)
 
 type KExpr = Expr SourcePos Ident Ident
