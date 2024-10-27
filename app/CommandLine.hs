@@ -1,9 +1,37 @@
-module CommandLine (ArgIO, CommandLineArg (CommandLineArg), input, output, intermediate, verbose, optimize, parseArg) where
+module CommandLine (
+    ConfigIO,
+    CompilerConfig (CompilerConfig),
+    CommandLineArg (CommandLineArg),
+    cInput,
+    cOutput,
+    cIntermediate,
+    cVerbose,
+    cOptimize,
+    cANSI,
+    input,
+    output,
+    intermediate,
+    verbose,
+    optimize,
+    parseArg,
+    toCompilerConfig,
+) where
 
-import Options.Applicative
 import Control.Monad.Trans.Reader
+import Options.Applicative
+import System.Console.ANSI (hNowSupportsANSI)
+import System.IO (stdout)
 
-type ArgIO a = ReaderT CommandLineArg IO a
+type ConfigIO a = ReaderT CompilerConfig IO a
+
+data CompilerConfig = CompilerConfig
+    { cInput :: [String]
+    , cOutput :: String
+    , cIntermediate :: Bool
+    , cVerbose :: Bool
+    , cOptimize :: Int
+    , cANSI :: Bool
+    }
 
 data CommandLineArg = CommandLineArg
     { input :: [String]
@@ -48,3 +76,8 @@ parseArg =
                 <> value 1000
                 <> metavar "INT"
             )
+
+toCompilerConfig :: CommandLineArg -> IO CompilerConfig
+toCompilerConfig (CommandLineArg i o inter v opt) = do
+    ansiSupported <- hNowSupportsANSI stdout
+    return $ CompilerConfig i o inter v opt ansiSupported

@@ -9,7 +9,7 @@ import Parser
 import Syntax
 import Text.Megaparsec
 
-compile :: FilePath -> ArgIO (Maybe ParsedExpr)
+compile :: FilePath -> ConfigIO (Maybe ParsedExpr)
 compile path = do
     content <- lift $ TIO.readFile path
     case parse (parseExpr <* eof) path content of
@@ -19,7 +19,7 @@ compile path = do
         Right expr ->
             return (Just expr)
 
-compileAll :: [FilePath] -> ArgIO (Maybe [ParsedExpr])
+compileAll :: [FilePath] -> ConfigIO (Maybe [ParsedExpr])
 compileAll paths = do
     exprs <- mapM compile paths
     return $ allValid exprs

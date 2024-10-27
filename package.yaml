@@ -23,7 +23,6 @@ dependencies:
 - base >= 4.7 && < 5
 - Cabal
 - text
-- optparse-applicative
 - megaparsec
 - hspec
 - parser-combinators
@@ -54,6 +53,8 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - mincc
+    - ansi-terminal
+    - optparse-applicative
 
 tests:
   mincc-test:

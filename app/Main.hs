@@ -12,11 +12,14 @@ import Options.Applicative
 
 import Control.Monad.Trans.Class
 import Log
-import Path
 import NameRes (resolveNames)
+import Path
 
 main :: IO ()
-main = execParser opts >>= \arg -> runReaderT execArgs arg
+main = do
+    args <- execParser opts
+    config <- toCompilerConfig args
+    runReaderT execArgs config
   where
     opts =
         info
@@ -26,22 +29,30 @@ main = execParser opts >>= \arg -> runReaderT execArgs arg
                 <> header "mincc (c) 2024 Akihisa Yagi\n\n"
             )
 
-execArgs :: ArgIO ()
+execArgs :: ConfigIO ()
 execArgs = do
-    inputFiles <- asks input
-    if any ((\ext -> ext /= Just "ml") .getExt) inputFiles then
-        printLog Error "An input file must have a .ml extension"
-    else do
-        outputFile <- asks output
-        if getExt outputFile /= Just "s" then
-            printLog Error "An output file must have a .s extension"
+    ansi <- asks cANSI
+    if ansi
+        then
+            printLog Debug "ANSI enabled"
+        else
+            printLog Debug "ANSI disabled"
+    inputFiles <- asks cInput
+    if any ((\ext -> ext /= Just "ml") . getExt) inputFiles
+        then
+            printLog Error "An input file must have a .ml extension"
         else do
-            parsedExprs <- compileAll inputFiles
-            case parsedExprs of
-                Just exprs -> do
-                    printLog Info "Parsing succeeded"
-                    lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map display exprs
-                    lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ intercalate "\n" $ map (display . resolveNames) exprs
-                    printLog Info "Compilation succeeded"
-                Nothing ->
-                    printLog Info "Compilation failed"
+            outputFile <- asks cOutput
+            if getExt outputFile /= Just "s"
+                then
+                    printLog Error "An output file must have a .s extension"
+                else do
+                    parsedExprs <- compileAll inputFiles
+                    case parsedExprs of
+                        Just exprs -> do
+                            printLog Done "Parsing succeeded"
+                            lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map display exprs
+                            lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ intercalate "\n" $ map (display . resolveNames) exprs
+                            printLog Done "Compilation succeeded"
+                        Nothing ->
+                            printLog Error "Compilation failed"
