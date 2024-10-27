@@ -12,10 +12,12 @@ module Syntax (
     ParsedExpr (PGuard, pExp),
     ResolvedExpr (RGuard, rExp),
     RawIdent (RawIdent),
+    TypedState (TypedState, getType, getPosition),
     KExpr,
     TypedExpr (TGuard, tExp),
     Expr (Const, Unary, Binary, If, Let, Var, App, Tuple, ArrayCreate, Get, Put),
     getExprState,
+    visitExprM,
 ) where
 
 import Data.Text (Text)
@@ -76,7 +78,11 @@ RGuard is used for avoiding invalid recursive type definition.
 newtype ResolvedExpr = RGuard {rExp :: Expr SourcePos Ident ResolvedExpr}
     deriving (Show, Eq)
 
-newtype TypedExpr = TGuard {tExp :: Expr (Ty, SourcePos) Ident TypedExpr}
+data TypedState = TypedState {getType :: Ty, getPosition :: SourcePos}
+    deriving (Show, Eq)
+
+-- | The type of an expression after type inference.
+newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr}
     deriving (Show, Eq)
 
 type KExpr = Expr SourcePos Ident Ident
@@ -107,3 +113,70 @@ getExprState (Tuple state _) = state
 getExprState (ArrayCreate state _ _) = state
 getExprState (Get state _ _) = state
 getExprState (Put state _ _ _) = state
+
+visitExprM ::
+    (Monad m) =>
+    (state -> m state') ->
+    (identTy -> m identTy') ->
+    (operandTy -> m operandTy') ->
+    Expr state identTy operandTy ->
+    m (Expr state' identTy' operandTy')
+visitExprM fState _ _ (Const state lit) = do
+    state' <- fState state
+    pure $ Const state' lit
+visitExprM fState _ fOperand (Unary state op operand) = do
+    state' <- fState state
+    operand' <- fOperand operand
+    pure $ Unary state' op operand'
+visitExprM fState _ fOperand (Binary state op lhs rhs) = do
+    state' <- fState state
+    lhs' <- fOperand lhs
+    rhs' <- fOperand rhs
+    pure $ Binary state' op lhs' rhs'
+visitExprM fState fIdent fOperand (If state cond thenE elseE) = do
+    state' <- fState state
+    cond' <- fOperand cond
+    thenE' <- visitExprM fState fIdent fOperand thenE
+    elseE' <- visitExprM fState fIdent fOperand elseE
+    pure $ If state' cond' thenE' elseE'
+visitExprM fState fIdent fOperand (Let state pat expr body) = do
+    state' <- fState state
+    expr' <- visitExprM fState fIdent fOperand expr
+    body' <- visitExprM fState fIdent fOperand body
+    pat' <- visitPatternM fIdent pat
+    pure $ Let state' pat' expr' body'
+  where
+    visitPatternM :: (Monad m) => (identTy -> m identTy') -> Pattern identTy -> m (Pattern identTy')
+    visitPatternM _ (PUnit) = pure PUnit
+    visitPatternM fIdent' (PVar ident) = PVar <$> fIdent' ident
+    visitPatternM fIdent' (PRec ident idents) = PRec <$> fIdent' ident <*> mapM fIdent' idents
+    visitPatternM fIdent' (PTuple idents) = PTuple <$> mapM fIdent' idents
+visitExprM fState fIdent _ (Var state ident) = do
+    state' <- fState state
+    ident' <- fIdent ident
+    pure $ Var state' ident'
+visitExprM fState _ fOperand (App state func args) = do
+    state' <- fState state
+    func' <- fOperand func
+    args' <- mapM fOperand args
+    pure $ App state' func' args'
+visitExprM fState _ fOperand (Tuple state values) = do
+    state' <- fState state
+    values' <- mapM fOperand values
+    pure $ Tuple state' values'
+visitExprM fState _ fOperand (ArrayCreate state size value) = do
+    state' <- fState state
+    size' <- fOperand size
+    value' <- fOperand value
+    pure $ ArrayCreate state' size' value'
+visitExprM fState _ fOperand (Get state array index) = do
+    state' <- fState state
+    array' <- fOperand array
+    index' <- fOperand index
+    pure $ Get state' array' index'
+visitExprM fState _ fOperand (Put state array index value) = do
+    state' <- fState state
+    array' <- fOperand array
+    index' <- fOperand index
+    value' <- fOperand value
+    pure $ Put state' array' index' value'

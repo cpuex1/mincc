@@ -1,10 +1,12 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Display (display) where
 
 import Data.Text
 import Syntax
-import Text.Megaparsec.Pos (SourcePos (sourceLine, sourceColumn), unPos)
+import Text.Megaparsec.Pos (SourcePos (sourceColumn, sourceLine), unPos)
+import Typing
 
 class DisplayI a where
     displayI :: a -> Int -> Text
@@ -45,9 +47,12 @@ instance Display RawIdent where
 
 instance Display Ident where
     display (UserDefined pos ident) =
-        "__" <> (pack . show . unPos . sourceLine) pos
-            <> "_" <> (pack . show . unPos . sourceColumn) pos
-            <> "_" <> ident
+        "__"
+            <> (pack . show . unPos . sourceLine) pos
+            <> "_"
+            <> (pack . show . unPos . sourceColumn) pos
+            <> "_"
+            <> ident
     display (CompilerGenerated ident) =
         "__gen_" <> ident
     display (ExternalIdent ident) =
@@ -59,43 +64,77 @@ insertIndent depth = Data.Text.replicate depth "    "
 instance Display SourcePos where
     display _ = ""
 
+instance Display TypedState where
+    display (TypedState ty _) = " (* : " <> display ty <> " *)"
+
 instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr state identTy operandTy) where
     displayI expression indentDepth = withoutState expression indentDepth <> display (getExprState expression)
-        where
-            withoutState :: (Display state, Display identTy, DisplayI operandTy) => Expr state identTy operandTy -> Int -> Text
-            withoutState (Const _ lit) _ = display lit
-            withoutState (Unary _ op expr) depth =
-                "(" <> display op <> " " <> displayI expr depth <> ")"
-            withoutState (Binary _ op expr1 expr2) depth =
-                "(" <> displayI expr1 depth <> " " <> display op <> " " <> displayI expr2 depth <> ")"
-            withoutState (If _ cond thenExpr elseExpr) depth =
-                "(if " <> displayI cond depth <> " then\n"
-                    <> insertIndent (depth + 1) <> displayI thenExpr (depth + 1) <> "\n"
-                    <> insertIndent depth <> "else\n"
-                    <> insertIndent (depth + 1) <> displayI elseExpr (depth + 1) <> ")"
-            withoutState (Let _ PUnit value body) depth =
-                "(let () = " <> displayI value depth <> " in\n"
-                    <> insertIndent (depth + 1) <> displayI body (depth + 1) <> ")"
-            withoutState (Let _ (PVar v) value body) depth =
-                "(let " <> display v <> " = " <> displayI value depth <> " in\n"
-                    <> insertIndent (depth + 1) <> displayI body (depth + 1) <> ")"
-            withoutState (Let _ (PRec f args) value body) depth =
-                "(let rec " <> display f <> " " <> Data.Text.unwords (Prelude.map display args) <> " = " <> displayI value depth <> " in\n"
-                    <> insertIndent (depth + 1) <> displayI body (depth + 1) <> ")"
-            withoutState (Let _ (PTuple values) value body) depth =
-                "(let " <> Data.Text.unwords (Prelude.map display values) <> " = " <> displayI value depth <> " in\n"
-                    <> insertIndent (depth + 1) <> displayI body (depth + 1) <> ")"
-            withoutState (App _ func args) depth =
-                "(" <> displayI func depth <> " " <> Data.Text.unwords (Prelude.map (`displayI` depth)  args) <> ")"
-            withoutState (Tuple _ values) depth =
-                "(" <> intercalate ", " (Prelude.map (`displayI` depth) values) <> ")"
-            withoutState (ArrayCreate _ size initVal) depth =
-                "(Array.create " <> displayI size depth <> " " <> displayI initVal depth <> ")"
-            withoutState (Get _ array idx) depth =
-                "(" <> displayI array depth <> ".(" <> displayI idx depth <> "))"
-            withoutState (Put _ array idx value) depth =
-                "(" <> displayI array depth <> ".(" <> displayI idx depth <> ") <- " <> displayI value depth <> ")"
-            withoutState (Var _ v) _ = display v
+      where
+        withoutState :: (Display state, Display identTy, DisplayI operandTy) => Expr state identTy operandTy -> Int -> Text
+        withoutState (Const _ lit) _ = display lit
+        withoutState (Unary _ op expr) depth =
+            "(" <> display op <> " " <> displayI expr depth <> ")"
+        withoutState (Binary _ op expr1 expr2) depth =
+            "(" <> displayI expr1 depth <> " " <> display op <> " " <> displayI expr2 depth <> ")"
+        withoutState (If _ cond thenExpr elseExpr) depth =
+            "(if "
+                <> displayI cond depth
+                <> " then\n"
+                <> insertIndent (depth + 1)
+                <> displayI thenExpr (depth + 1)
+                <> "\n"
+                <> insertIndent depth
+                <> "else\n"
+                <> insertIndent (depth + 1)
+                <> displayI elseExpr (depth + 1)
+                <> ")"
+        withoutState (Let _ PUnit value body) depth =
+            "(let () = "
+                <> displayI value depth
+                <> " in\n"
+                <> insertIndent (depth + 1)
+                <> displayI body (depth + 1)
+                <> ")"
+        withoutState (Let _ (PVar v) value body) depth =
+            "(let "
+                <> display v
+                <> " = "
+                <> displayI value depth
+                <> " in\n"
+                <> insertIndent (depth + 1)
+                <> displayI body (depth + 1)
+                <> ")"
+        withoutState (Let _ (PRec f args) value body) depth =
+            "(let rec "
+                <> display f
+                <> " "
+                <> Data.Text.unwords (Prelude.map display args)
+                <> " = "
+                <> displayI value depth
+                <> " in\n"
+                <> insertIndent (depth + 1)
+                <> displayI body (depth + 1)
+                <> ")"
+        withoutState (Let _ (PTuple values) value body) depth =
+            "(let "
+                <> Data.Text.unwords (Prelude.map display values)
+                <> " = "
+                <> displayI value depth
+                <> " in\n"
+                <> insertIndent (depth + 1)
+                <> displayI body (depth + 1)
+                <> ")"
+        withoutState (App _ func args) depth =
+            "(" <> displayI func depth <> " " <> Data.Text.unwords (Prelude.map (`displayI` depth) args) <> ")"
+        withoutState (Tuple _ values) depth =
+            "(" <> intercalate ", " (Prelude.map (`displayI` depth) values) <> ")"
+        withoutState (ArrayCreate _ size initVal) depth =
+            "(Array.create " <> displayI size depth <> " " <> displayI initVal depth <> ")"
+        withoutState (Get _ array idx) depth =
+            "(" <> displayI array depth <> ".(" <> displayI idx depth <> "))"
+        withoutState (Put _ array idx value) depth =
+            "(" <> displayI array depth <> ".(" <> displayI idx depth <> ") <- " <> displayI value depth <> ")"
+        withoutState (Var _ v) _ = display v
 
 instance DisplayI ParsedExpr where
     displayI (PGuard expr) = displayI expr
@@ -108,3 +147,22 @@ instance DisplayI ResolvedExpr where
 
 instance Display ResolvedExpr where
     display expr = displayI expr 0
+
+instance DisplayI TypedExpr where
+    displayI (TGuard expr) = displayI expr
+
+instance Display TypedExpr where
+    display expr = displayI expr 0
+
+instance Display (TypeKind a) where
+    display TUnit = "unit"
+    display TBool = "bool"
+    display TInt = "int"
+    display TFloat = "float"
+    display (TFun args ret) =
+        "(" <> intercalate " -> " (Prelude.map display args) <> ") -> " <> display ret
+    display (TTuple values) =
+        "(" <> intercalate " * " (Prelude.map display values) <> ")"
+    display (TArray value) =
+        display value <> " array"
+    display (TVar tId) = "__t" <> pack (show tId)

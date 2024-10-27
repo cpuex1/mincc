@@ -46,6 +46,7 @@ library
     , containers
     , hspec
     , megaparsec
+    , mtl
     , parser-combinators
     , text
     , transformers
@@ -72,6 +73,7 @@ executable mincc
     , hspec
     , megaparsec
     , mincc
+    , mtl
     , optparse-applicative
     , parser-combinators
     , text
@@ -96,6 +98,7 @@ test-suite mincc-test
     , hspec
     , megaparsec
     , mincc
+    , mtl
     , parser-combinators
     , text
     , transformers

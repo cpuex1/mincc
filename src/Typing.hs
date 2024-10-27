@@ -1,7 +1,12 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Typing (ITy, Ty, TypeKind(TUnit, TBool, TInt, TFloat, TFun, TTuple, TArray, TVar)) where
+module Typing (
+    TypeId,
+    ITy,
+    Ty,
+    TypeKind (TUnit, TBool, TInt, TFloat, TFun, TTuple, TArray, TVar),
+) where
 
 data TypeNotResolved = TypeNotResolved
     deriving (Show, Eq)
@@ -23,5 +28,5 @@ data TypeKind resolvedTy where
     TArray :: TypeKind resolvedTy -> TypeKind resolvedTy
     TVar :: TypeId -> TypeKind TypeNotResolved
 
-deriving instance Show a => Show (TypeKind a)
-deriving instance Eq a => Eq (TypeKind a)
+deriving instance (Show a) => Show (TypeKind a)
+deriving instance (Eq a) => Eq (TypeKind a)

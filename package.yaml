@@ -28,6 +28,7 @@ dependencies:
 - parser-combinators
 - containers
 - transformers
+- mtl
 
 ghc-options:
 - -Wall
