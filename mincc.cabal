@@ -27,7 +27,6 @@ library
   exposed-modules:
       Display
       Error
-      Lib
       NameRes
       Parser
       Syntax
