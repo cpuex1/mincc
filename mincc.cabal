@@ -27,6 +27,7 @@ library
   exposed-modules:
       Display
       Error
+      KNorm
       NameRes
       Parser
       Syntax
