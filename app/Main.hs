@@ -69,6 +69,11 @@ execArgs = do
             lift $ lift $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map (display . fst) kExprs
             printLog Debug "K-normalized expressions are saved"
 
+            flattenExprs <- flattenExprIO kExprs
+            printLog Done "Flatten succeeded"
+            lift $ lift $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map (display . fst) flattenExprs
+            printLog Debug "Flatten expressions are saved"
+
             printLog Done "Compilation succeeded"
         )
         $ \err -> do

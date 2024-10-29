@@ -1,18 +1,26 @@
-module Compile (parseAllIO, resolveAllIO, inferTypeIO, kNormalizeIO) where
+module Compile (
+    parseAllIO,
+    resolveAllIO,
+    inferTypeIO,
+    kNormalizeIO,
+    flattenExprIO
+) where
 
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
+import Control.Monad.State (runState)
 import Control.Monad.Trans.Class
+import Data.Bifunctor (Bifunctor (first))
 import qualified Data.Text.IO as TIO
 import Error
+import Flatten (flattenExpr)
+import KNorm
 import Log
 import NameRes (resolveNames)
 import Parser
 import Syntax
 import Text.Megaparsec
 import TypeInferrer (inferType)
-import KNorm
-import Control.Monad.State (runState)
 
 parseIO :: FilePath -> ConfigIO ParsedExpr
 parseIO path = do
@@ -41,3 +49,6 @@ inferTypeIO (expr : rest) = do
 
 kNormalizeIO :: [TypedExpr] -> ConfigIO [(KExpr, OptimEnv)]
 kNormalizeIO exprs = pure $ map (\expr -> runState (kNormalize expr) defaultOptimEnv) exprs
+
+flattenExprIO :: [(KExpr, OptimEnv)] -> ConfigIO [(KExpr, OptimEnv)]
+flattenExprIO exprs = pure $ map (first flattenExpr) exprs

@@ -27,6 +27,7 @@ library
   exposed-modules:
       Display
       Error
+      Flatten
       KNorm
       NameRes
       Parser
