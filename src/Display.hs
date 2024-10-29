@@ -45,18 +45,21 @@ instance Display BinaryOp where
 instance Display RawIdent where
     display (RawIdent _ ident) = ident
 
-instance Display Ident where
-    display (UserDefined pos ident) =
+instance DisplayI Ident where
+    displayI (UserDefined pos ident) _ =
         "__"
             <> (pack . show . unPos . sourceLine) pos
             <> "_"
             <> (pack . show . unPos . sourceColumn) pos
             <> "_"
             <> ident
-    display (CompilerGenerated ident) =
+    displayI (CompilerGenerated ident) _ =
         "__gen_" <> pack (show ident)
-    display (ExternalIdent ident) =
+    displayI (ExternalIdent ident) _ =
         "__ext_" <> ident
+
+instance Display Ident where
+    display ident = displayI ident 0
 
 insertIndent :: Int -> Text
 insertIndent depth = Data.Text.replicate depth "    "
@@ -135,6 +138,9 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
         withoutState (Put _ array idx value) depth =
             "(" <> displayI array depth <> ".(" <> displayI idx depth <> ") <- " <> displayI value depth <> ")"
         withoutState (Var _ v) _ = display v
+
+instance (Display state, Display identTy, DisplayI operandTy) => Display (Expr state identTy operandTy) where
+    display expr = displayI expr 0
 
 instance DisplayI ParsedExpr where
     displayI (PGuard expr) = displayI expr

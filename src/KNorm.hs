@@ -1,4 +1,10 @@
-module KNorm (OptimState, genVar, kNormalize) where
+module KNorm (
+    OptimState,
+    OptimEnv (OptimEnv, generated),
+    defaultOptimEnv,
+    genVar,
+    kNormalize,
+) where
 
 import Control.Monad.State
 import Syntax
@@ -6,6 +12,9 @@ import Syntax
 newtype OptimEnv = OptimEnv
     {generated :: Int}
     deriving (Show, Eq)
+
+defaultOptimEnv :: OptimEnv
+defaultOptimEnv = OptimEnv 0
 
 type OptimState = State OptimEnv
 

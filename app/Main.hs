@@ -64,6 +64,11 @@ execArgs = do
             lift $ lift $ TIO.writeFile (changeExt "typed.ml" outputFile) $ intercalate "\n" $ map display typedExprs
             printLog Debug "Typed expressions are saved"
 
+            kExprs <- kNormalizeIO typedExprs
+            printLog Done "K-normalization succeeded"
+            lift $ lift $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map (display . fst) kExprs
+            printLog Debug "K-normalized expressions are saved"
+
             printLog Done "Compilation succeeded"
         )
         $ \err -> do

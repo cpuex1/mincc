@@ -1,4 +1,4 @@
-module Compile (parseAllIO, resolveAllIO, inferTypeIO) where
+module Compile (parseAllIO, resolveAllIO, inferTypeIO, kNormalizeIO) where
 
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
@@ -11,6 +11,8 @@ import Parser
 import Syntax
 import Text.Megaparsec
 import TypeInferrer (inferType)
+import KNorm
+import Control.Monad.State (runState)
 
 parseIO :: FilePath -> ConfigIO ParsedExpr
 parseIO path = do
@@ -36,3 +38,6 @@ inferTypeIO (expr : rest) = do
         Right typedExpr -> do
             rest' <- inferTypeIO rest
             return (typedExpr : rest')
+
+kNormalizeIO :: [TypedExpr] -> ConfigIO [(KExpr, OptimEnv)]
+kNormalizeIO exprs = pure $ map (\expr -> runState (kNormalize expr) defaultOptimEnv) exprs
