@@ -54,7 +54,7 @@ instance Display Ident where
             <> "_"
             <> ident
     display (CompilerGenerated ident) =
-        "__gen_" <> ident
+        "__gen_" <> pack (show ident)
     display (ExternalIdent ident) =
         "__ext_" <> ident
 
