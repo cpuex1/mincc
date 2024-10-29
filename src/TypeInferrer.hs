@@ -42,7 +42,7 @@ defaultEnv = TypeEnv 0 [] []
 genNewId :: TypingM TypeId
 genNewId =
     get >>= \env ->
-        modify (\e -> e{assigned = assigned env + 1, table = table env ++ [Nothing]})
+        modify (\e -> e{assigned = assigned e + 1, table = table e ++ [Nothing]})
             >> return (assigned env)
 
 fromTypeId :: TypeId -> TypingM (Maybe ITy)
@@ -55,7 +55,7 @@ registerIdent ident = do
         Just _ -> pure ()
         Nothing -> do
             tId <- genNewId
-            modify (\e -> e{variables = (ident, tId) : variables env})
+            modify (\e -> e{variables = (ident, tId) : variables e})
 
 registerAll :: ResolvedExpr -> TypingM ()
 registerAll (RGuard expr) =
