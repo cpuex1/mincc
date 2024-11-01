@@ -3,7 +3,8 @@ module Compile (
     resolveAllIO,
     inferTypeIO,
     kNormalizeIO,
-    flattenExprIO
+    flattenExprIO,
+    getFunctionsIO
 ) where
 
 import CommandLine
@@ -21,6 +22,7 @@ import Parser
 import Syntax
 import Text.Megaparsec
 import TypeInferrer (inferType)
+import Closure (getFunctions)
 
 parseIO :: FilePath -> ConfigIO ParsedExpr
 parseIO path = do
@@ -52,3 +54,6 @@ kNormalizeIO exprs = pure $ map (\expr -> runState (kNormalize expr) defaultOpti
 
 flattenExprIO :: [(KExpr, OptimEnv)] -> ConfigIO [(KExpr, OptimEnv)]
 flattenExprIO exprs = pure $ map (first flattenExpr) exprs
+
+getFunctionsIO :: [KExpr] -> ConfigIO [Function]
+getFunctionsIO exprs = pure $ concatMap getFunctions exprs

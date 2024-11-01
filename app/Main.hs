@@ -74,6 +74,11 @@ execArgs = do
             lift $ lift $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map (display . fst) flattenExprs
             printLog Debug "Flatten expressions are saved"
 
+            functions <- getFunctionsIO (map fst flattenExprs)
+            printLog Done "Closure conversion succeeded"
+            lift $ lift $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
+            printLog Debug "Closure expressions are saved"
+
             printLog Done "Compilation succeeded"
         )
         $ \err -> do

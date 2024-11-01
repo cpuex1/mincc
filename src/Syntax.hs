@@ -16,6 +16,8 @@ module Syntax (
     TypedState (TypedState, getType, getPosition),
     KExpr,
     TypedExpr (TGuard, tExp),
+    ClosureExpr,
+    Function (Function, funcName, isDirect, globalArgs, funcArgs, funcBody),
     AllowClosure (AllowClosure),
     DisallowClosure (DisallowClosure),
     Expr (
@@ -105,6 +107,19 @@ newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr DisallowClos
 
 -- | The type of an expression after K-normalization.
 type KExpr = Expr TypedState Ident Ident DisallowClosure
+
+-- | The type of an expression after introducing closures.
+type ClosureExpr = Expr TypedState Ident Ident AllowClosure
+
+data Function = Function
+    { funcState :: TypedState
+    , isDirect :: Bool
+    , funcName :: Ident
+    , globalArgs :: [Ident]
+    , funcArgs :: [Ident]
+    , funcBody :: ClosureExpr
+    }
+    deriving (Show, Eq)
 
 data AllowClosure = AllowClosure
     deriving (Show, Eq)

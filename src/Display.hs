@@ -166,13 +166,29 @@ instance DisplayI TypedExpr where
 instance Display TypedExpr where
     display expr = displayI expr 0
 
+instance DisplayI Function where
+    displayI func depth =
+        displayI (funcName func) depth
+            <> "@"
+            <> (if isDirect func then "direct" else "closure")
+            <> " {"
+            <> Data.Text.unwords (Prelude.map display (globalArgs func))
+            <> "} "
+            <> Data.Text.unwords (Prelude.map display (funcArgs func))
+            <> ":\n"
+            <> insertIndent (depth + 1)
+            <> displayI (funcBody func) (depth + 1)
+
+instance Display Function where
+    display func = displayI func 0
+
 instance Display (TypeKind a) where
     display TUnit = "unit"
     display TBool = "bool"
     display TInt = "int"
     display TFloat = "float"
     display (TFun args ret) =
-        "(" <> intercalate " -> " (Prelude.map display args) <> ") -> " <> display ret
+        "(" <> intercalate ", " (Prelude.map display args) <> ") -> " <> display ret
     display (TTuple values) =
         "(" <> intercalate " * " (Prelude.map display values) <> ")"
     display (TArray value) =
