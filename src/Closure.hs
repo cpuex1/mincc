@@ -32,6 +32,7 @@ data GlobalArgsEnv = GlobalArgsEnv
     }
 
 extractGlobal :: Ident -> State GlobalArgsEnv ()
+extractGlobal (ExternalIdent _) = pure ()
 extractGlobal ident = do
     env <- get
     unless (ident `elem` eBoundedArgs env) $
