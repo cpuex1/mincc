@@ -104,6 +104,7 @@ getFreeVars kExpr bounded = eFreeVars $ execState (getFreeVarState kExpr) (FreeA
         registerFreeVar func
         mapM_ registerFreeVar args
 
+-- | Determines whether the function has been treated as a closure.
 isUsedAsClosure :: Ident -> KExpr -> Bool
 isUsedAsClosure ident (If _ _ thenExpr elseExpr) =
     isUsedAsClosure ident thenExpr || isUsedAsClosure ident elseExpr
@@ -121,9 +122,27 @@ isUsedAsClosure ident (Put _ _ _ value) =
     ident == value
 isUsedAsClosure _ _ = False
 
+-- | Determines whether the function is used.
+isUsed :: Ident -> KExpr -> Bool
+isUsed ident (If _ _ thenExpr elseExpr) =
+    isUsed ident thenExpr || isUsed ident elseExpr
+isUsed ident (Let _ _ expr body) =
+    isUsed ident expr || isUsed ident body
+isUsed ident (Var _ ident') =
+    ident == ident'
+isUsed ident (App _ func args) =
+    func == ident || ident `elem` args
+isUsed ident (Tuple _ values) =
+    ident `elem` values
+isUsed ident (ArrayCreate _ _ value) =
+    ident == value
+isUsed ident (Put _ _ _ value) =
+    ident == value
+isUsed _ _ = False
+
 getFunctions :: KExpr -> [Function]
 getFunctions expr =
-    Function (getExprState expr') True (ExternalIdent "__entry") [] [] expr' : functions funcList
+    Function (getExprState expr') True (ExternalIdent "entry") [] [] expr' : functions funcList
   where
     (expr', funcList) = runState (genFunctions expr) (ClosureEnv [])
 
@@ -143,10 +162,16 @@ genFunctions (Let state (PRec func args) expr body) = do
             updateFunctionExpr func expr'
             genFunctions body
         else do
-            -- TODO: care about recursive functions with some free variables.
             addFunction (Function state False func freeVars' args dummyExpr)
             expr' <- genFunctions expr
-            updateFunctionExpr func expr'
+            if isUsed func expr
+                then
+                    -- The function is a recursive function with free variables.
+                    -- Create a closure inside it to avoid referencing out-of-scope closures.
+                    updateFunctionExpr func
+                        $ Let state (PVar func) (MakeClosure state func freeVars') expr'
+                else
+                    updateFunctionExpr func expr'
             body' <- genFunctions body
             pure $ Let state (PVar func) (MakeClosure state func freeVars') body'
   where
