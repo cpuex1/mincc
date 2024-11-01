@@ -172,9 +172,9 @@ instance DisplayI Function where
             <> "@"
             <> (if isDirect func then "direct" else "closure")
             <> " {"
-            <> Data.Text.unwords (Prelude.map display (globalArgs func))
+            <> Data.Text.unwords (Prelude.map display (freeVars func))
             <> "} "
-            <> Data.Text.unwords (Prelude.map display (funcArgs func))
+            <> Data.Text.unwords (Prelude.map display (boundedArgs func))
             <> ":\n"
             <> insertIndent (depth + 1)
             <> displayI (funcBody func) (depth + 1)

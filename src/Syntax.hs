@@ -17,7 +17,7 @@ module Syntax (
     KExpr,
     TypedExpr (TGuard, tExp),
     ClosureExpr,
-    Function (Function, funcName, isDirect, globalArgs, funcArgs, funcBody),
+    Function (Function, funcName, isDirect, freeVars, boundedArgs, funcBody),
     AllowClosure (AllowClosure),
     DisallowClosure (DisallowClosure),
     Expr (
@@ -115,8 +115,8 @@ data Function = Function
     { funcState :: TypedState
     , isDirect :: Bool
     , funcName :: Ident
-    , globalArgs :: [Ident]
-    , funcArgs :: [Ident]
+    , freeVars :: [Ident]
+    , boundedArgs :: [Ident]
     , funcBody :: ClosureExpr
     }
     deriving (Show, Eq)

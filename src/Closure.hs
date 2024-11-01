@@ -6,6 +6,8 @@ module Closure (getFunctions, ClosureEnv (ClosureEnv)) where
 import Control.Monad (unless)
 import Control.Monad.State (State, execState, get, gets, modify, runState)
 import Syntax
+import Text.Megaparsec (initialPos)
+import Typing (TypeKind (TUnit))
 
 newtype ClosureEnv = ClosureEnv
     { functions :: [Function]
@@ -26,83 +28,131 @@ findFunction ident =
         | funcName f == ident' = Just f
         | otherwise = findFunction' ident' fs
 
-data GlobalArgsEnv = GlobalArgsEnv
-    { eGlobalArgs :: [Ident]
-    , eBoundedArgs :: [Ident]
+updateFunctionExpr :: Ident -> ClosureExpr -> ClosureState ()
+updateFunctionExpr ident expr = do
+    funcList <- gets functions
+    modify $ \env -> env{functions = updateFunctionExpr' funcList}
+  where
+    updateFunctionExpr' :: [Function] -> [Function]
+    updateFunctionExpr' [] = []
+    updateFunctionExpr' (func : rest)
+        | funcName func == ident = func{funcBody = expr} : rest
+        | otherwise = func : updateFunctionExpr' rest
+
+data FreeArgsEnv = FreeArgsEnv
+    { eFreeVars :: [Ident]
+    , eBoundedVars :: [Ident]
     }
 
-extractGlobal :: Ident -> State GlobalArgsEnv ()
-extractGlobal (ExternalIdent _) = pure ()
-extractGlobal ident = do
+registerFreeVar :: Ident -> State FreeArgsEnv ()
+registerFreeVar (ExternalIdent _) = pure ()
+registerFreeVar ident = do
     env <- get
-    unless (ident `elem` eBoundedArgs env) $
-        unless (ident `elem` eGlobalArgs env) $
+    unless (ident `elem` eBoundedVars env) $
+        unless (ident `elem` eFreeVars env) $
             modify $
-                \env' -> env'{eGlobalArgs = ident : eGlobalArgs env}
+                \env' -> env'{eFreeVars = ident : eFreeVars env}
 
-addBoundedArg :: Ident -> State GlobalArgsEnv ()
-addBoundedArg ident = modify $ \env -> env{eBoundedArgs = ident : eBoundedArgs env}
+addBounded :: Ident -> State FreeArgsEnv ()
+addBounded ident = modify $ \env -> env{eBoundedVars = ident : eBoundedVars env}
 
-getGlobalArgs :: KExpr -> State GlobalArgsEnv ()
-getGlobalArgs (Const _ _) = pure ()
-getGlobalArgs (Unary _ _ operand) = extractGlobal operand
-getGlobalArgs (Binary _ _ operand1 operand2) = do
-    extractGlobal operand1
-    extractGlobal operand2
-getGlobalArgs (If _ cond thenExpr elseExpr) = do
-    extractGlobal cond
-    getGlobalArgs thenExpr
-    getGlobalArgs elseExpr
-getGlobalArgs (Let _ PUnit expr body) = do
-    getGlobalArgs expr
-    getGlobalArgs body
-getGlobalArgs (Let _ (PVar v) expr body) = do
-    -- Since the identifiers are unique, we don't have to care about shadowing.
-    addBoundedArg v
-    getGlobalArgs expr
-    getGlobalArgs body
-getGlobalArgs (Let _ (PTuple vs) expr body) = do
-    mapM_ addBoundedArg vs
-    getGlobalArgs expr
-    getGlobalArgs body
-getGlobalArgs (Let _ (PRec func args) expr body) = do
-    addBoundedArg func
-    mapM_ addBoundedArg args
-    getGlobalArgs expr
-    getGlobalArgs body
-getGlobalArgs (Var _ v) = do
-    extractGlobal v
-getGlobalArgs (Tuple _ values) = do
-    mapM_ extractGlobal values
-getGlobalArgs (ArrayCreate _ size value) = do
-    extractGlobal size
-    extractGlobal value
-getGlobalArgs (Get _ array index) = do
-    extractGlobal array
-    extractGlobal index
-getGlobalArgs (Put _ array index value) = do
-    extractGlobal array
-    extractGlobal index
-    extractGlobal value
-getGlobalArgs (App _ func args) = do
-    extractGlobal func
-    mapM_ extractGlobal args
+getFreeVars :: KExpr -> [Ident] -> [Ident]
+getFreeVars kExpr bounded = eFreeVars $ execState (getFreeVarState kExpr) (FreeArgsEnv [] bounded)
+  where
+    getFreeVarState :: KExpr -> State FreeArgsEnv ()
+    getFreeVarState (Const _ _) = pure ()
+    getFreeVarState (Unary _ _ operand) = registerFreeVar operand
+    getFreeVarState (Binary _ _ operand1 operand2) = do
+        registerFreeVar operand1
+        registerFreeVar operand2
+    getFreeVarState (If _ cond thenExpr elseExpr) = do
+        registerFreeVar cond
+        getFreeVarState thenExpr
+        getFreeVarState elseExpr
+    getFreeVarState (Let _ PUnit expr body) = do
+        getFreeVarState expr
+        getFreeVarState body
+    getFreeVarState (Let _ (PVar v) expr body) = do
+        -- Since the identifiers are unique, we don't have to care about shadowing.
+        addBounded v
+        getFreeVarState expr
+        getFreeVarState body
+    getFreeVarState (Let _ (PTuple vs) expr body) = do
+        mapM_ addBounded vs
+        getFreeVarState expr
+        getFreeVarState body
+    getFreeVarState (Let _ (PRec func args) expr body) = do
+        addBounded func
+        mapM_ addBounded args
+        getFreeVarState expr
+        getFreeVarState body
+    getFreeVarState (Var _ v) = do
+        registerFreeVar v
+    getFreeVarState (Tuple _ values) = do
+        mapM_ registerFreeVar values
+    getFreeVarState (ArrayCreate _ size value) = do
+        registerFreeVar size
+        registerFreeVar value
+    getFreeVarState (Get _ array index) = do
+        registerFreeVar array
+        registerFreeVar index
+    getFreeVarState (Put _ array index value) = do
+        registerFreeVar array
+        registerFreeVar index
+        registerFreeVar value
+    getFreeVarState (App _ func args) = do
+        registerFreeVar func
+        mapM_ registerFreeVar args
+
+isUsedAsClosure :: Ident -> KExpr -> Bool
+isUsedAsClosure ident (If _ _ thenExpr elseExpr) =
+    isUsedAsClosure ident thenExpr || isUsedAsClosure ident elseExpr
+isUsedAsClosure ident (Let _ _ expr body) =
+    isUsedAsClosure ident expr || isUsedAsClosure ident body
+isUsedAsClosure ident (Var _ ident') =
+    ident == ident'
+isUsedAsClosure ident (App _ _ args) =
+    ident `elem` args
+isUsedAsClosure ident (Tuple _ values) =
+    ident `elem` values
+isUsedAsClosure ident (ArrayCreate _ _ value) =
+    ident == value
+isUsedAsClosure ident (Put _ _ _ value) =
+    ident == value
+isUsedAsClosure _ _ = False
 
 getFunctions :: KExpr -> [Function]
 getFunctions expr =
     Function (getExprState expr') True (ExternalIdent "__entry") [] [] expr' : functions funcList
-    where
-        (expr', funcList) = runState (extractFunctions expr) (ClosureEnv [])
-
-extractFunctions :: KExpr -> ClosureState ClosureExpr
-extractFunctions (Let state (PRec func args) expr body) = do
-    expr' <- extractFunctions expr
-    addFunction (Function state False func globals args expr')
-    body' <- extractFunctions body
-    pure $ Let state (PVar func) (MakeClosure state func globals) body'
   where
-    globals = eGlobalArgs $ execState (getGlobalArgs expr) (GlobalArgsEnv [] (func : args))
-extractFunctions (App state func args) = do
+    (expr', funcList) = runState (genFunctions expr) (ClosureEnv [])
+
+dummyState :: TypedState
+dummyState = TypedState TUnit (initialPos "dummy")
+
+dummyExpr :: ClosureExpr
+dummyExpr = Const dummyState LUnit
+
+genFunctions :: KExpr -> ClosureState ClosureExpr
+genFunctions (Let state (PRec func args) expr body) = do
+    if null freeVars' && not isUsedAsClosure'
+        then do
+            -- No free variables and no usage as closure means we don't have to create a closure.
+            addFunction (Function state True func [] args dummyExpr)
+            expr' <- genFunctions expr
+            updateFunctionExpr func expr'
+            genFunctions body
+        else do
+            -- TODO: care about recursive functions with some free variables.
+            addFunction (Function state False func freeVars' args dummyExpr)
+            expr' <- genFunctions expr
+            updateFunctionExpr func expr'
+            body' <- genFunctions body
+            pure $ Let state (PVar func) (MakeClosure state func freeVars') body'
+  where
+    freeVars' = getFreeVars expr (func : args)
+    isUsedAsClosure' = isUsedAsClosure func expr || isUsedAsClosure func body
+genFunctions (App state func args) = do
     func' <- findFunction func
     case (func', func) of
         (Just f, _) -> do
@@ -117,34 +167,34 @@ extractFunctions (App state func args) = do
         (Nothing, _) -> do
             -- Calling a closure.
             pure $ ClosureApp state func args
-extractFunctions (Const state lit) =
+genFunctions (Const state lit) =
     pure $ Const state lit
-extractFunctions (Unary state op operand) =
+genFunctions (Unary state op operand) =
     pure $ Unary state op operand
-extractFunctions (Binary state op operand1 operand2) =
+genFunctions (Binary state op operand1 operand2) =
     pure $ Binary state op operand1 operand2
-extractFunctions (If state cond thenExpr elseExpr) = do
-    thenExpr' <- extractFunctions thenExpr
-    elseExpr' <- extractFunctions elseExpr
+genFunctions (If state cond thenExpr elseExpr) = do
+    thenExpr' <- genFunctions thenExpr
+    elseExpr' <- genFunctions elseExpr
     pure $ If state cond thenExpr' elseExpr'
-extractFunctions (Let state PUnit expr body) = do
-    expr' <- extractFunctions expr
-    body' <- extractFunctions body
+genFunctions (Let state PUnit expr body) = do
+    expr' <- genFunctions expr
+    body' <- genFunctions body
     pure $ Let state PUnit expr' body'
-extractFunctions (Let state (PVar v) expr body) = do
-    expr' <- extractFunctions expr
-    body' <- extractFunctions body
+genFunctions (Let state (PVar v) expr body) = do
+    expr' <- genFunctions expr
+    body' <- genFunctions body
     pure $ Let state (PVar v) expr' body'
-extractFunctions (Let state (PTuple vs) expr body) = do
-    expr' <- extractFunctions expr
-    body' <- extractFunctions body
+genFunctions (Let state (PTuple vs) expr body) = do
+    expr' <- genFunctions expr
+    body' <- genFunctions body
     pure $ Let state (PTuple vs) expr' body'
-extractFunctions (Var state ident) = pure $ Var state ident
-extractFunctions (Tuple state values) =
+genFunctions (Var state ident) = pure $ Var state ident
+genFunctions (Tuple state values) =
     pure $ Tuple state values
-extractFunctions (ArrayCreate state size value) =
+genFunctions (ArrayCreate state size value) =
     pure $ ArrayCreate state size value
-extractFunctions (Get state array index) =
+genFunctions (Get state array index) =
     pure $ Get state array index
-extractFunctions (Put state array index value) =
+genFunctions (Put state array index value) =
     pure $ Put state array index value
