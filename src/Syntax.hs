@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Syntax (
     Literal (LUnit, LBool, LInt, LFloat),
@@ -15,7 +16,24 @@ module Syntax (
     TypedState (TypedState, getType, getPosition),
     KExpr,
     TypedExpr (TGuard, tExp),
-    Expr (Const, Unary, Binary, If, Let, Var, App, Tuple, ArrayCreate, Get, Put),
+    AllowClosure (AllowClosure),
+    DisallowClosure (DisallowClosure),
+    Expr (
+        Const,
+        Unary,
+        Binary,
+        If,
+        Let,
+        Var,
+        App,
+        Tuple,
+        ArrayCreate,
+        Get,
+        Put,
+        MakeClosure,
+        ClosureApp,
+        DirectApp
+    ),
     getExprState,
     visitExprM,
 ) where
@@ -69,40 +87,112 @@ data Pattern identTy
 {- | The type of an expression after parsing.
 PGuard is used for avoiding invalid recursive type definition.
 -}
-newtype ParsedExpr = PGuard {pExp :: Expr SourcePos RawIdent ParsedExpr}
+newtype ParsedExpr = PGuard {pExp :: Expr SourcePos RawIdent ParsedExpr DisallowClosure}
     deriving (Show, Eq)
 
 {- | The type of an expression after name resolution.
 RGuard is used for avoiding invalid recursive type definition.
 -}
-newtype ResolvedExpr = RGuard {rExp :: Expr SourcePos Ident ResolvedExpr}
+newtype ResolvedExpr = RGuard {rExp :: Expr SourcePos Ident ResolvedExpr DisallowClosure}
     deriving (Show, Eq)
 
 data TypedState = TypedState {getType :: Ty, getPosition :: SourcePos}
     deriving (Show, Eq)
 
 -- | The type of an expression after type inference.
-newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr}
+newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr DisallowClosure}
     deriving (Show, Eq)
 
 -- | The type of an expression after K-normalization.
-type KExpr = Expr TypedState Ident Ident
+type KExpr = Expr TypedState Ident Ident DisallowClosure
 
-data Expr state identTy operandTy where
-    Const :: state -> Literal -> Expr state a b
-    Unary :: state -> UnaryOp -> operandTy -> Expr state a operandTy
-    Binary :: state -> BinaryOp -> operandTy -> operandTy -> Expr state a operandTy
-    If :: state -> operandTy -> Expr state identTy operandTy -> Expr state identTy operandTy -> Expr state identTy operandTy
-    Let :: state -> Pattern identTy -> Expr state identTy operandTy -> Expr state identTy operandTy -> Expr state identTy operandTy
-    Var :: state -> identTy -> Expr state identTy b
-    App :: state -> operandTy -> [operandTy] -> Expr state a operandTy
-    Tuple :: state -> [operandTy] -> Expr state a operandTy
-    ArrayCreate :: state -> operandTy -> operandTy -> Expr state a operandTy
-    Get :: state -> operandTy -> operandTy -> Expr state a operandTy
-    Put :: state -> operandTy -> operandTy -> operandTy -> Expr state a operandTy
+data AllowClosure = AllowClosure
     deriving (Show, Eq)
 
-getExprState :: Expr state identTy operandTy -> state
+data DisallowClosure = DisallowClosure
+    deriving (Show, Eq)
+
+data Expr state identTy operandTy closureTy where
+    Const ::
+        state ->
+        Literal ->
+        Expr state a b closureTy
+    Unary ::
+        state ->
+        UnaryOp ->
+        operandTy ->
+        Expr state a operandTy closureTy
+    Binary ::
+        state ->
+        BinaryOp ->
+        operandTy ->
+        operandTy ->
+        Expr state a operandTy closureTy
+    If ::
+        state ->
+        operandTy ->
+        Expr state identTy operandTy closureTy ->
+        Expr state identTy operandTy closureTy ->
+        Expr state identTy operandTy closureTy
+    Let ::
+        state ->
+        Pattern identTy ->
+        Expr state identTy operandTy closureTy ->
+        Expr state identTy operandTy closureTy ->
+        Expr state identTy operandTy closureTy
+    Var ::
+        state ->
+        identTy ->
+        Expr state identTy b closureTy
+    App ::
+        state ->
+        operandTy ->
+        [operandTy] ->
+        Expr state identTy operandTy DisallowClosure
+    Tuple ::
+        state ->
+        [operandTy] ->
+        Expr state a operandTy closureTy
+    ArrayCreate ::
+        state ->
+        operandTy ->
+        operandTy ->
+        Expr state identTy operandTy closureTy
+    Get ::
+        state ->
+        operandTy ->
+        operandTy ->
+        Expr state a operandTy closureTy
+    Put ::
+        state ->
+        operandTy ->
+        operandTy ->
+        operandTy ->
+        Expr state identTy operandTy closureTy
+    MakeClosure ::
+        state ->
+        identTy ->
+        [operandTy] ->
+        Expr state identTy operandTy AllowClosure
+    ClosureApp ::
+        state ->
+        identTy ->
+        [operandTy] ->
+        Expr state identTy operandTy AllowClosure
+    DirectApp ::
+        state ->
+        identTy ->
+        [operandTy] ->
+        Expr state identTy operandTy AllowClosure
+
+deriving instance
+    (Show state, Show identTy, Show operandTy, Show closureTy) =>
+    Show (Expr state identTy operandTy closureTy)
+deriving instance
+    (Eq state, Eq identTy, Eq operandTy, Eq closureTy) =>
+    Eq (Expr state identTy operandTy closureTy)
+
+getExprState :: Expr state identTy operandTy closureTy -> state
 getExprState (Const state _) = state
 getExprState (Unary state _ _) = state
 getExprState (Binary state _ _ _) = state
@@ -114,14 +204,17 @@ getExprState (Tuple state _) = state
 getExprState (ArrayCreate state _ _) = state
 getExprState (Get state _ _) = state
 getExprState (Put state _ _ _) = state
+getExprState (MakeClosure state _ _) = state
+getExprState (ClosureApp state _ _) = state
+getExprState (DirectApp state _ _) = state
 
 visitExprM ::
     (Monad m) =>
     (state -> m state') ->
     (identTy -> m identTy') ->
     (operandTy -> m operandTy') ->
-    Expr state identTy operandTy ->
-    m (Expr state' identTy' operandTy')
+    Expr state identTy operandTy closureTy ->
+    m (Expr state' identTy' operandTy' closureTy)
 visitExprM fState _ _ (Const state lit) = do
     state' <- fState state
     pure $ Const state' lit
@@ -181,3 +274,18 @@ visitExprM fState _ fOperand (Put state array index value) = do
     index' <- fOperand index
     value' <- fOperand value
     pure $ Put state' array' index' value'
+visitExprM fState fIdent fOperand (MakeClosure state ident args) = do
+    state' <- fState state
+    ident' <- fIdent ident
+    args' <- mapM fOperand args
+    pure $ MakeClosure state' ident' args'
+visitExprM fState fIdent fOperand (ClosureApp state ident args) = do
+    state' <- fState state
+    ident' <- fIdent ident
+    args' <- mapM fOperand args
+    pure $ ClosureApp state' ident' args'
+visitExprM fState fIdent fOperand (DirectApp state ident args) = do
+    state' <- fState state
+    ident' <- fIdent ident
+    args' <- mapM fOperand args
+    pure $ DirectApp state' ident' args'

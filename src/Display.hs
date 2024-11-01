@@ -70,10 +70,10 @@ instance Display SourcePos where
 instance Display TypedState where
     display (TypedState ty _) = " (* : " <> display ty <> " *)"
 
-instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr state identTy operandTy) where
+instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr state identTy operandTy closureTy) where
     displayI expression indentDepth = withoutState expression indentDepth <> display (getExprState expression)
       where
-        withoutState :: (Display state, Display identTy, DisplayI operandTy) => Expr state identTy operandTy -> Int -> Text
+        withoutState :: (Display state, Display identTy, DisplayI operandTy) => Expr state identTy operandTy closureTy -> Int -> Text
         withoutState (Const _ lit) _ = display lit
         withoutState (Unary _ op expr) depth =
             "(" <> display op <> " " <> displayI expr depth <> ")"
@@ -138,8 +138,14 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
         withoutState (Put _ array idx value) depth =
             "(" <> displayI array depth <> ".(" <> displayI idx depth <> ") <- " <> displayI value depth <> ")"
         withoutState (Var _ v) _ = display v
+        withoutState (MakeClosure _ ident args) depth =
+            "<" <> display ident <> ", " <> Data.Text.unwords (Prelude.map (`displayI` depth) args) <> ">"
+        withoutState (ClosureApp _ closure args) depth =
+            "(" <> display closure <> " @ " <> Data.Text.unwords (Prelude.map (`displayI` depth) args) <> ")"
+        withoutState (DirectApp _ func args) depth =
+            "(" <> display func <> " " <> Data.Text.unwords (Prelude.map (`displayI` depth) args) <> ")"
 
-instance (Display state, Display identTy, DisplayI operandTy) => Display (Expr state identTy operandTy) where
+instance (Display state, Display identTy, DisplayI operandTy) => Display (Expr state identTy operandTy closureTy) where
     display expr = displayI expr 0
 
 instance DisplayI ParsedExpr where

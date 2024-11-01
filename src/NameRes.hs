@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 module NameRes (resolveNames) where
 
 import Syntax

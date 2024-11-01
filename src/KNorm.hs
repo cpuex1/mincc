@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 module KNorm (
     OptimState,
     OptimEnv (OptimEnv, generated),
