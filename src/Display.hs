@@ -260,3 +260,28 @@ instance Display (Inst stateTy Int) where
         "lw " <> display lhs <> " " <> display rhs
     display (InstStore _ lhs rhs) =
         "sw " <> display lhs <> " " <> display rhs
+
+instance Display (InstTerm stateTy Int) where
+    display (Return _) = "return"
+    display (Jmp _ label) = "jmp " <> label
+    display (Branch _ Eq lhs rhs _ label2) =
+        "beq " <> display lhs <> " "  <> display rhs <> " " <> label2
+    display (Branch _ Le lhs rhs _ label2) =
+        "ble " <> display lhs <> " "  <> display rhs <> " " <> label2
+    display (Branch _ Ge lhs rhs _ label2) =
+        "bge " <> display lhs <> " "  <> display rhs <> " " <> label2
+    display (Branch _ Ne lhs rhs _ label2) =
+        "bne " <> display lhs <> " "  <> display rhs <> " " <> label2
+    display (Branch _ Lt lhs rhs _ label2) =
+        "blt " <> display lhs <> " "  <> display rhs <> " " <> label2
+    display (Branch _ Gt lhs rhs _ label2) =
+        "bgt " <> display lhs <> " "  <> display rhs <> " " <> label2
+    display Nop = "nop"
+
+instance Display (CodeBlock stateTy Int) where
+    display (CodeBlock label inst term) =
+        label <> ":\n"
+            <> intercalate "\n" (Prelude.map (\i -> insertIndent 1 <> display i) inst)
+            <> "\n"
+            <> insertIndent 1
+            <> display term
