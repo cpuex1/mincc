@@ -1,8 +1,10 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Display (display) where
 
+import Asm
 import Data.Text
 import Syntax
 import Text.Megaparsec.Pos (SourcePos (sourceColumn, sourceLine), unPos)
@@ -194,3 +196,67 @@ instance Display (TypeKind a) where
     display (TArray value) =
         display value <> " array"
     display (TVar tId) = "__t" <> pack (show tId)
+
+instance Display (Register Int Int) where
+    display ZeroReg = "x0"
+    display RetReg = "a0"
+    display (ArgsReg idTy) = "a" <> pack (show (idTy + 1))
+    display (TempReg idTy) = "t" <> pack (show idTy)
+
+instance Display (Register Int Float) where
+    display ZeroReg = "xf0"
+    display RetReg = "f0"
+    display (ArgsReg idTy) = "f" <> pack (show (idTy + 1))
+    display (TempReg idTy) = "tf" <> pack (show idTy)
+
+instance Display (Operand Int Int) where
+    display (Reg reg) = display reg
+    display (Imm imm) = "__imm_" <> pack (show imm)
+    display (Mem reg offset) = display reg <> "[" <> pack (show offset) <> "]"
+    display (DirectMem offset) = "[" <> pack (show offset) <> "]"
+
+instance Display (Operand Int Float) where
+    display (Reg reg) = display reg
+    display (Imm imm) = "__imm_" <> pack (show imm)
+    display (Mem reg offset) = display reg <> "[" <> pack (show offset) <> "]"
+    display (DirectMem offset) = "[" <> pack (show offset) <> "]"
+
+instance Display (Inst stateTy Int) where
+    display (InstRelationOp _ Eq lhs rhs1 rhs2) =
+        "seq " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstRelationOp _ Le lhs rhs1 rhs2) =
+        "sle " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstRelationOp _ Ge lhs rhs1 rhs2) =
+        "sge " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstRelationOp _ Ne lhs rhs1 rhs2) =
+        "sne " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstRelationOp _ Lt lhs rhs1 rhs2) =
+        "slt " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstRelationOp _ Gt lhs rhs1 rhs2) =
+        "sgt " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstIntBinOp _ Add lhs rhs1 rhs2) =
+        "add " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstIntBinOp _ Sub lhs rhs1 rhs2) =
+        "sub " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstIntBinOp _ Mul lhs rhs1 rhs2) =
+        "mul " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstIntBinOp _ Div lhs rhs1 rhs2) =
+        "div " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstFloatBinOp _ FAdd lhs rhs1 rhs2) =
+        "fadd " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstFloatBinOp _ FSub lhs rhs1 rhs2) =
+        "fsub " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstFloatBinOp _ FMul lhs rhs1 rhs2) =
+        "fmul " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstFloatBinOp _ FDiv lhs rhs1 rhs2) =
+        "fdiv " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+    display (InstMov _ lhs rhs) =
+        "mov " <> display lhs <> " " <> display rhs
+    display (InstFMov _ lhs rhs) =
+        "fmov " <> display lhs <> " " <> display rhs
+    display (InstCall _ func) =
+        "call " <> func
+    display (InstLoad _ lhs rhs) =
+        "lw " <> display lhs <> " " <> display rhs
+    display (InstStore _ lhs rhs) =
+        "sw " <> display lhs <> " " <> display rhs

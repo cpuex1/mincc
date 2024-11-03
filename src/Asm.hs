@@ -1,81 +1,96 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Asm () where
+module Asm (
+    InstLabel,
+    Register (ZeroReg, RetReg, ArgsReg, TempReg, DummyReg),
+    Operand (Reg, Imm, Mem, DirectMem),
+    CodeBlock (CodeBlock),
+    InstTerm (Return, Jmp, Branch, Nop),
+    Inst (InstRelationOp, InstIntBinOp, InstFloatBinOp, InstMov, InstFMov, InstCall, InstLoad, InstStore),
+) where
 
 import Data.Text (Text)
 import Syntax (FloatBinOp, IntBinOp, RelationBinOp)
 
-newtype InstLabel
-    = InstLabel Text
-    deriving (Show, Eq)
+type InstLabel = Text
 
-data OInt = OInt
-    deriving (Show, Eq)
+data Register idTy ty where
+    ZeroReg :: Register idTy ty
+    RetReg :: Register idTy ty
+    ArgsReg :: idTy -> Register idTy ty
+    TempReg :: idTy -> Register idTy ty
+    DummyReg :: Register idTy ()
 
-data OFloat = OFloat
-    deriving (Show, Eq)
+deriving instance (Show idTy, Show ty) => Show (Register idTy ty)
+deriving instance (Eq idTy, Eq ty) => Eq (Register idTy ty)
 
-data Operand opTy regTy where
-    Reg :: regTy -> Operand opTy regTy
-    Imm :: opTy -> Operand opTy regTy
-    Mem :: regTy -> Int -> Operand opTy regTy
+data Operand idTy ty where
+    Reg :: Register idTy ty -> Operand idTy ty
+    Imm :: ty -> Operand idTy ty
+    Mem :: Register idTy Int -> Int -> Operand idTy ty
+    DirectMem :: Int -> Operand idTy ty
 
-deriving instance (Show opTy, Show regTy) => Show (Operand opTy regTy)
-deriving instance (Eq opTy, Eq regTy) => Eq (Operand opTy regTy)
+deriving instance (Show idTy, Show ty) => Show (Operand idTy ty)
+deriving instance (Eq idTy, Eq ty) => Eq (Operand idTy ty)
 
 data CodeBlock stateTy regTy
     = CodeBlock InstLabel [Inst stateTy regTy] (InstTerm stateTy regTy)
-    deriving Show
+    deriving (Show, Eq)
 
 data InstTerm stateTy regTy
     = Return stateTy
     | Jmp stateTy InstLabel
-    | Branch stateTy RelationBinOp (Operand OInt regTy) (Operand OInt regTy) InstLabel InstLabel
-    | Nop stateTy
+    | Branch stateTy RelationBinOp (Operand Int regTy) (Operand Int regTy) InstLabel InstLabel
+    | Nop
     deriving (Show, Eq)
 
-data Inst stateTy regTy where
+data Inst stateTy idTy where
     InstRelationOp ::
         stateTy ->
         RelationBinOp ->
-        Operand OInt regTy ->
-        Operand OInt regTy ->
-        Operand OInt regTy ->
-        Inst stateTy regTy
+        Operand idTy Int ->
+        Operand idTy Int ->
+        Operand idTy Int ->
+        Inst stateTy idTy
     InstIntBinOp ::
         stateTy ->
         IntBinOp ->
-        Operand OInt regTy ->
-        Operand OInt regTy ->
-        Operand OInt regTy ->
-        Inst stateTy regTy
-    InstFloatOp ::
+        Operand idTy Int ->
+        Operand idTy Int ->
+        Operand idTy Int ->
+        Inst stateTy idTy
+    InstFloatBinOp ::
         stateTy ->
         FloatBinOp ->
-        Operand OFloat regTy ->
-        Operand OFloat regTy ->
-        Operand OFloat regTy ->
-        Inst stateTy regTy
+        Operand idTy Float ->
+        Operand idTy Float ->
+        Operand idTy Float ->
+        Inst stateTy idTy
     InstMov ::
-        (Show opTy, Eq opTy) =>
         stateTy ->
-        Operand opTy regTy ->
-        Operand opTy regTy ->
-        Inst stateTy regTy
+        Operand idTy Int ->
+        Operand idTy Int ->
+        Inst stateTy idTy
+    InstFMov ::
+        stateTy ->
+        Operand idTy Float ->
+        Operand idTy Float ->
+        Inst stateTy idTy
     InstCall ::
         stateTy ->
         InstLabel ->
-        Inst stateTy regTy
+        Inst stateTy idTy
     InstLoad ::
         stateTy ->
-        Operand OInt regTy ->
-        Operand OInt regTy ->
-        Inst stateTy regTy
+        Operand idTy Int ->
+        Operand idTy Int ->
+        Inst stateTy idTy
     InstStore ::
         stateTy ->
-        Operand OInt regTy ->
-        Operand OInt regTy ->
-        Inst stateTy regTy
+        Operand idTy Int ->
+        Operand idTy Int ->
+        Inst stateTy idTy
 
-deriving instance (Show stateTy, Show regTy) => Show (Inst stateTy regTy)
+deriving instance (Show stateTy, Show idTy) => Show (Inst stateTy idTy)
+deriving instance (Eq stateTy, Eq idTy) => Eq (Inst stateTy idTy)

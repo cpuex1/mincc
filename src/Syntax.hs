@@ -14,6 +14,8 @@ module Syntax (
     ResolvedExpr (RGuard, rExp),
     RawIdent (RawIdent),
     TypedState (TypedState, getType, getPosition),
+    fromSourcePos,
+    Loc (Loc),
     KExpr,
     TypedExpr (TGuard, tExp),
     ClosureExpr,
@@ -40,8 +42,8 @@ module Syntax (
     visitExprM,
 ) where
 
-import Data.Text (Text)
-import Text.Megaparsec.Pos (SourcePos)
+import Data.Text (Text, pack)
+import Text.Megaparsec.Pos (SourcePos, sourceColumn, sourceLine, sourceName, unPos)
 import Typing (Ty)
 
 data Literal
@@ -97,6 +99,12 @@ RGuard is used for avoiding invalid recursive type definition.
 -}
 newtype ResolvedExpr = RGuard {rExp :: Expr SourcePos Ident ResolvedExpr DisallowClosure}
     deriving (Show, Eq)
+
+data Loc = Loc Text Int Int
+    deriving (Show, Eq)
+
+fromSourcePos :: SourcePos -> Loc
+fromSourcePos pos = Loc (pack (sourceName pos)) (unPos (sourceLine pos)) (unPos (sourceColumn pos))
 
 data TypedState = TypedState {getType :: Ty, getPosition :: SourcePos}
     deriving (Show, Eq)
