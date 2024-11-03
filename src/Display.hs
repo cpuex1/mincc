@@ -223,13 +223,13 @@ instance Display (Operand Int Float) where
 
 instance Display (Inst stateTy Int) where
     display (InstRelationOp _ Eq lhs rhs1 rhs2) =
-        "seq " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "eq " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstRelationOp _ Le lhs rhs1 rhs2) =
         "sle " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstRelationOp _ Ge lhs rhs1 rhs2) =
         "sge " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstRelationOp _ Ne lhs rhs1 rhs2) =
-        "sne " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "ne " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstRelationOp _ Lt lhs rhs1 rhs2) =
         "slt " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstRelationOp _ Gt lhs rhs1 rhs2) =
@@ -262,26 +262,26 @@ instance Display (Inst stateTy Int) where
         "sw " <> display lhs <> " " <> display rhs
 
 instance Display (InstTerm stateTy Int) where
-    display (Return _) = "return"
+    display (Return _) = "jal ra, 0"
     display (Jmp _ label) = "jmp " <> label
-    display (Branch _ Eq lhs rhs _ label2) =
-        "beq " <> display lhs <> " "  <> display rhs <> " " <> label2
-    display (Branch _ Le lhs rhs _ label2) =
-        "ble " <> display lhs <> " "  <> display rhs <> " " <> label2
-    display (Branch _ Ge lhs rhs _ label2) =
-        "bge " <> display lhs <> " "  <> display rhs <> " " <> label2
-    display (Branch _ Ne lhs rhs _ label2) =
-        "bne " <> display lhs <> " "  <> display rhs <> " " <> label2
-    display (Branch _ Lt lhs rhs _ label2) =
-        "blt " <> display lhs <> " "  <> display rhs <> " " <> label2
-    display (Branch _ Gt lhs rhs _ label2) =
-        "bgt " <> display lhs <> " "  <> display rhs <> " " <> label2
+    display (Branch _ Eq lhs rhs label1 _) =
+        "beq " <> display lhs <> " " <> display rhs <> " " <> label1
+    display (Branch _ Le lhs rhs label1 _) =
+        "ble " <> display lhs <> " " <> display rhs <> " " <> label1
+    display (Branch _ Ge lhs rhs label1 _) =
+        "bge " <> display lhs <> " " <> display rhs <> " " <> label1
+    display (Branch _ Ne lhs rhs label1 _) =
+        "bne " <> display lhs <> " " <> display rhs <> " " <> label1
+    display (Branch _ Lt lhs rhs label1 _) =
+        "blt " <> display lhs <> " " <> display rhs <> " " <> label1
+    display (Branch _ Gt lhs rhs label1 _) =
+        "bgt " <> display lhs <> " " <> display rhs <> " " <> label1
     display Nop = "nop"
 
 instance Display (CodeBlock stateTy Int) where
     display (CodeBlock label inst term) =
-        label <> ":\n"
-            <> intercalate "\n" (Prelude.map (\i -> insertIndent 1 <> display i) inst)
-            <> "\n"
+        label
+            <> ":\n"
+            <> intercalate "" (Prelude.map (\i -> insertIndent 1 <> display i <> "\n") inst)
             <> insertIndent 1
             <> display term

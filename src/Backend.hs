@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Backend (
+    BackendConfig (BackendConfig),
     loadFunctions,
 ) where
 
@@ -14,7 +15,7 @@ import Data.Text (pack)
 import Display (display)
 import Error (CompilerError (OtherError))
 import Syntax
-import Typing (TypeKind (TFloat))
+import Typing (TypeKind (TFloat, TInt, TUnit))
 
 type RegID = Int
 
@@ -208,16 +209,16 @@ toAsm (If state cond thenExpr elseExpr) = do
     -- Flush the current code block.
     thenLabel <- genLabel
     elseLabel <- genLabel
-    modify $ \env -> env{currentTerm = Branch (fromState state) Eq (Reg cond') (Reg ZeroReg) elseLabel thenLabel}
+    modify $ \env -> env{currentTerm = Branch (fromState state) Eq (Reg cond') (Reg ZeroReg) thenLabel elseLabel}
     flushInstBuffer
-
-    -- Generate the "then" code block.
-    modify $ \env -> env{currentLabel = thenLabel, currentTerm = term}
-    toAsm thenExpr
 
     -- Generate the "else" code block.
     modify $ \env -> env{currentLabel = elseLabel, currentTerm = term}
     toAsm elseExpr
+
+    -- Generate the "then" code block.
+    modify $ \env -> env{currentLabel = thenLabel, currentTerm = term}
+    toAsm thenExpr
 toAsm (Let _ PUnit (If state cond thenExpr elseExpr) body) = do
     cond' <- findI cond
 
@@ -227,16 +228,8 @@ toAsm (Let _ PUnit (If state cond thenExpr elseExpr) body) = do
     thenLabel <- genLabel
     elseLabel <- genLabel
     endLabel <- genLabel
-    modify $ \env -> env{currentTerm = Branch (fromState state) Eq (Reg cond') (Reg ZeroReg) elseLabel thenLabel}
+    modify $ \env -> env{currentTerm = Branch (fromState state) Eq (Reg cond') (Reg ZeroReg) thenLabel elseLabel}
     flushInstBuffer
-
-    -- Generate the "then" code block.
-    modify $ \env ->
-        env
-            { currentLabel = thenLabel
-            , currentTerm = Jmp (fromState state) endLabel
-            }
-    toAsm thenExpr
 
     -- Generate the "else" code block.
     modify $ \env ->
@@ -245,6 +238,14 @@ toAsm (Let _ PUnit (If state cond thenExpr elseExpr) body) = do
             , currentTerm = Jmp (fromState state) endLabel
             }
     toAsm elseExpr
+
+    -- Generate the "then" code block.
+    modify $ \env ->
+        env
+            { currentLabel = thenLabel
+            , currentTerm = Jmp (fromState state) endLabel
+            }
+    toAsm thenExpr
 
     -- Generate the "end" code block.
     modify $ \env ->
@@ -266,17 +267,8 @@ toAsm (Let _ (PVar v) (If state cond thenExpr elseExpr) body) = do
     thenLabel <- genLabel
     elseLabel <- genLabel
     endLabel <- genLabel
-    modify $ \env -> env{currentTerm = Branch (fromState state) Eq (Reg cond') (Reg ZeroReg) elseLabel thenLabel}
+    modify $ \env -> env{currentTerm = Branch (fromState state) Eq (Reg cond') (Reg ZeroReg) thenLabel elseLabel}
     flushInstBuffer
-
-    -- Generate the "then" code block.
-    modify $ \env ->
-        env
-            { currentLabel = thenLabel
-            , currentTerm = Jmp (fromState state) endLabel
-            , currentRet = phiReg
-            }
-    toAsm thenExpr
 
     -- Generate the "else" code block.
     modify $ \env ->
@@ -286,6 +278,15 @@ toAsm (Let _ (PVar v) (If state cond thenExpr elseExpr) body) = do
             , currentRet = phiReg
             }
     toAsm elseExpr
+
+    -- Generate the "then" code block.
+    modify $ \env ->
+        env
+            { currentLabel = thenLabel
+            , currentTerm = Jmp (fromState state) endLabel
+            , currentRet = phiReg
+            }
+    toAsm thenExpr
 
     -- Generate the "end" code block.
     modify $ \env ->
@@ -311,9 +312,16 @@ toAsm (Let _ (PVar v) expr body) = do
             modify $ \env -> env{iMap = (v, reg) : iMap env}
             toAsm body
 toAsm expr = do
-    retReg <- gets currentRet
-    toInstI retReg expr
-    flushInstBuffer
+    case getType (getExprState expr) of
+        TInt -> do
+            retReg <- gets currentRet
+            toInstI retReg expr
+            flushInstBuffer
+        TUnit -> do
+            toInstU expr
+            flushInstBuffer
+        _ -> do
+            throwError $ OtherError "Not implemented."
 
 loadFunctions :: BackendConfig -> [Function] -> Either CompilerError [CodeBlock Loc RegID]
 loadFunctions config functions =

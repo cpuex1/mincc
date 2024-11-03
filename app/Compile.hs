@@ -4,7 +4,8 @@ module Compile (
     inferTypeIO,
     kNormalizeIO,
     flattenExprIO,
-    getFunctionsIO
+    getFunctionsIO,
+    loadFunctionsIO
 ) where
 
 import CommandLine
@@ -23,6 +24,9 @@ import Syntax
 import Text.Megaparsec
 import TypeInferrer (inferType)
 import Closure (getFunctions)
+import Asm
+import Backend
+import Control.Monad.Trans.Reader (asks)
 
 parseIO :: FilePath -> ConfigIO ParsedExpr
 parseIO path = do
@@ -57,3 +61,10 @@ flattenExprIO exprs = pure $ map (first flattenExpr) exprs
 
 getFunctionsIO :: [KExpr] -> ConfigIO [Function]
 getFunctionsIO exprs = pure $ concatMap getFunctions exprs
+
+loadFunctionsIO :: [Function] -> ConfigIO [CodeBlock Loc Int]
+loadFunctionsIO functions = do
+    argsLimit' <- asks cArgsLimit
+    case loadFunctions (BackendConfig argsLimit') functions of
+        Left err -> throwError err
+        Right codeBlocks -> pure codeBlocks

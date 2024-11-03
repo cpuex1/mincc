@@ -7,12 +7,14 @@ module CommandLine (
     cIntermediate,
     cVerbose,
     cOptimize,
+    cArgsLimit,
     cANSI,
     input,
     output,
     intermediate,
     verbose,
     optimize,
+    argsLimit,
     parseArg,
     toCompilerConfig,
 ) where
@@ -32,6 +34,7 @@ data CompilerConfig = CompilerConfig
     , cIntermediate :: Bool
     , cVerbose :: Bool
     , cOptimize :: Int
+    , cArgsLimit :: Int
     , cANSI :: Bool
     }
 
@@ -41,6 +44,7 @@ data CommandLineArg = CommandLineArg
     , intermediate :: Bool
     , verbose :: Bool
     , optimize :: Int
+    , argsLimit :: Int
     }
 
 -- | Parse a command line argument
@@ -78,8 +82,16 @@ parseArg =
                 <> value 1000
                 <> metavar "INT"
             )
+        <*> option
+            auto
+            ( long "args-limit"
+                <> help "The maximum number of arguments"
+                <> showDefault
+                <> value 7
+                <> metavar "INT"
+            )
 
 toCompilerConfig :: CommandLineArg -> IO CompilerConfig
-toCompilerConfig (CommandLineArg i o inter v opt) = do
+toCompilerConfig (CommandLineArg i o inter v opt lim) = do
     ansiSupported <- hNowSupportsANSI stdout
-    return $ CompilerConfig i o inter v opt ansiSupported
+    return $ CompilerConfig i o inter v opt lim ansiSupported

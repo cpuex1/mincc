@@ -79,6 +79,11 @@ execArgs = do
             lift $ lift $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
             printLog Debug "Closure expressions are saved"
 
+            blocks <- loadFunctionsIO functions
+            printLog Done "Code generation succeeded"
+            lift $ lift $ TIO.writeFile (changeExt "code.s" outputFile) $ intercalate "\n" $ map display blocks
+            printLog Debug "Generated code was saved"
+
             printLog Done "Compilation succeeded"
         )
         $ \err -> do
