@@ -24,7 +24,7 @@ spec = do
         it "LFloat1" $ do
             parse parseLiteral "" "3.1415" `shouldBe` Right (LFloat 3.1415)
         it "LFloat2" $ do
-            parse parseLiteral "" "123." `shouldBe` Right (LFloat 12345)
+            parse parseLiteral "" "123." `shouldBe` Right (LFloat 123)
         it "LFloat3" $ do
             parse parseLiteral "" "123.E-12" `shouldBe` Right (LFloat 123e-12)
         it "Invalid1" $ do
