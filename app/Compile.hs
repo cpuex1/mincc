@@ -5,13 +5,17 @@ module Compile (
     kNormalizeIO,
     flattenExprIO,
     getFunctionsIO,
-    loadFunctionsIO
+    loadFunctionsIO,
 ) where
 
+import Asm
+import Backend
+import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.State (runState)
 import Control.Monad.Trans.Class
+import Control.Monad.Trans.Reader (asks)
 import Data.Bifunctor (Bifunctor (first))
 import qualified Data.Text.IO as TIO
 import Error
@@ -23,10 +27,6 @@ import Parser
 import Syntax
 import Text.Megaparsec
 import TypeInferrer (inferType)
-import Closure (getFunctions)
-import Asm
-import Backend
-import Control.Monad.Trans.Reader (asks)
 
 parseIO :: FilePath -> ConfigIO ParsedExpr
 parseIO path = do

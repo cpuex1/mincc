@@ -168,8 +168,8 @@ genFunctions (Let state (PRec func args) expr body) = do
                 then
                     -- The function is a recursive function with free variables.
                     -- Create a closure inside it to avoid referencing out-of-scope closures.
-                    updateFunctionExpr func
-                        $ Let state (PVar func) (MakeClosure state func freeVars') expr'
+                    updateFunctionExpr func $
+                        Let state (PVar func) (MakeClosure state func freeVars') expr'
                 else
                     updateFunctionExpr func expr'
             body' <- genFunctions body
