@@ -102,15 +102,15 @@ parseLiteral =
                             >>= \num -> return $ "e" ++ unpack sign ++ num
                 )
 
-parseRelationBinOp :: Parser BinaryOp
+parseRelationBinOp :: Parser (Bool, BinaryOp)
 parseRelationBinOp =
     lexeme
-        ( try (string "=" >> return (RelationOp Eq))
-            <|> try (string "<=" >> return (RelationOp Le))
-            <|> try (string ">=" >> return (RelationOp Ge))
-            <|> try (string "<>" >> return (RelationOp Ne))
-            <|> try (string "<" >> return (RelationOp Lt))
-            <|> try (string ">" >> return (RelationOp Gt))
+        ( try (string "=" >> return (False, RelationOp Eq))
+            <|> try (string "<=" >> return (True, RelationOp Ge))
+            <|> try (string ">=" >> return (False, RelationOp Ge))
+            <|> try (string "<>" >> return (False, RelationOp Ne))
+            <|> try (string "<" >> return (False, RelationOp Lt))
+            <|> try (string ">" >> return (True, RelationOp Lt))
         )
         <?> "a relation binary operator"
 
@@ -275,17 +275,22 @@ parseExpr =
             -- RelationBinOp
             lexeme $
                 try
-                    ( getSourcePos
-                        >>= \pos ->
-                            makeExprParser
-                                (parseExprWithPrecedence 4)
-                                [
-                                    [ InfixL
-                                        ( parseRelationBinOp
-                                            >>= \op -> return (\left right -> PGuard (Binary pos op left right))
-                                        )
-                                    ]
+                    ( do
+                        pos <- getSourcePos
+                        makeExprParser
+                            (parseExprWithPrecedence 4)
+                            [
+                                [ InfixL
+                                    ( do
+                                        (flipped, op) <- parseRelationBinOp
+                                        if flipped
+                                            then
+                                                return (\left right -> PGuard (Binary pos op right left))
+                                            else
+                                                return (\left right -> PGuard (Binary pos op left right))
+                                    )
                                 ]
+                            ]
                     )
                     <|> parseExprWithPrecedence 4
         | precedence == 4 =

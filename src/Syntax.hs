@@ -4,7 +4,7 @@
 module Syntax (
     Literal (LUnit, LBool, LInt, LFloat),
     UnaryOp (Not, Neg, FNeg),
-    RelationBinOp (Eq, Le, Ge, Ne, Lt, Gt),
+    RelationBinOp (Eq, Ne, Lt, Ge),
     IntBinOp (Add, Sub, Mul, Div),
     FloatBinOp (FAdd, FSub, FMul, FDiv),
     BinaryOp (RelationOp, IntOp, FloatOp),
@@ -59,7 +59,7 @@ data UnaryOp
     | FNeg
     deriving (Show, Eq)
 
-data RelationBinOp = Eq | Le | Ge | Ne | Lt | Gt deriving (Show, Eq)
+data RelationBinOp = Eq | Ne | Lt | Ge deriving (Show, Eq)
 data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq)
 data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq)
 data BinaryOp

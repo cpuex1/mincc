@@ -30,11 +30,9 @@ instance Display UnaryOp where
 
 instance Display BinaryOp where
     display (RelationOp Eq) = "="
-    display (RelationOp Le) = "<="
     display (RelationOp Ge) = ">="
     display (RelationOp Ne) = "<>"
     display (RelationOp Lt) = "<"
-    display (RelationOp Gt) = ">"
     display (IntOp Add) = "+"
     display (IntOp Sub) = "-"
     display (IntOp Mul) = "*"
@@ -224,16 +222,12 @@ instance Display (Operand Int Float) where
 instance Display (Inst stateTy Int) where
     display (InstRelationOp _ Eq lhs rhs1 rhs2) =
         "eq " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
-    display (InstRelationOp _ Le lhs rhs1 rhs2) =
-        "sle " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstRelationOp _ Ge lhs rhs1 rhs2) =
         "sge " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstRelationOp _ Ne lhs rhs1 rhs2) =
         "ne " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstRelationOp _ Lt lhs rhs1 rhs2) =
         "slt " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
-    display (InstRelationOp _ Gt lhs rhs1 rhs2) =
-        "sgt " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstIntBinOp _ Add lhs rhs1 rhs2) =
         "add " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
     display (InstIntBinOp _ Sub lhs rhs1 rhs2) =
@@ -266,16 +260,12 @@ instance Display (InstTerm stateTy Int) where
     display (Jmp _ label) = "jmp " <> label
     display (Branch _ Eq lhs rhs label1 _) =
         "beq " <> display lhs <> " " <> display rhs <> " " <> label1
-    display (Branch _ Le lhs rhs label1 _) =
-        "ble " <> display lhs <> " " <> display rhs <> " " <> label1
     display (Branch _ Ge lhs rhs label1 _) =
         "bge " <> display lhs <> " " <> display rhs <> " " <> label1
     display (Branch _ Ne lhs rhs label1 _) =
         "bne " <> display lhs <> " " <> display rhs <> " " <> label1
     display (Branch _ Lt lhs rhs label1 _) =
         "blt " <> display lhs <> " " <> display rhs <> " " <> label1
-    display (Branch _ Gt lhs rhs label1 _) =
-        "bgt " <> display lhs <> " " <> display rhs <> " " <> label1
     display Nop = "nop"
 
 instance Display (CodeBlock stateTy Int) where
