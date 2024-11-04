@@ -61,6 +61,8 @@ jobs:
           key: ${{ runner.os }}-stack-work-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}-${{ hashFiles('**/*.hs') }}
           restore-keys: |
             ${{ runner.os }}-stack-work-
+      - run: stack install fourmolu
+        name: Install fourmolu
       - run: fourmolu --mode check ./src
         name: Lint src
       - run: fourmolu --mode check ./app
