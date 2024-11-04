@@ -35,3 +35,63 @@ jobs:
             ${{ runner.os }}-stack-work-
       - run: stack test
         name: Run tests
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: "9.8.2"
+          enable-stack: true
+          stack-version: "latest"
+      - uses: actions/cache@v4
+        name: Cache ~/.stack
+        with:
+          path: ~/.stack
+          key: ${{ runner.os }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-global-
+      - uses: actions/cache@v4
+        name: Cache .stack-work
+        with:
+          path: .stack-work
+          key: ${{ runner.os }}-stack-work-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}-${{ hashFiles('**/*.hs') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-work-
+      - run: fourmolu --mode check ./src
+        name: Lint src
+      - run: fourmolu --mode check ./app
+        name: Lint app
+      - run: fourmolu --mode check ./test
+        name: Lint test
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: "9.8.2"
+          enable-stack: true
+          stack-version: "latest"
+      - uses: actions/cache@v4
+        name: Cache ~/.stack
+        with:
+          path: ~/.stack
+          key: ${{ runner.os }}-stack-global-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-global-
+      - uses: actions/cache@v4
+        name: Cache .stack-work
+        with:
+          path: .stack-work
+          key: ${{ runner.os }}-stack-work-${{ hashFiles('stack.yaml') }}-${{ hashFiles('package.yaml') }}-${{ hashFiles('**/*.hs') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-work-
+      - run: stack build --dry-run
+        name: Build the project
