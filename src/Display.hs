@@ -209,63 +209,63 @@ instance Display (Register Int Float) where
 
 instance Display (Operand Int Int) where
     display (Reg reg) = display reg
-    display (Imm imm) = "__imm_" <> pack (show imm)
+    display (Imm imm) = pack (show imm)
     display (Mem reg offset) = display reg <> "[" <> pack (show offset) <> "]"
     display (DirectMem offset) = "[" <> pack (show offset) <> "]"
 
 instance Display (Operand Int Float) where
     display (Reg reg) = display reg
-    display (Imm imm) = "__imm_" <> pack (show imm)
+    display (Imm imm) = pack (show imm)
     display (Mem reg offset) = display reg <> "[" <> pack (show offset) <> "]"
     display (DirectMem offset) = "[" <> pack (show offset) <> "]"
 
 instance Display (Inst stateTy Int) where
     display (InstRelationOp _ Eq lhs rhs1 rhs2) =
-        "eq " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "eq " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstRelationOp _ Ge lhs rhs1 rhs2) =
-        "sge " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "sge " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstRelationOp _ Ne lhs rhs1 rhs2) =
-        "ne " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "ne " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstRelationOp _ Lt lhs rhs1 rhs2) =
-        "slt " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "slt " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstIntBinOp _ Add lhs rhs1 rhs2) =
-        "add " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "add " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstIntBinOp _ Sub lhs rhs1 rhs2) =
-        "sub " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "sub " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstIntBinOp _ Mul lhs rhs1 rhs2) =
-        "mul " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "mul " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstIntBinOp _ Div lhs rhs1 rhs2) =
-        "div " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "div " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstFloatBinOp _ FAdd lhs rhs1 rhs2) =
-        "fadd " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "fadd " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstFloatBinOp _ FSub lhs rhs1 rhs2) =
-        "fsub " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "fsub " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstFloatBinOp _ FMul lhs rhs1 rhs2) =
-        "fmul " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "fmul " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstFloatBinOp _ FDiv lhs rhs1 rhs2) =
-        "fdiv " <> display lhs <> " " <> display rhs1 <> " " <> display rhs2
+        "fdiv " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
     display (InstMov _ lhs rhs) =
-        "mov " <> display lhs <> " " <> display rhs
+        "mov " <> display lhs <> ", " <> display rhs
     display (InstFMov _ lhs rhs) =
-        "fmov " <> display lhs <> " " <> display rhs
+        "fmov " <> display lhs <> ", " <> display rhs
     display (InstCall _ func) =
         "call " <> func
     display (InstLoad _ lhs rhs) =
-        "lw " <> display lhs <> " " <> display rhs
+        "lw " <> display lhs <> ", " <> display rhs
     display (InstStore _ lhs rhs) =
-        "sw " <> display lhs <> " " <> display rhs
+        "sw " <> display lhs <> ", " <> display rhs
 
 instance Display (InstTerm stateTy Int) where
     display (Return _) = "jal ra, 0"
     display (Jmp _ label) = "jmp " <> label
     display (Branch _ Eq lhs rhs label1 _) =
-        "beq " <> display lhs <> " " <> display rhs <> " " <> label1
+        "beq " <> display lhs <> ", " <> display rhs <> ", " <> label1
     display (Branch _ Ge lhs rhs label1 _) =
-        "bge " <> display lhs <> " " <> display rhs <> " " <> label1
+        "bge " <> display lhs <> ", " <> display rhs <> ", " <> label1
     display (Branch _ Ne lhs rhs label1 _) =
-        "bne " <> display lhs <> " " <> display rhs <> " " <> label1
+        "bne " <> display lhs <> ", " <> display rhs <> ", " <> label1
     display (Branch _ Lt lhs rhs label1 _) =
-        "blt " <> display lhs <> " " <> display rhs <> " " <> label1
+        "blt " <> display lhs <> ", " <> display rhs <> ", " <> label1
     display Nop = "nop"
 
 instance Display (CodeBlock stateTy Int) where
