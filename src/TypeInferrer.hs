@@ -181,10 +181,13 @@ inferE :: ResolvedExpr -> TypingM TypedExpr
 inferE expr = do
     registerAll expr
     expr' <- inferIE expr
-    if getTy expr' == TUnit
-        then
+    case getTy expr' of
+        TVar tId -> do
+            doUnify (getExprState $ rExp expr) TUnit (TVar tId)
             applyEnvE expr'
-        else
+        TUnit ->
+            applyEnvE expr'
+        _ ->
             throwError $
                 TypeError (Just $ snd $ getExprState $ iTExp expr') $
                     "A main expression must return unit, not " <> display (getTy expr')
