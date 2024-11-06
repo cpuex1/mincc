@@ -51,33 +51,45 @@ execArgs = do
 
             parsedExprs <- parseAllIO inputFiles
             printLog Done "Parsing succeeded"
-            lift $ lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map display parsedExprs
-            printLog Debug "Parsed expressions are saved"
+            emitParsed <- asks cEmitParsed
+            when emitParsed $ do
+                lift $ lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map display parsedExprs
+                printLog Debug "Parsed expressions are saved"
 
             resolvedExprs <- resolveAllIO parsedExprs
             printLog Done "Name resolution succeeded"
-            lift $ lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ intercalate "\n" $ map display resolvedExprs
-            printLog Debug "Resolved expressions are saved"
+            emitResolved <- asks cEmitResolved
+            when emitResolved $ do
+                lift $ lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ intercalate "\n" $ map display resolvedExprs
+                printLog Debug "Resolved expressions are saved"
 
             typedExprs <- inferTypeIO resolvedExprs
             printLog Done "Type inference succeeded"
-            lift $ lift $ TIO.writeFile (changeExt "typed.ml" outputFile) $ intercalate "\n" $ map display typedExprs
-            printLog Debug "Typed expressions are saved"
+            emitTyped <- asks cEmitTyped
+            when emitTyped $ do
+                lift $ lift $ TIO.writeFile (changeExt "typed.ml" outputFile) $ intercalate "\n" $ map display typedExprs
+                printLog Debug "Typed expressions are saved"
 
             kExprs <- kNormalizeIO typedExprs
             printLog Done "K-normalization succeeded"
-            lift $ lift $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map (display . fst) kExprs
-            printLog Debug "K-normalized expressions are saved"
+            emitKNorm <- asks cEmitKNorm
+            when emitKNorm $ do
+                lift $ lift $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map (display . fst) kExprs
+                printLog Debug "K-normalized expressions are saved"
 
             flattenExprs <- flattenExprIO kExprs
             printLog Done "Flatten succeeded"
-            lift $ lift $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map (display . fst) flattenExprs
-            printLog Debug "Flatten expressions are saved"
+            emitFlatten <- asks cEmitFlatten
+            when emitFlatten $ do
+                lift $ lift $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map (display . fst) flattenExprs
+                printLog Debug "Flatten expressions are saved"
 
             functions <- getFunctionsIO (map fst flattenExprs)
             printLog Done "Closure conversion succeeded"
-            lift $ lift $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
-            printLog Debug "Closure expressions are saved"
+            emitClosure <- asks cEmitClosure
+            when emitClosure $ do
+                lift $ lift $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
+                printLog Debug "Closure expressions are saved"
 
             blocks <- loadFunctionsIO functions
             printLog Done "Code generation succeeded"

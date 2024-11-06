@@ -4,17 +4,17 @@ module CommandLine (
     CommandLineArg (CommandLineArg),
     cInput,
     cOutput,
-    cIntermediate,
     cVerbose,
     cOptimize,
     cArgsLimit,
     cANSI,
-    input,
-    output,
-    intermediate,
-    verbose,
-    optimize,
-    argsLimit,
+    cEmitParsed,
+    cEmitResolved,
+    cEmitTyped,
+    cEmitKNorm,
+    cEmitFlatten,
+    cEmitClosure,
+    cEmitIR,
     parseArg,
     toCompilerConfig,
 ) where
@@ -31,20 +31,33 @@ type ConfigIO = ReaderT CompilerConfig (ExceptT CompilerError IO)
 data CompilerConfig = CompilerConfig
     { cInput :: [String]
     , cOutput :: String
-    , cIntermediate :: Bool
     , cVerbose :: Bool
     , cOptimize :: Int
     , cArgsLimit :: Int
     , cANSI :: Bool
+    , cEmitParsed :: Bool
+    , cEmitResolved :: Bool
+    , cEmitTyped :: Bool
+    , cEmitKNorm :: Bool
+    , cEmitFlatten :: Bool
+    , cEmitClosure :: Bool
+    , cEmitIR :: Bool
     }
 
 data CommandLineArg = CommandLineArg
     { input :: [String]
     , output :: String
-    , intermediate :: Bool
     , verbose :: Bool
     , optimize :: Int
     , argsLimit :: Int
+    , emitAll :: Bool
+    , emitParsed :: Bool
+    , emitResolved :: Bool
+    , emitTyped :: Bool
+    , emitKNorm :: Bool
+    , emitFlatten :: Bool
+    , emitClosure :: Bool
+    , emitIR :: Bool
     }
 
 -- | Parse a command line argument
@@ -64,10 +77,6 @@ parseArg =
                 <> short 'o'
                 <> help "An output file"
                 <> metavar "OUTFILE"
-            )
-        <*> switch
-            ( long "intermediate"
-                <> help "Export intermediate files"
             )
         <*> switch
             ( long "verbose"
@@ -90,8 +99,56 @@ parseArg =
                 <> value 7
                 <> metavar "INT"
             )
+        <*> switch
+            ( long "emit-all"
+                <> short 'e'
+                <> help "Emit all intermediate files"
+            )
+        <*> switch
+            ( long "emit-parsed"
+                <> help "Emit parsed expressions"
+            )
+        <*> switch
+            ( long "emit-resolved"
+                <> help "Emit expressions after name resolution"
+            )
+        <*> switch
+            ( long "emit-typed"
+                <> help "Emit expressions after type inference"
+            )
+        <*> switch
+            ( long "emit-knorm"
+                <> help "Emit expressions after K-normalization"
+            )
+        <*> switch
+            ( long "emit-flatten"
+                <> help "Emit expressions after let-flattening"
+            )
+        <*> switch
+            ( long "emit-closure"
+                <> help "Emit expressions after introducing closures"
+            )
+        <*> switch
+            ( long "emit-ir"
+                <> help "Emit intermediate representation"
+            )
 
 toCompilerConfig :: CommandLineArg -> IO CompilerConfig
-toCompilerConfig (CommandLineArg i o inter v opt lim) = do
+toCompilerConfig arg = do
     ansiSupported <- hNowSupportsANSI stdout
-    return $ CompilerConfig i o inter v opt lim ansiSupported
+    return $
+        CompilerConfig
+            { cInput = input arg
+            , cOutput = output arg
+            , cVerbose = verbose arg
+            , cOptimize = optimize arg
+            , cArgsLimit = argsLimit arg
+            , cANSI = ansiSupported
+            , cEmitParsed = emitAll arg || emitParsed arg
+            , cEmitResolved = emitAll arg || emitResolved arg
+            , cEmitTyped = emitAll arg || emitTyped arg
+            , cEmitKNorm = emitAll arg || emitKNorm arg
+            , cEmitFlatten = emitAll arg || emitFlatten arg
+            , cEmitClosure = emitAll arg || emitClosure arg
+            , cEmitIR = emitAll arg || emitIR arg
+            }
