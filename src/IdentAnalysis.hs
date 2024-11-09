@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module IdentAnalysis (
     IdentProp (IdentProp, typeOf, constant, isClosure),
     IdentE,
@@ -8,10 +10,16 @@ module IdentAnalysis (
     searchProp,
     updateProp,
     genNewVar,
+    loadTypeEnv,
+    reportEnv,
 ) where
 
 import Control.Monad.Identity (Identity)
+import Control.Monad.Trans
+import Data.Text (Text, pack)
+import Display (display)
 import Syntax
+import TypeInferrer (TypeEnv (table, variables), removeVar)
 import Typing (Ty)
 
 data IdentProp
@@ -46,6 +54,17 @@ instance (Monad m) => Monad (IdentEnvT m) where
     m >>= k = IdentEnvT $ \s -> do
         ~(a, s') <- runIdentEnvT m s
         runIdentEnvT (k a) s'
+
+instance MonadTrans IdentEnvT where
+    lift m = IdentEnvT $ \s -> do
+        a <- m
+        return (a, s)
+
+instance (MonadIO m) => MonadIO (IdentEnvT m) where
+    liftIO = lift . liftIO
+
+getEnv :: (Monad m) => IdentEnvT m IdentE
+getEnv = IdentEnvT $ \s -> return (s, s)
 
 modifyEnv :: (Monad m) => (IdentE -> IdentE) -> IdentEnvT m ()
 modifyEnv f = IdentEnvT $ \s -> return ((), f s)
@@ -82,3 +101,36 @@ genNewVar prop = do
             )
     _ <- registerProp newIdent prop
     pure newIdent
+
+loadTypeEnv :: (Monad m) => TypeEnv -> IdentEnvT m ()
+loadTypeEnv typeEnv = do
+    mapM_
+        ( \(ident, tId) ->
+            case tyTable !! tId of
+                Just ty ->
+                    registerProp ident (IdentProp (removeVar ty) Nothing False)
+                Nothing -> pure ()
+        )
+        vars
+  where
+    vars = variables typeEnv
+    tyTable = table typeEnv
+
+reportEnv :: (Monad m) => IdentEnvT m [Text]
+reportEnv = do
+    map
+        ( \(ident, IdentProp ty c isC) ->
+            display ident
+                <> " : "
+                <> display ty
+                <> " (Const: "
+                <> pack (show c)
+                <> ", IsClosure: "
+                <> if isC
+                    then "Yes"
+                    else
+                        "No"
+                            <> ")"
+        )
+        . identProps
+        <$> getEnv

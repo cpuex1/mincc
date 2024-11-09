@@ -1,5 +1,6 @@
 module CommandLine (
     ConfigIO,
+    IdentEnvIO,
     CompilerConfig (CompilerConfig),
     CommandLineArg (CommandLineArg),
     cInput,
@@ -22,11 +23,13 @@ module CommandLine (
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
 import Error (CompilerError)
+import IdentAnalysis (IdentEnvT)
 import Options.Applicative
 import System.Console.ANSI (hNowSupportsANSI)
 import System.IO (stdout)
 
 type ConfigIO = ReaderT CompilerConfig (ExceptT CompilerError IO)
+type IdentEnvIO = IdentEnvT ConfigIO
 
 data CompilerConfig = CompilerConfig
     { cInput :: [String]

@@ -9,6 +9,7 @@ module TypeInferrer (
     TypeEnv (TypeEnv, assigned, table, variables),
     registerIdent,
     registerAll,
+    removeVar,
 ) where
 
 import Control.Monad (void)
@@ -96,6 +97,19 @@ updateEnv typeId ty = do
     updateTy tId replaced (TArray value) = TArray $ updateTy tId replaced value
     updateTy _ _ ty' = ty'
 
+{- | Remove all type variables from a type.
+Unresolved type variables are replaced with `TInt`.
+-}
+removeVar :: ITy -> Ty
+removeVar TUnit = TUnit
+removeVar TBool = TBool
+removeVar TInt = TInt
+removeVar TFloat = TFloat
+removeVar (TFun args ret) = TFun (map removeVar args) (removeVar ret)
+removeVar (TTuple values) = TTuple $ map removeVar values
+removeVar (TArray value) = TArray $ removeVar value
+removeVar (TVar _) = TInt
+
 applyEnv :: ITy -> TypingM Ty
 applyEnv TUnit = pure TUnit
 applyEnv TBool = pure TBool
@@ -104,10 +118,13 @@ applyEnv TFloat = pure TFloat
 applyEnv (TFun args ret) = TFun <$> mapM applyEnv args <*> applyEnv ret
 applyEnv (TTuple values) = TTuple <$> mapM applyEnv values
 applyEnv (TArray value) = TArray <$> applyEnv value
-applyEnv (TVar tId) =
-    fromTypeId tId >>= \case
-        Just t -> applyEnv t
-        Nothing -> pure TInt
+applyEnv (TVar tId) = do
+    t <- fromTypeId tId
+    case t of
+        Just t' -> applyEnv t'
+        Nothing -> do
+            updateEnv tId TInt
+            pure TInt
 
 applyEnvE :: ITypedExpr -> TypingM TypedExpr
 applyEnvE (ITGuard expr) = do
@@ -174,8 +191,8 @@ doUnify pos ty1 ty2 = do
                 throwError $ TypeError (Just pos) $ "Expected type " <> display expected <> " but got " <> display actual
             )
 
-inferType :: ResolvedExpr -> Either CompilerError TypedExpr
-inferType expr = evalState (runExceptT $ inferE expr) defaultEnv
+inferType :: ResolvedExpr -> (Either CompilerError TypedExpr, TypeEnv)
+inferType expr = runState (runExceptT $ inferE expr) defaultEnv
 
 inferE :: ResolvedExpr -> TypingM TypedExpr
 inferE expr = do

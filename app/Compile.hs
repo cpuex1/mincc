@@ -20,6 +20,7 @@ import Data.Bifunctor (Bifunctor (first))
 import qualified Data.Text.IO as TIO
 import Error
 import Flatten (flattenExpr)
+import IdentAnalysis (loadTypeEnv)
 import KNorm
 import Log
 import NameRes (resolveNames)
@@ -44,27 +45,30 @@ parseAllIO = mapM parseIO
 resolveAllIO :: [ParsedExpr] -> ConfigIO [ResolvedExpr]
 resolveAllIO exprs = pure $ map resolveNames exprs
 
-inferTypeIO :: [ResolvedExpr] -> ConfigIO [TypedExpr]
+inferTypeIO :: [ResolvedExpr] -> IdentEnvIO [TypedExpr]
 inferTypeIO [] = pure []
 inferTypeIO (expr : rest) = do
-    case inferType expr of
-        Left err -> throwError err
+    case result of
+        Left err -> lift $ throwError err
         Right typedExpr -> do
             rest' <- inferTypeIO rest
+            loadTypeEnv env
             return (typedExpr : rest')
+  where
+    (result, env) = inferType expr
 
-kNormalizeIO :: [TypedExpr] -> ConfigIO [(KExpr, OptimEnv)]
+kNormalizeIO :: [TypedExpr] -> IdentEnvIO [(KExpr, OptimEnv)]
 kNormalizeIO exprs = pure $ map (\expr -> runState (kNormalize expr) defaultOptimEnv) exprs
 
-flattenExprIO :: [(KExpr, OptimEnv)] -> ConfigIO [(KExpr, OptimEnv)]
+flattenExprIO :: [(KExpr, OptimEnv)] -> IdentEnvIO [(KExpr, OptimEnv)]
 flattenExprIO exprs = pure $ map (first flattenExpr) exprs
 
-getFunctionsIO :: [KExpr] -> ConfigIO [Function]
+getFunctionsIO :: [KExpr] -> IdentEnvIO [Function]
 getFunctionsIO exprs = pure $ concatMap getFunctions exprs
 
-loadFunctionsIO :: [Function] -> ConfigIO [CodeBlock Loc Int]
+loadFunctionsIO :: [Function] -> IdentEnvIO [CodeBlock Loc Int]
 loadFunctionsIO functions = do
-    argsLimit' <- asks cArgsLimit
+    argsLimit' <- lift $ asks cArgsLimit
     case loadFunctions (BackendConfig argsLimit') functions of
-        Left err -> throwError err
+        Left err -> lift $ throwError err
         Right codeBlocks -> pure codeBlocks

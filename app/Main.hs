@@ -4,7 +4,7 @@ module Main (main) where
 
 import CommandLine
 import Compile
-import Control.Monad (when)
+import Control.Monad (void, when)
 import Control.Monad.Trans.Reader
 import Data.Text (intercalate)
 import qualified Data.Text.IO as TIO
@@ -12,8 +12,10 @@ import Display
 import Options.Applicative
 
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
+import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Class
 import Error
+import IdentAnalysis (IdentEnvT (runIdentEnvT), defaultIdentE, reportEnv)
 import Log
 import Path
 
@@ -63,40 +65,48 @@ execArgs = do
                 lift $ lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ intercalate "\n" $ map display resolvedExprs
                 printLog Debug "Resolved expressions are saved"
 
-            typedExprs <- inferTypeIO resolvedExprs
-            printLog Done "Type inference succeeded"
-            emitTyped <- asks cEmitTyped
-            when emitTyped $ do
-                lift $ lift $ TIO.writeFile (changeExt "typed.ml" outputFile) $ intercalate "\n" $ map display typedExprs
-                printLog Debug "Typed expressions are saved"
+            void $
+                runIdentEnvT
+                    ( do
+                        typedExprs <- inferTypeIO resolvedExprs
+                        lift $ printLog Done "Type inference succeeded"
+                        emitTyped <- lift $ asks cEmitTyped
+                        when emitTyped $ do
+                            liftIO $ TIO.writeFile (changeExt "typed.ml" outputFile) $ intercalate "\n" $ map display typedExprs
+                            lift $ printLog Debug "Typed expressions are saved"
 
-            kExprs <- kNormalizeIO typedExprs
-            printLog Done "K-normalization succeeded"
-            emitKNorm <- asks cEmitKNorm
-            when emitKNorm $ do
-                lift $ lift $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map (display . fst) kExprs
-                printLog Debug "K-normalized expressions are saved"
+                        reported <- reportEnv
+                        lift $ mapM_ (printTextLog Debug) reported
 
-            flattenExprs <- flattenExprIO kExprs
-            printLog Done "Flatten succeeded"
-            emitFlatten <- asks cEmitFlatten
-            when emitFlatten $ do
-                lift $ lift $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map (display . fst) flattenExprs
-                printLog Debug "Flatten expressions are saved"
+                        kExprs <- kNormalizeIO typedExprs
+                        lift $ printLog Done "K-normalization succeeded"
+                        emitKNorm <- lift $ asks cEmitKNorm
+                        when emitKNorm $ do
+                            liftIO $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map (display . fst) kExprs
+                            lift $ printLog Debug "K-normalized expressions are saved"
 
-            functions <- getFunctionsIO (map fst flattenExprs)
-            printLog Done "Closure conversion succeeded"
-            emitClosure <- asks cEmitClosure
-            when emitClosure $ do
-                lift $ lift $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
-                printLog Debug "Closure expressions are saved"
+                        flattenExprs <- flattenExprIO kExprs
+                        lift $ printLog Done "Flatten succeeded"
+                        emitFlatten <- lift $ asks cEmitFlatten
+                        when emitFlatten $ do
+                            liftIO $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map (display . fst) flattenExprs
+                            lift $ printLog Debug "Flatten expressions are saved"
 
-            blocks <- loadFunctionsIO functions
-            printLog Done "Code generation succeeded"
-            lift $ lift $ TIO.writeFile (changeExt "code.s" outputFile) $ intercalate "\n" $ map display blocks
-            printLog Debug "Generated code was saved"
+                        functions <- getFunctionsIO (map fst flattenExprs)
+                        lift $ printLog Done "Closure conversion succeeded"
+                        emitClosure <- lift $ asks cEmitClosure
+                        when emitClosure $ do
+                            liftIO $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
+                            lift $ printLog Debug "Closure expressions are saved"
 
-            printLog Done "Compilation succeeded"
+                        blocks <- loadFunctionsIO functions
+                        lift $ printLog Done "Code generation succeeded"
+                        liftIO $ TIO.writeFile (changeExt "code.s" outputFile) $ intercalate "\n" $ map display blocks
+                        lift $ printLog Debug "Generated code was saved"
+
+                        lift $ printLog Done "Compilation succeeded"
+                    )
+                    defaultIdentE
         )
         $ \err -> do
             mapM_ (printTextLog Error) $ displayError err
