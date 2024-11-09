@@ -31,6 +31,7 @@ library
       Display
       Error
       Flatten
+      IdentAnalysis
       KNorm
       NameRes
       Parser
