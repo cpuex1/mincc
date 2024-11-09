@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 module Flatten (flattenExpr) where
 
 import Syntax

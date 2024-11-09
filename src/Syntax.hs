@@ -22,11 +22,13 @@ module Syntax (
     Function (Function, funcName, isDirect, freeVars, boundedArgs, funcBody),
     AllowClosure (AllowClosure),
     DisallowClosure (DisallowClosure),
+    AllowCompBranch (AllowCompBranch),
     Expr (
         Const,
         Unary,
         Binary,
         If,
+        IfComp,
         Let,
         Var,
         App,
@@ -91,13 +93,13 @@ data Pattern identTy
 {- | The type of an expression after parsing.
 PGuard is used for avoiding invalid recursive type definition.
 -}
-newtype ParsedExpr = PGuard {pExp :: Expr SourcePos RawIdent ParsedExpr DisallowClosure}
+newtype ParsedExpr = PGuard {pExp :: Expr SourcePos RawIdent ParsedExpr DisallowClosure ()}
     deriving (Show, Eq)
 
 {- | The type of an expression after name resolution.
 RGuard is used for avoiding invalid recursive type definition.
 -}
-newtype ResolvedExpr = RGuard {rExp :: Expr SourcePos Ident ResolvedExpr DisallowClosure}
+newtype ResolvedExpr = RGuard {rExp :: Expr SourcePos Ident ResolvedExpr DisallowClosure ()}
     deriving (Show, Eq)
 
 data Loc = Loc Text Int Int
@@ -110,14 +112,14 @@ data TypedState = TypedState {getType :: Ty, getPosition :: SourcePos}
     deriving (Show, Eq)
 
 -- | The type of an expression after type inference.
-newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr DisallowClosure}
+newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr DisallowClosure ()}
     deriving (Show, Eq)
 
 -- | The type of an expression after K-normalization.
-type KExpr = Expr TypedState Ident Ident DisallowClosure
+type KExpr = Expr TypedState Ident Ident DisallowClosure ()
 
 -- | The type of an expression after introducing closures.
-type ClosureExpr = Expr TypedState Ident Ident AllowClosure
+type ClosureExpr = Expr TypedState Ident Ident AllowClosure ()
 
 data Function = Function
     { funcState :: TypedState
@@ -135,91 +137,103 @@ data AllowClosure = AllowClosure
 data DisallowClosure = DisallowClosure
     deriving (Show, Eq)
 
-data Expr state identTy operandTy closureTy where
+data AllowCompBranch = AllowCompBranch
+    deriving (Show, Eq)
+
+data Expr state identTy operandTy closureTy branchTy where
     Const ::
         state ->
         Literal ->
-        Expr state a b closureTy
+        Expr state a b closureTy branchTy
     Unary ::
         state ->
         UnaryOp ->
         operandTy ->
-        Expr state a operandTy closureTy
+        Expr state a operandTy closureTy branchTy
     Binary ::
         state ->
         BinaryOp ->
         operandTy ->
         operandTy ->
-        Expr state a operandTy closureTy
+        Expr state a operandTy closureTy branchTy
     If ::
         state ->
         operandTy ->
-        Expr state identTy operandTy closureTy ->
-        Expr state identTy operandTy closureTy ->
-        Expr state identTy operandTy closureTy
+        Expr state identTy operandTy closureTy () ->
+        Expr state identTy operandTy closureTy () ->
+        Expr state identTy operandTy closureTy ()
+    IfComp ::
+        state ->
+        RelationBinOp ->
+        operandTy ->
+        operandTy ->
+        Expr state identTy operandTy closureTy AllowCompBranch ->
+        Expr state identTy operandTy closureTy AllowCompBranch ->
+        Expr state identTy operandTy closureTy AllowCompBranch
     Let ::
         state ->
         Pattern identTy ->
-        Expr state identTy operandTy closureTy ->
-        Expr state identTy operandTy closureTy ->
-        Expr state identTy operandTy closureTy
+        Expr state identTy operandTy closureTy branchTy ->
+        Expr state identTy operandTy closureTy branchTy ->
+        Expr state identTy operandTy closureTy branchTy
     Var ::
         state ->
         identTy ->
-        Expr state identTy b closureTy
+        Expr state identTy b closureTy branchTy
     App ::
         state ->
         operandTy ->
         [operandTy] ->
-        Expr state identTy operandTy DisallowClosure
+        Expr state identTy operandTy DisallowClosure branchTy
     Tuple ::
         state ->
         [operandTy] ->
-        Expr state a operandTy closureTy
+        Expr state a operandTy closureTy branchTy
     ArrayCreate ::
         state ->
         operandTy ->
         operandTy ->
-        Expr state identTy operandTy closureTy
+        Expr state identTy operandTy closureTy branchTy
     Get ::
         state ->
         operandTy ->
         operandTy ->
-        Expr state a operandTy closureTy
+        Expr state a operandTy closureTy branchTy
     Put ::
         state ->
         operandTy ->
         operandTy ->
         operandTy ->
-        Expr state identTy operandTy closureTy
+        Expr state identTy operandTy closureTy branchTy
     MakeClosure ::
         state ->
         identTy ->
         [operandTy] ->
-        Expr state identTy operandTy AllowClosure
+        Expr state identTy operandTy AllowClosure branchTy
     ClosureApp ::
         state ->
         identTy ->
         [operandTy] ->
-        Expr state identTy operandTy AllowClosure
+        Expr state identTy operandTy AllowClosure branchTy
     DirectApp ::
         state ->
         identTy ->
         [operandTy] ->
-        Expr state identTy operandTy AllowClosure
+        Expr state identTy operandTy AllowClosure branchTy
 
 deriving instance
-    (Show state, Show identTy, Show operandTy, Show closureTy) =>
-    Show (Expr state identTy operandTy closureTy)
+    (Show state, Show identTy, Show operandTy, Show closureTy, Show branchTy) =>
+    Show (Expr state identTy operandTy closureTy branchTy)
 deriving instance
-    (Eq state, Eq identTy, Eq operandTy, Eq closureTy) =>
-    Eq (Expr state identTy operandTy closureTy)
+    (Eq state, Eq identTy, Eq operandTy, Eq closureTy, Eq branchTy) =>
+    Eq (Expr state identTy operandTy closureTy branchTy)
 
-getExprState :: Expr state identTy operandTy closureTy -> state
+getExprState :: Expr state identTy operandTy closureTy branchTy -> state
 getExprState (Const state _) = state
 getExprState (Unary state _ _) = state
 getExprState (Binary state _ _ _) = state
 getExprState (If state _ _ _) = state
+getExprState (IfComp state _ _ _ _ _) = state
 getExprState (Let state _ _ _) = state
 getExprState (Var state _) = state
 getExprState (App state _ _) = state
@@ -236,8 +250,8 @@ visitExprM ::
     (state -> m state') ->
     (identTy -> m identTy') ->
     (operandTy -> m operandTy') ->
-    Expr state identTy operandTy closureTy ->
-    m (Expr state' identTy' operandTy' closureTy)
+    Expr state identTy operandTy closureTy branchTy ->
+    m (Expr state' identTy' operandTy' closureTy branchTy)
 visitExprM fState _ _ (Const state lit) = do
     state' <- fState state
     pure $ Const state' lit
@@ -256,6 +270,13 @@ visitExprM fState fIdent fOperand (If state cond thenE elseE) = do
     thenE' <- visitExprM fState fIdent fOperand thenE
     elseE' <- visitExprM fState fIdent fOperand elseE
     pure $ If state' cond' thenE' elseE'
+visitExprM fState fIdent fOperand (IfComp state op left right thenE elseE) = do
+    state' <- fState state
+    left' <- fOperand left
+    right' <- fOperand right
+    thenE' <- visitExprM fState fIdent fOperand thenE
+    elseE' <- visitExprM fState fIdent fOperand elseE
+    pure $ IfComp state' op left' right' thenE' elseE'
 visitExprM fState fIdent fOperand (Let state pat expr body) = do
     state' <- fState state
     expr' <- visitExprM fState fIdent fOperand expr

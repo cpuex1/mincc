@@ -21,7 +21,7 @@ import Syntax
 import Text.Megaparsec.Pos
 import Typing
 
-newtype ITypedExpr = ITGuard {iTExp :: Expr (ITy, SourcePos) Ident ITypedExpr DisallowClosure}
+newtype ITypedExpr = ITGuard {iTExp :: Expr (ITy, SourcePos) Ident ITypedExpr DisallowClosure ()}
     deriving (Show, Eq)
 
 getTy :: ITypedExpr -> ITy

@@ -70,10 +70,10 @@ instance Display SourcePos where
 instance Display TypedState where
     display (TypedState ty _) = " (* : " <> display ty <> " *)"
 
-instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr state identTy operandTy closureTy) where
+instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr state identTy operandTy closureTy branchTy) where
     displayI expression indentDepth = withoutState expression indentDepth <> display (getExprState expression)
       where
-        withoutState :: (Display state, Display identTy, DisplayI operandTy) => Expr state identTy operandTy closureTy -> Int -> Text
+        withoutState :: (Display state, Display identTy, DisplayI operandTy) => Expr state identTy operandTy closureTy branchTy -> Int -> Text
         withoutState (Const _ lit) _ = display lit
         withoutState (Unary _ op expr) depth =
             "(" <> display op <> " " <> displayI expr depth <> ")"
@@ -82,6 +82,24 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
         withoutState (If _ cond thenExpr elseExpr) depth =
             "(if "
                 <> displayI cond depth
+                <> " then\n"
+                <> insertIndent (depth + 1)
+                <> displayI thenExpr (depth + 1)
+                <> "\n"
+                <> insertIndent depth
+                <> "else\n"
+                <> insertIndent (depth + 1)
+                <> displayI elseExpr (depth + 1)
+                <> ")"
+        withoutState (IfComp _ op left right thenExpr elseExpr) depth =
+            "(if "
+                <> "("
+                <> displayI left depth
+                <> " "
+                <> display (RelationOp op)
+                <> " "
+                <> displayI right depth
+                <> ")"
                 <> " then\n"
                 <> insertIndent (depth + 1)
                 <> displayI thenExpr (depth + 1)
@@ -145,7 +163,7 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
         withoutState (DirectApp _ func args) depth =
             "(" <> display func <> " " <> Data.Text.unwords (Prelude.map (`displayI` depth) args) <> ")"
 
-instance (Display state, Display identTy, DisplayI operandTy) => Display (Expr state identTy operandTy closureTy) where
+instance (Display state, Display identTy, DisplayI operandTy) => Display (Expr state identTy operandTy closureTy branchTy) where
     display expr = displayI expr 0
 
 instance DisplayI ParsedExpr where
