@@ -41,9 +41,11 @@ module Syntax (
         DirectApp
     ),
     getExprState,
+    subst,
     visitExprM,
 ) where
 
+import Control.Monad.Identity (Identity (runIdentity))
 import Data.Text (Text, pack)
 import Text.Megaparsec.Pos (SourcePos, sourceColumn, sourceLine, sourceName, unPos)
 import Typing (Ty)
@@ -245,6 +247,14 @@ getExprState (MakeClosure state _ _) = state
 getExprState (ClosureApp state _ _) = state
 getExprState (DirectApp state _ _) = state
 
+-- | Substitute identifiers and operands. The identifiers should be unique.
+subst ::
+    (identTy -> identTy) ->
+    (operandTy -> operandTy) ->
+    Expr state identTy operandTy closureTy branchTy ->
+    Expr state identTy operandTy closureTy branchTy
+subst fIdent fOperand expr = runIdentity $ visitExprM pure (pure . fIdent) (pure . fOperand) expr
+
 visitExprM ::
     (Monad m) =>
     (state -> m state') ->
@@ -285,7 +295,7 @@ visitExprM fState fIdent fOperand (Let state pat expr body) = do
     pure $ Let state' pat' expr' body'
   where
     visitPatternM :: (Monad m) => (identTy -> m identTy') -> Pattern identTy -> m (Pattern identTy')
-    visitPatternM _ (PUnit) = pure PUnit
+    visitPatternM _ PUnit = pure PUnit
     visitPatternM fIdent' (PVar ident) = PVar <$> fIdent' ident
     visitPatternM fIdent' (PRec ident idents) = PRec <$> fIdent' ident <*> mapM fIdent' idents
     visitPatternM fIdent' (PTuple idents) = PTuple <$> mapM fIdent' idents

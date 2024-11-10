@@ -4,8 +4,8 @@
 module Closure (getFunctions, ClosureEnv (ClosureEnv)) where
 
 import Control.Monad (unless)
-import Control.Monad.State (State, StateT (runStateT), execState, get, gets, modify)
-import IdentAnalysis (IdentEnvT)
+import Control.Monad.State (MonadTrans (lift), State, StateT (runStateT), execState, get, gets, modify)
+import IdentAnalysis (IdentEnvT, IdentProp (typeOf), genNewVar, searchProp)
 import Syntax
 import Text.Megaparsec (initialPos)
 import Typing (TypeKind (TUnit))
@@ -162,14 +162,34 @@ genFunctions (Let state (PRec func args) expr body) = do
             updateFunctionExpr func expr'
             genFunctions body
         else do
-            addFunction (Function state False func freeVars' args dummyExpr)
-            expr' <- genFunctions expr
+            newFreeVars <-
+                lift $
+                    mapM
+                        ( \ident -> do
+                            prop <- searchProp ident
+                            case prop of
+                                Just prop' -> genNewVar (typeOf prop')
+                                Nothing -> genNewVar TUnit
+                        )
+                        freeVars'
+            addFunction (Function state False func newFreeVars args dummyExpr)
+            let replacedExpr =
+                    foldl
+                        ( \expr' (ident, newIdent) ->
+                            subst
+                                (\ident' -> if ident' == ident then newIdent else ident')
+                                (\ident' -> if ident' == ident then newIdent else ident')
+                                expr'
+                        )
+                        expr
+                        (zip freeVars' newFreeVars)
+            expr' <- genFunctions replacedExpr
             if isUsed func expr
                 then
                     -- The function is a recursive function with free variables.
                     -- Create a closure inside it to avoid referencing out-of-scope closures.
                     updateFunctionExpr func $
-                        Let state (PVar func) (MakeClosure state func freeVars') expr'
+                        Let state (PVar func) (MakeClosure state func newFreeVars) expr'
                 else
                     updateFunctionExpr func expr'
             body' <- genFunctions body
