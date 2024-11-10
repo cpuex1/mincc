@@ -90,8 +90,8 @@ updateProp ident f =
             { identProps = map (\(i, p) -> if i == ident then (i, f p) else (i, p)) (identProps env)
             }
 
-genNewVar :: (Monad m) => IdentProp -> IdentEnvT m Ident
-genNewVar prop = do
+genNewVar :: (Monad m) => Ty -> IdentEnvT m Ident
+genNewVar ty = do
     newIdent <- IdentEnvT $ \env ->
         return
             ( CompilerGenerated (nextIdent env)
@@ -99,7 +99,7 @@ genNewVar prop = do
                 { nextIdent = nextIdent env + 1
                 }
             )
-    _ <- registerProp newIdent prop
+    _ <- registerProp newIdent (IdentProp ty Nothing False)
     pure newIdent
 
 loadTypeEnv :: (Monad m) => TypeEnv -> IdentEnvT m ()

@@ -1,48 +1,29 @@
 {-# LANGUAGE GADTs #-}
 
 module KNorm (
-    OptimState,
-    OptimEnv (OptimEnv, generated),
-    defaultOptimEnv,
-    genVar,
     kNormalize,
 ) where
 
-import Control.Monad.State
+import IdentAnalysis (IdentEnvT, genNewVar)
 import Syntax
 
-newtype OptimEnv = OptimEnv
-    {generated :: Int}
-    deriving (Show, Eq)
-
-defaultOptimEnv :: OptimEnv
-defaultOptimEnv = OptimEnv 0
-
-type OptimState = State OptimEnv
-
-genVar :: OptimState Ident
-genVar = do
-    env <- get
-    modify (\e -> e{generated = generated e + 1})
-    pure $ CompilerGenerated $ generated env
-
 -- | Insert a let expression to a tail of the K-normalized expression.
-insertLet :: KExpr -> (Ident -> OptimState KExpr) -> OptimState KExpr
+insertLet :: (Monad m) => KExpr -> (Ident -> IdentEnvT m KExpr) -> IdentEnvT m KExpr
 insertLet (Var _ v) genBody = genBody v
 insertLet expr genBody = do
-    newVar <- genVar
+    newVar <- genNewVar $ getType $ getExprState expr
     body <- genBody newVar
     pure $ Let (getExprState body) (PVar newVar) expr body
 
-insertLetAll :: [KExpr] -> ([Ident] -> OptimState KExpr) -> OptimState KExpr
+insertLetAll :: (Monad m) => [KExpr] -> ([Ident] -> IdentEnvT m KExpr) -> IdentEnvT m KExpr
 insertLetAll = insertLetAll' []
   where
-    insertLetAll' :: [Ident] -> [KExpr] -> ([Ident] -> OptimState KExpr) -> OptimState KExpr
+    insertLetAll' :: (Monad m) => [Ident] -> [KExpr] -> ([Ident] -> IdentEnvT m KExpr) -> IdentEnvT m KExpr
     insertLetAll' idents [] genBody = genBody idents
     insertLetAll' idents (e : exprs) genBody = do
         insertLet e (\ident -> insertLetAll' (idents ++ [ident]) exprs genBody)
 
-kNormalize :: TypedExpr -> OptimState KExpr
+kNormalize :: (Monad m) => TypedExpr -> IdentEnvT m KExpr
 kNormalize (TGuard (Const s lit)) = pure (Const s lit)
 kNormalize (TGuard (Unary s op expr)) = do
     expr' <- kNormalize expr

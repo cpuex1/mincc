@@ -82,17 +82,17 @@ execArgs = do
                         lift $ printLog Done "K-normalization succeeded"
                         emitKNorm <- lift $ asks cEmitKNorm
                         when emitKNorm $ do
-                            liftIO $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map (display . fst) kExprs
+                            liftIO $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map display kExprs
                             lift $ printLog Debug "K-normalized expressions are saved"
 
                         flattenExprs <- flattenExprIO kExprs
                         lift $ printLog Done "Flatten succeeded"
                         emitFlatten <- lift $ asks cEmitFlatten
                         when emitFlatten $ do
-                            liftIO $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map (display . fst) flattenExprs
+                            liftIO $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map display flattenExprs
                             lift $ printLog Debug "Flatten expressions are saved"
 
-                        functions <- getFunctionsIO (map fst flattenExprs)
+                        functions <- getFunctionsIO flattenExprs
                         lift $ printLog Done "Closure conversion succeeded"
                         emitClosure <- lift $ asks cEmitClosure
                         when emitClosure $ do

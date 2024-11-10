@@ -13,10 +13,8 @@ import Backend
 import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
-import Control.Monad.State (runState)
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader (asks)
-import Data.Bifunctor (Bifunctor (first))
 import qualified Data.Text.IO as TIO
 import Error
 import Flatten (flattenExpr)
@@ -57,11 +55,11 @@ inferTypeIO (expr : rest) = do
   where
     (result, env) = inferType expr
 
-kNormalizeIO :: [TypedExpr] -> IdentEnvIO [(KExpr, OptimEnv)]
-kNormalizeIO exprs = pure $ map (\expr -> runState (kNormalize expr) defaultOptimEnv) exprs
+kNormalizeIO :: [TypedExpr] -> IdentEnvIO [KExpr]
+kNormalizeIO = mapM kNormalize
 
-flattenExprIO :: [(KExpr, OptimEnv)] -> IdentEnvIO [(KExpr, OptimEnv)]
-flattenExprIO exprs = pure $ map (first flattenExpr) exprs
+flattenExprIO :: [KExpr] -> IdentEnvIO [KExpr]
+flattenExprIO exprs = pure $ map flattenExpr exprs
 
 getFunctionsIO :: [KExpr] -> IdentEnvIO [Function]
 getFunctionsIO exprs = pure $ concatMap getFunctions exprs
