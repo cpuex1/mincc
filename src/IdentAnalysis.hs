@@ -8,6 +8,7 @@ module IdentAnalysis (
     IdentEnv,
     registerProp,
     searchProp,
+    getTyOf,
     updateProp,
     genNewVar,
     loadTypeEnv,
@@ -20,7 +21,7 @@ import Data.Text (Text, pack)
 import Display (display)
 import Syntax
 import TypeInferrer (TypeEnv (table, variables), removeVar)
-import Typing (Ty)
+import Typing (Ty, TypeKind (TUnit))
 
 data IdentProp
     = IdentProp
@@ -82,6 +83,16 @@ registerProp ident prop = do
 searchProp :: (Monad m) => Ident -> IdentEnvT m (Maybe IdentProp)
 searchProp ident =
     IdentEnvT $ \env -> return (lookup ident (identProps env), env)
+
+{- | Get the type of an identifier.
+If the identifier is not found, return `TUnit`.
+-}
+getTyOf :: (Monad m) => Ident -> IdentEnvT m Ty
+getTyOf ident = do
+    found <- searchProp ident
+    case found of
+        Just prop -> pure (typeOf prop)
+        Nothing -> pure TUnit
 
 updateProp :: (Monad m) => Ident -> (IdentProp -> IdentProp) -> IdentEnvT m ()
 updateProp ident f =
