@@ -71,6 +71,7 @@ getFunctionsIO (expr : exprs) = do
 loadFunctionsIO :: [Function] -> IdentEnvIO [CodeBlock Loc Int]
 loadFunctionsIO functions = do
     argsLimit' <- lift $ asks cArgsLimit
-    case loadFunctions (BackendConfig argsLimit') functions of
+    functions' <- loadFunctions (BackendConfig argsLimit') functions
+    case functions' of
         Left err -> lift $ throwError err
         Right codeBlocks -> pure codeBlocks

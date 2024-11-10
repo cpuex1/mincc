@@ -10,10 +10,11 @@ import Asm
 import Control.Monad (when)
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (ReaderT (runReaderT), asks)
-import Control.Monad.State (MonadState (get), State, gets, modify, runState)
+import Control.Monad.State (MonadState (get), StateT (runStateT), gets, modify)
 import Data.Text (pack)
 import Display (display)
 import Error (CompilerError (OtherError))
+import IdentAnalysis (IdentEnvT)
 import Syntax
 import Typing (TypeKind (TFloat, TInt, TUnit))
 
@@ -53,27 +54,27 @@ defaultBackendEnv =
         , instBuffer = []
         }
 
-type BackendState = ReaderT BackendConfig (ExceptT CompilerError (State BackendEnv))
+type BackendState m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv (IdentEnvT m)))
 
-genIReg :: BackendState (Register RegID Int)
+genIReg :: (Monad m) => BackendState m (Register RegID Int)
 genIReg = do
     env <- get
     modify $ \e -> e{generatedIReg = generatedIReg e + 1}
     return $ TempReg $ generatedIReg env
 
-genFReg :: BackendState (Register RegID Float)
+genFReg :: (Monad m) => BackendState m (Register RegID Float)
 genFReg = do
     env <- get
     modify $ \e -> e{generatedFReg = generatedFReg e + 1}
     return $ TempReg $ generatedFReg env
 
-genLabel :: BackendState InstLabel
+genLabel :: (Monad m) => BackendState m InstLabel
 genLabel = do
     env <- get
     modify $ \e -> e{generatedLabel = generatedLabel e + 1}
     return $ "__label_" <> pack (show $ generatedLabel env)
 
-findI :: Ident -> BackendState (Register RegID Int)
+findI :: (Monad m) => Ident -> BackendState m (Register RegID Int)
 findI ident = do
     regID <- gets (lookup ident . iMap)
     case regID of
@@ -81,7 +82,7 @@ findI ident = do
         Nothing -> do
             throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
 
-findF :: Ident -> BackendState (Register RegID Float)
+findF :: (Monad m) => Ident -> BackendState m (Register RegID Float)
 findF ident = do
     regID <- gets (lookup ident . fMap)
     case regID of
@@ -89,7 +90,7 @@ findF ident = do
         Nothing -> do
             throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
 
-flushInstBuffer :: BackendState ()
+flushInstBuffer :: (Monad m) => BackendState m ()
 flushInstBuffer =
     modify $ \env ->
         env
@@ -97,13 +98,13 @@ flushInstBuffer =
             , instBuffer = []
             }
 
-addInst :: Inst Loc RegID -> BackendState ()
+addInst :: (Monad m) => Inst Loc RegID -> BackendState m ()
 addInst inst = modify $ \env -> env{instBuffer = instBuffer env ++ [inst]}
 
 fromState :: TypedState -> Loc
 fromState (TypedState _ pos) = fromSourcePos pos
 
-toInstU :: ClosureExpr -> BackendState ()
+toInstU :: (Monad m) => ClosureExpr -> BackendState m ()
 toInstU (Let{}) =
     throwError $ OtherError "Let itself cannot be regarded as an instruction."
 toInstU (If{}) =
@@ -123,7 +124,7 @@ toInstU (DirectApp state func args) = do
 toInstU _ =
     throwError $ OtherError "The expression cannot have type unit."
 
-toInstI :: Register RegID Int -> ClosureExpr -> BackendState ()
+toInstI :: (Monad m) => Register RegID Int -> ClosureExpr -> BackendState m ()
 toInstI _ (Let{}) =
     throwError $ OtherError "Let itself cannot be regarded as an instruction."
 toInstI _ (If{}) =
@@ -170,7 +171,7 @@ toInstI _ (ClosureApp{}) =
 toInstI _ _ =
     throwError $ OtherError "The expression cannot be represented as int."
 
-toInstF :: Register RegID Float -> ClosureExpr -> BackendState ()
+toInstF :: (Monad m) => Register RegID Float -> ClosureExpr -> BackendState m ()
 toInstF _ (Let{}) =
     throwError $ OtherError "Let itself cannot be regarded as an instruction."
 toInstF _ (If{}) =
@@ -200,7 +201,7 @@ toInstF reg (DirectApp state func args) = do
 toInstF _ _ =
     throwError $ OtherError "The expression cannot have type float."
 
-toAsm :: ClosureExpr -> BackendState ()
+toAsm :: (Monad m) => ClosureExpr -> BackendState m ()
 toAsm (If state cond thenExpr elseExpr) = do
     cond' <- findI cond
 
@@ -323,19 +324,18 @@ toAsm expr = do
         _ -> do
             throwError $ OtherError "Not implemented."
 
-loadFunctions :: BackendConfig -> [Function] -> Either CompilerError [CodeBlock Loc RegID]
-loadFunctions config functions =
-    case result of
-        (Left err, _) -> Left err
-        (Right _, env) -> Right $ codeBlocks env
-  where
-    result =
-        runState
-            ( runExceptT $ runReaderT (mapM_ loadFunctionAsAsm functions) config
+loadFunctions :: (Monad m) => BackendConfig -> [Function] -> IdentEnvT m (Either CompilerError [CodeBlock Loc RegID])
+loadFunctions config functions = do
+    result <-
+        runStateT
+            ( runExceptT $ runReaderT (mapM loadFunctionAsAsm functions) config
             )
             defaultBackendEnv
+    case result of
+        (Left err, _) -> pure $ Left err
+        (Right _, env) -> pure $ Right $ codeBlocks env
 
-loadFunctionAsAsm :: Function -> BackendState ()
+loadFunctionAsAsm :: (Monad m) => Function -> BackendState m ()
 loadFunctionAsAsm (Function state _ name freeVars' boundedArgs' body) = do
     modify $ \env ->
         env
