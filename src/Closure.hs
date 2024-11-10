@@ -4,7 +4,8 @@
 module Closure (getFunctions, ClosureEnv (ClosureEnv)) where
 
 import Control.Monad (unless)
-import Control.Monad.State (State, execState, get, gets, modify, runState)
+import Control.Monad.State (State, StateT (runStateT), execState, get, gets, modify)
+import IdentAnalysis (IdentEnvT)
 import Syntax
 import Text.Megaparsec (initialPos)
 import Typing (TypeKind (TUnit))
@@ -13,13 +14,13 @@ newtype ClosureEnv = ClosureEnv
     { functions :: [Function]
     }
 
-type ClosureState = State ClosureEnv
+type ClosureT m = StateT ClosureEnv (IdentEnvT m)
 
-addFunction :: Function -> ClosureState ()
+addFunction :: (Monad m) => Function -> ClosureT m ()
 addFunction f = do
     modify $ \env -> env{functions = f : functions env}
 
-findFunction :: Ident -> ClosureState (Maybe Function)
+findFunction :: (Monad m) => Ident -> ClosureT m (Maybe Function)
 findFunction ident =
     gets (findFunction' ident . functions)
   where
@@ -28,7 +29,7 @@ findFunction ident =
         | funcName f == ident' = Just f
         | otherwise = findFunction' ident' fs
 
-updateFunctionExpr :: Ident -> ClosureExpr -> ClosureState ()
+updateFunctionExpr :: (Monad m) => Ident -> ClosureExpr -> ClosureT m ()
 updateFunctionExpr ident expr = do
     funcList <- gets functions
     modify $ \env -> env{functions = updateFunctionExpr' funcList}
@@ -140,11 +141,10 @@ isUsed ident (Put _ _ _ value) =
     ident == value
 isUsed _ _ = False
 
-getFunctions :: KExpr -> [Function]
-getFunctions expr =
-    Function (getExprState expr') True (ExternalIdent "entry") [] [] expr' : functions funcList
-  where
-    (expr', funcList) = runState (genFunctions expr) (ClosureEnv [])
+getFunctions :: (Monad m) => KExpr -> IdentEnvT m [Function]
+getFunctions expr = do
+    (expr', funcList) <- runStateT (genFunctions expr) (ClosureEnv [])
+    pure $ Function (getExprState expr') True (ExternalIdent "entry") [] [] expr' : functions funcList
 
 dummyState :: TypedState
 dummyState = TypedState TUnit (initialPos "dummy")
@@ -152,7 +152,7 @@ dummyState = TypedState TUnit (initialPos "dummy")
 dummyExpr :: ClosureExpr
 dummyExpr = Const dummyState LUnit
 
-genFunctions :: KExpr -> ClosureState ClosureExpr
+genFunctions :: (Monad m) => KExpr -> ClosureT m ClosureExpr
 genFunctions (Let state (PRec func args) expr body) = do
     if null freeVars' && not isUsedAsClosure'
         then do

@@ -62,7 +62,11 @@ flattenExprIO :: [KExpr] -> IdentEnvIO [KExpr]
 flattenExprIO exprs = pure $ map flattenExpr exprs
 
 getFunctionsIO :: [KExpr] -> IdentEnvIO [Function]
-getFunctionsIO exprs = pure $ concatMap getFunctions exprs
+getFunctionsIO [] = pure []
+getFunctionsIO (expr : exprs) = do
+    func <- getFunctions expr
+    functions <- getFunctionsIO exprs
+    pure (func ++ functions)
 
 loadFunctionsIO :: [Function] -> IdentEnvIO [CodeBlock Loc Int]
 loadFunctionsIO functions = do
