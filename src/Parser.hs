@@ -249,12 +249,12 @@ parseExpr =
             -- If
             pos <- getSourcePos
             parseKeyword "if"
-            cond <- parseExprWithPrecedence 6
+            cond <- parseExpr
             parseKeyword "then"
-            then' <- parseExprWithPrecedence 6
+            then' <- parseExpr
             parseKeyword "else"
-            else' <- parseExprWithPrecedence 6
-            pure (PGuard (If (fromSourcePos pos) cond (pExp then') (pExp else')))
+            PGuard . If (fromSourcePos pos) cond (pExp then') . pExp
+                <$> parseExpr
         | precedence == 6 = do
             -- Put
             pos <- getSourcePos
