@@ -96,18 +96,17 @@ updateEnv typeId ty = do
     updateTy tId replaced (TArray value) = TArray $ updateTy tId replaced value
     updateTy _ _ ty' = ty'
 
-{- | Remove all type variables from a type.
-Unresolved type variables are replaced with `TInt`.
--}
-removeVar :: ITy -> Ty
-removeVar TUnit = TUnit
-removeVar TBool = TBool
-removeVar TInt = TInt
-removeVar TFloat = TFloat
-removeVar (TFun args ret) = TFun (map removeVar args) (removeVar ret)
-removeVar (TTuple values) = TTuple $ map removeVar values
-removeVar (TArray value) = TArray $ removeVar value
-removeVar (TVar _) = TInt
+-- | Remove all type variables from a type.
+removeVar :: TypeEnv -> ITy -> Ty
+removeVar env ty =
+    evalState
+        ( do
+            result <- runExceptT $ applyEnv ty
+            case result of
+                Left _ -> error "panic!"
+                Right ty' -> pure ty'
+        )
+        env
 
 applyEnv :: ITy -> TypingM Ty
 applyEnv TUnit = pure TUnit

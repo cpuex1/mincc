@@ -21,8 +21,8 @@ import Control.Monad.Trans
 import Data.Text (Text, pack)
 import Display (display)
 import Syntax
-import TypeInferrer (TypeEnv (table, variables), removeVar)
-import Typing (Ty, TypeKind (TUnit))
+import TypeInferrer (TypeEnv (variables), removeVar)
+import Typing (Ty, TypeKind (TUnit, TVar))
 
 data IdentProp
     = IdentProp
@@ -123,15 +123,11 @@ loadTypeEnv :: (Monad m) => TypeEnv -> IdentEnvT m ()
 loadTypeEnv typeEnv = do
     mapM_
         ( \(ident, tId) ->
-            case tyTable !! tId of
-                Just ty ->
-                    registerProp ident (IdentProp (removeVar ty) Nothing False)
-                Nothing -> pure ()
+            registerProp ident (IdentProp (removeVar typeEnv (TVar tId)) Nothing False)
         )
         vars
   where
     vars = variables typeEnv
-    tyTable = table typeEnv
 
 reportEnv :: (Monad m) => IdentEnvT m [Text]
 reportEnv = do
