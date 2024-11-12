@@ -8,8 +8,9 @@ module Compile (
     toInstructionsIO,
 ) where
 
-import Asm
-import Backend
+import Backend.Asm
+import Backend.BackendEnv
+import Backend.Lowering
 import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))

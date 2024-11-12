@@ -25,8 +25,11 @@ source-repository head
 
 library
   exposed-modules:
-      Asm
-      Backend
+      Backend.Asm
+      Backend.BackendEnv
+      Backend.FunctionCall
+      Backend.Lowering
+      Backend.RegisterAlloc
       Closure
       Display
       Error

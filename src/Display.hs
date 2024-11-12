@@ -4,7 +4,7 @@
 
 module Display (display) where
 
-import Asm
+import Backend.Asm
 import Data.Text
 import Syntax
 import Text.Megaparsec.Pos (SourcePos (sourceColumn, sourceLine), unPos)
@@ -218,7 +218,7 @@ instance Display (Register Int Int) where
     display RetReg = "a0"
     display HeapReg = "hp"
     display StackReg = "sp"
-    display (ArgsReg idTy) = "a" <> pack (show (idTy + 1))
+    display (ArgsReg idTy) = "a" <> pack (show idTy)
     display (TempReg idTy) = "t" <> pack (show idTy)
 
 instance Display (Register Int Float) where
@@ -326,10 +326,6 @@ instance DisplayI (Inst stateTy Int branchTy) where
         toOp Ne = "ifne!"
         toOp Ge = "ifge!"
         toOp Lt = "iflt!"
-    displayI (IRet _ reg) _ =
-        "ret! " <> display reg
-    displayI (IFRet _ reg) _ =
-        "fret! " <> display reg
 
 instance Display (Inst stateTy Int branchTy) where
     display inst = displayI inst 0

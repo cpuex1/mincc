@@ -1,98 +1,31 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Backend (
-    BackendConfig (BackendConfig),
+module Backend.Lowering (
+    RegID,
+    BackendStateT,
     toInstructions,
 ) where
 
-import Asm
+import Backend.Asm
+import Backend.BackendEnv
+import Backend.FunctionCall (saveArgs)
 import Control.Monad (when)
-import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
+import Control.Monad.Except (MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT), asks)
-import Control.Monad.State (MonadState (get), StateT (runStateT), gets, modify)
+import Control.Monad.State (StateT (runStateT), evalState, modify)
 import Display (display)
 import Error (CompilerError (OtherError))
 import IdentAnalysis (IdentEnvT, getTyOf)
 import Syntax
 import Typing (TypeKind (TFloat, TUnit))
 
-type RegID = Int
-
-newtype BackendConfig = BackendConfig
-    { argLimit :: Int
-    }
-    deriving (Show, Eq)
-
-data BackendEnv = BackendEnv
-    { generatedIReg :: Int
-    , generatedFReg :: Int
-    , iMap :: [(Ident, Register RegID Int)]
-    , fMap :: [(Ident, Register RegID Float)]
-    }
-    deriving (Show, Eq)
-
-defaultBackendEnv :: BackendEnv
-defaultBackendEnv =
-    BackendEnv
-        { generatedIReg = 0
-        , generatedFReg = 0
-        , iMap = []
-        , fMap = []
-        }
-
-type BackendState m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv (IdentEnvT m)))
-
-genTempIReg :: (Monad m) => BackendState m (Register RegID Int)
-genTempIReg = do
-    env <- get
-    modify $ \e -> e{generatedIReg = generatedIReg e + 1}
-    return $ TempReg $ generatedIReg env
-
-genTempFReg :: (Monad m) => BackendState m (Register RegID Float)
-genTempFReg = do
-    env <- get
-    modify $ \e -> e{generatedFReg = generatedFReg e + 1}
-    return $ TempReg $ generatedFReg env
-
-genIReg :: (Monad m) => Ident -> BackendState m (Register RegID Int)
-genIReg ident = do
-    reg <- genTempIReg
-    modify $ \e ->
-        e
-            { iMap = (ident, reg) : iMap e
-            }
-    pure reg
-
-genFReg :: (Monad m) => Ident -> BackendState m (Register RegID Float)
-genFReg ident = do
-    reg <- genTempFReg
-    modify $ \e ->
-        e
-            { fMap = (ident, reg) : fMap e
-            }
-    pure reg
-
-findI :: (Monad m) => Ident -> BackendState m (Register RegID Int)
-findI ident = do
-    regID <- gets (lookup ident . iMap)
-    case regID of
-        Just actual -> pure actual
-        Nothing -> do
-            throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
-
-findF :: (Monad m) => Ident -> BackendState m (Register RegID Float)
-findF ident = do
-    regID <- gets (lookup ident . fMap)
-    case regID of
-        Just actual -> pure actual
-        Nothing -> do
-            throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
+type BackendIdentState m = BackendStateT (IdentEnvT m)
 
 fromState :: TypedState -> Loc
 fromState (TypedState _ pos) = fromSourcePos pos
 
-toInstU :: (Monad m) => ClosureExpr -> BackendState m [Inst Loc RegID AllowBranch]
+toInstU :: (Monad m) => ClosureExpr -> BackendIdentState m [Inst Loc RegID AllowBranch]
 toInstU (Let{}) =
     throwError $ OtherError "Let itself cannot be regarded as an instruction."
 toInstU (If{}) =
@@ -135,7 +68,7 @@ toInstU (DirectApp state func args) = do
 toInstU _ =
     throwError $ OtherError "The expression cannot have type unit."
 
-toInstI :: (Monad m) => Register RegID Int -> ClosureExpr -> BackendState m [Inst Loc RegID AllowBranch]
+toInstI :: (Monad m) => Register RegID Int -> ClosureExpr -> BackendIdentState m [Inst Loc RegID AllowBranch]
 toInstI _ (Let{}) =
     throwError $ OtherError "Let itself cannot be regarded as an instruction."
 toInstI _ (If{}) =
@@ -248,7 +181,7 @@ toInstI reg (ClosureApp state func args) = do
 toInstI _ _ =
     throwError $ OtherError "The expression cannot be represented as int."
 
-toInstF :: (Monad m) => Register RegID Float -> ClosureExpr -> BackendState m [Inst Loc RegID AllowBranch]
+toInstF :: (Monad m) => Register RegID Float -> ClosureExpr -> BackendIdentState m [Inst Loc RegID AllowBranch]
 toInstF _ (Let{}) =
     throwError $ OtherError "Let itself cannot be regarded as an instruction."
 toInstF _ (If{}) =
@@ -300,7 +233,7 @@ toInst ::
     Register RegID Int ->
     Register RegID Float ->
     ClosureExpr ->
-    BackendState m [Inst Loc RegID AllowBranch]
+    BackendIdentState m [Inst Loc RegID AllowBranch]
 toInst iReg fReg (If state cond thenExpr elseExpr) = do
     cond' <- findI cond
 
@@ -358,19 +291,35 @@ toInstructions :: (Monad m) => BackendConfig -> Function -> IdentEnvT m (Either 
 toInstructions config function = do
     result <-
         runStateT
-            ( runExceptT $ runReaderT (toInstructions' function) config
+            ( runExceptT $
+                runReaderT
+                    ( toInstructions' function
+                    )
+                    config
             )
             defaultBackendEnv
     case result of
         (Left err, _) -> pure $ Left err
-        (Right inst, _) -> pure $ Right $ IntermediateCodeBlock (display (funcName function)) inst
+        (Right inst, env) ->
+            pure $
+                evalState
+                    ( runExceptT $
+                        runReaderT
+                            ( saveArgs (IntermediateCodeBlock (display $ funcName function) inst)
+                            )
+                            config
+                    )
+                    env
   where
-    toInstructions' :: (Monad m) => Function -> BackendState m [Inst Loc RegID AllowBranch]
+    toInstructions' :: (Monad m) => Function -> BackendIdentState m [Inst Loc RegID AllowBranch]
     toInstructions' (Function _ _ _ freeVars' boundedArgs' body) = do
+        -- TODO: Support free variables
         modify $ \env ->
             env
                 { generatedIReg = 0
                 , generatedFReg = 0
+                , iArgsLen = length freeReg + length boundedReg
+                , fArgsLen = 0
                 , iMap = argReg
                 , fMap = []
                 }

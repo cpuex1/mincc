@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Asm (
+module Backend.Asm (
     InstLabel,
     Register (
         ZeroReg,
@@ -33,10 +33,10 @@ module Asm (
         IStore,
         IFLoad,
         IFStore,
-        IBranch,
-        IRet,
-        IFRet
+        IBranch
     ),
+    getIState,
+    replaceIReg,
 ) where
 
 import Data.Text (Text)
@@ -188,14 +188,102 @@ data Inst stateTy idTy branchTy where
         [Inst stateTy idTy AllowBranch] ->
         [Inst stateTy idTy AllowBranch] ->
         Inst stateTy idTy AllowBranch
-    IRet ::
-        stateTy ->
-        Register idTy Int ->
-        Inst stateTy idTy AllowBranch
-    IFRet ::
-        stateTy ->
-        Register idTy Float ->
-        Inst stateTy idTy AllowBranch
 
 deriving instance (Show stateTy, Show idTy, Show branchTy) => Show (Inst stateTy idTy branchTy)
 deriving instance (Eq stateTy, Eq idTy, Eq branchTy) => Eq (Inst stateTy idTy branchTy)
+
+getIState :: Inst stateTy idTy branchTy -> stateTy
+getIState (ICompOp state _ _ _ _) = state
+getIState (IFCompOp state _ _ _ _) = state
+getIState (IIntOp state _ _ _ _) = state
+getIState (IFOp state _ _ _ _) = state
+getIState (IMov state _ _) = state
+getIState (IFMov state _ _) = state
+getIState (IRichCall state _ _ _) = state
+getIState (IClosureCall state _ _ _) = state
+getIState (IMakeClosure state _ _ _ _) = state
+getIState (ICall state _) = state
+getIState (ILoad state _ _ _) = state
+getIState (IStore state _ _ _) = state
+getIState (IFLoad state _ _ _) = state
+getIState (IFStore state _ _ _) = state
+getIState (IBranch state _ _ _ _ _) = state
+
+substReg :: (Eq idTy, Eq ty) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
+substReg beforeReg afterReg victim =
+    if victim == beforeReg then afterReg else victim
+
+substImmReg :: (Eq idTy, Eq ty) => Register idTy ty -> Register idTy ty -> RegOrImm idTy ty -> RegOrImm idTy ty
+substImmReg beforeReg afterReg victim =
+    if victim == Reg beforeReg then Reg afterReg else victim
+
+replaceIReg ::
+    (Eq idTy) =>
+    Register idTy Int ->
+    Register idTy Int ->
+    Inst stateTy idTy branchTy ->
+    Inst stateTy idTy branchTy
+replaceIReg beforeReg afterReg (ICompOp state op dest left right) =
+    ICompOp state op (substReg' dest) (substReg' left) (substImmReg' right)
+  where
+    substReg' = substReg beforeReg afterReg
+    substImmReg' = substImmReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IFCompOp state op dest left right) =
+    IFCompOp state op (substReg' dest) left right
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IIntOp state op dest left right) =
+    IIntOp state op (substReg' dest) (substReg' left) (substImmReg' right)
+  where
+    substReg' = substReg beforeReg afterReg
+    substImmReg' = substImmReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IMov state dest src) =
+    IMov state (substReg' dest) (substImmReg' src)
+  where
+    substReg' = substReg beforeReg afterReg
+    substImmReg' = substImmReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IRichCall state label iArgs fArgs) =
+    IRichCall state label (map substReg' iArgs) fArgs
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IClosureCall state dest iArgs fArgs) =
+    IClosureCall state (substReg' dest) (map substReg' iArgs) fArgs
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IMakeClosure state dest label iArgs fArgs) =
+    IMakeClosure state (substReg' dest) label (map substReg' iArgs) fArgs
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (ILoad state dest src offset) =
+    ILoad state (substReg' dest) (substReg' src) offset
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IFLoad state dest src offset) =
+    IFLoad state dest (substReg' src) offset
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IStore state dest src offset) =
+    IStore state (substReg' dest) (substReg' src) offset
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IFStore state dest src offset) =
+    IFStore state dest (substReg' src) offset
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =
+    IBranch
+        state
+        op
+        (substReg' left)
+        (substReg' right)
+        ( map
+            (replaceIReg beforeReg afterReg)
+            thenExpr
+        )
+        ( map
+            (replaceIReg beforeReg afterReg)
+            elseExpr
+        )
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg _ _ inst = inst
