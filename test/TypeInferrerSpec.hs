@@ -6,7 +6,6 @@ import Control.Monad.Except
 import Control.Monad.State
 import Syntax
 import Test.Hspec
-import Text.Megaparsec.Pos
 import TypeInferrer
 
 spec :: Spec
@@ -20,7 +19,7 @@ spec = do
                     _ <- genNewId
                     _ <- genNewId
                     _ <- genNewId
-                    assigned <$> get
+                    gets assigned
                 )
                 defaultEnv
                 `shouldBe` Right 3
@@ -30,15 +29,15 @@ spec = do
                     _ <- genNewId
                     _ <- genNewId
                     _ <- genNewId
-                    t <- table <$> get
+                    t <- gets table
                     pure $ length t
                 )
                 defaultEnv
                 `shouldBe` Right 3
     describe "registerIdent" $ do
         it "Test1" $ do
-            let x = UserDefined (SourcePos "" (mkPos 1) (mkPos 1)) "x"
-             in let y = UserDefined (SourcePos "" (mkPos 1) (mkPos 1)) "y"
+            let x = UserDefined (Loc "" 1 1) "x"
+             in let y = UserDefined (Loc "" 1 1) "y"
                  in evalState
                         ( runExceptT $
                             do

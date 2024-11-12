@@ -7,10 +7,6 @@ import Parser
 import Syntax
 import Test.Hspec
 import Text.Megaparsec (MonadParsec (eof), parse)
-import Text.Megaparsec.Pos
-
-newPos :: String -> Int -> Int -> SourcePos
-newPos source line col = SourcePos source (mkPos line) (mkPos col)
 
 spec :: Spec
 spec = do
@@ -33,7 +29,7 @@ spec = do
             parse parseLiteral "" "trued" `shouldSatisfy` isLeft
     describe "parseIdent" $ do
         it "Valid" $ do
-            parse parseIdent "" "_test314" `shouldBe` Right (RawIdent (newPos "" 1 1) "_test314")
+            parse parseIdent "" "_test314" `shouldBe` Right (RawIdent (Loc "" 1 1) "_test314")
         it "Invalid1" $ do
             parse parseIdent "" "CamelCase" `shouldSatisfy` isLeft
         it "Invalid2" $ do

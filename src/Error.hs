@@ -7,8 +7,8 @@ import Data.Proxy
 import qualified Data.Set as S
 import Data.Text (Text, intercalate, pack)
 import GHC.Base (Void)
+import Syntax (Loc (locColumn, locFileName, locLine), fromSourcePos)
 import Text.Megaparsec
-import Syntax (Loc (locFileName, locLine, locColumn), fromSourcePos)
 
 data CompilerError
     = ParserError (ParseErrorBundle Text Void)
