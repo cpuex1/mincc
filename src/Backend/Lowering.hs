@@ -10,9 +10,9 @@ module Backend.Lowering (
 import Backend.Asm
 import Backend.BackendEnv
 import Backend.FunctionCall (saveArgs)
-import Control.Monad (when)
+import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError), runExceptT)
-import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT), asks)
+import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (StateT (runStateT), evalState, modify)
 import Display (display)
 import Error (CompilerError (OtherError))
@@ -51,17 +51,41 @@ toInstU (Put state dest idx src) = do
                 ]
 toInstU (ClosureApp state func args) = do
     func' <- findI func
-    args' <- mapM findI args
-    argLimit' <- asks argLimit
-    when (length args' > argLimit') $ do
-        throwError $ OtherError "The number of arguments exceeds the limit."
-    pure [IClosureCall (getLoc state) func' args' []]
+    iArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty /= TFloat
+            )
+            args
+    fArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty == TFloat
+            )
+            args
+    iArgs' <- mapM findI iArgs
+    fArgs' <- mapM findF fArgs
+    pure [IClosureCall (getLoc state) func' iArgs' fArgs']
 toInstU (DirectApp state func args) = do
-    args' <- mapM findI args
-    argLimit' <- asks argLimit
-    when (length args' > argLimit') $ do
-        throwError $ OtherError "The number of arguments exceeds the limit."
-    pure [IRichCall (getLoc state) (display func) args' []]
+    iArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty /= TFloat
+            )
+            args
+    fArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty == TFloat
+            )
+            args
+    iArgs' <- mapM findI iArgs
+    fArgs' <- mapM findF fArgs
+    pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
 toInstU _ =
     throwError $ OtherError "The expression cannot have type unit."
 
@@ -146,35 +170,74 @@ toInstI reg (Get state array index) = do
         , ILoad (getLoc state) reg addr 0
         ]
 toInstI reg (MakeClosure state func freeV) = do
-    freeV' <- mapM findI freeV
-    pure [IMakeClosure (getLoc state) reg (display func) freeV' []]
+    iFreeV <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty /= TFloat
+            )
+            freeV
+    fFreeV <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty == TFloat
+            )
+            freeV
+    iFreeV' <- mapM findI iFreeV
+    fFreeV' <- mapM findF fFreeV
+    pure [IMakeClosure (getLoc state) reg (display func) iFreeV' fFreeV']
 toInstI reg (DirectApp state func args) = do
-    args' <- mapM findI args
-    argLimit' <- asks argLimit
-    when (length args' > argLimit') $ do
-        throwError $ OtherError "The number of arguments exceeds the limit."
+    iArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty /= TFloat
+            )
+            args
+    fArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty == TFloat
+            )
+            args
+    iArgs' <- mapM findI iArgs
+    fArgs' <- mapM findF fArgs
     if reg /= RetReg
         then
             pure
-                [ IRichCall (getLoc state) (display func) args' []
+                [ IRichCall (getLoc state) (display func) iArgs' fArgs'
                 , IMov (getLoc state) reg (Reg RetReg)
                 ]
         else
-            pure [IRichCall (getLoc state) (display func) args' []]
+            pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
 toInstI reg (ClosureApp state func args) = do
     func' <- findI func
-    args' <- mapM findI args
-    argLimit' <- asks argLimit
-    when (length args' > argLimit') $ do
-        throwError $ OtherError "The number of arguments exceeds the limit."
+    iArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty /= TFloat
+            )
+            args
+    fArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty == TFloat
+            )
+            args
+    iArgs' <- mapM findI iArgs
+    fArgs' <- mapM findF fArgs
     if reg /= RetReg
         then
             pure
-                [ IClosureCall (getLoc state) func' args' []
+                [ IClosureCall (getLoc state) func' iArgs' fArgs'
                 , IMov (getLoc state) reg (Reg RetReg)
                 ]
         else
-            pure [IClosureCall (getLoc state) func' args' []]
+            pure [IClosureCall (getLoc state) func' iArgs' fArgs']
 toInstI _ _ =
     throwError $ OtherError "The expression cannot be represented as int."
 
@@ -210,18 +273,56 @@ toInstF reg (Get state array index) = do
         , IFLoad (getLoc state) reg addr 0
         ]
 toInstF reg (DirectApp state func args) = do
-    args' <- mapM findI args
-    argLimit' <- asks argLimit
-    when (length args' > argLimit') $ do
-        throwError $ OtherError "The number of arguments exceeds the limit."
+    iArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty /= TFloat
+            )
+            args
+    fArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty == TFloat
+            )
+            args
+    iArgs' <- mapM findI iArgs
+    fArgs' <- mapM findF fArgs
     if reg /= RetReg
         then
             pure
-                [ IRichCall (getLoc state) (display func) args' []
+                [ IRichCall (getLoc state) (display func) iArgs' fArgs'
                 , IFMov (getLoc state) reg (Reg RetReg)
                 ]
         else
-            pure [IRichCall (getLoc state) (display func) args' []]
+            pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
+toInstF reg (ClosureApp state func args) = do
+    func' <- findI func
+    iArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty /= TFloat
+            )
+            args
+    fArgs <-
+        filterM
+            ( \arg -> do
+                ty <- lift $ lift $ lift $ getTyOf arg
+                pure $ ty == TFloat
+            )
+            args
+    iArgs' <- mapM findI iArgs
+    fArgs' <- mapM findF fArgs
+    if reg /= RetReg
+        then
+            pure
+                [ IClosureCall (getLoc state) func' iArgs' fArgs'
+                , IFMov (getLoc state) reg (Reg RetReg)
+                ]
+        else
+            pure [IClosureCall (getLoc state) func' iArgs' fArgs']
 toInstF _ _ =
     throwError $ OtherError "The expression cannot have type float."
 
@@ -310,22 +411,67 @@ toInstructions config function = do
   where
     toInstructions' :: (Monad m) => Function -> BackendIdentState m [Inst Loc RegID AllowBranch]
     toInstructions' (Function _ _ _ freeVars' boundedArgs' body) = do
-        -- TODO: Support free variables
+        iBoundedArgs <-
+            filterM
+                ( \v -> do
+                    ty <- lift $ lift $ lift $ getTyOf v
+                    pure $ ty /= TFloat
+                )
+                boundedArgs'
+        fBoundedArgs <-
+            filterM
+                ( \v -> do
+                    ty <- lift $ lift $ lift $ getTyOf v
+                    pure $ ty == TFloat
+                )
+                boundedArgs'
+        iFreeVars <-
+            filterM
+                ( \(v, _) -> do
+                    ty <- lift $ lift $ lift $ getTyOf v
+                    pure $ ty /= TFloat
+                )
+                $ zip freeVars' [0 ..]
+        fFreeVars <-
+            filterM
+                ( \(v, _) -> do
+                    ty <- lift $ lift $ lift $ getTyOf v
+                    pure $ ty == TFloat
+                )
+                $ zip freeVars' [0 ..]
+
+        let iBoundedReg =
+                zipWith
+                    (\v i -> (v, ArgsReg i))
+                    iBoundedArgs
+                    [0 ..]
+        let fBoundedReg =
+                zipWith
+                    (\v i -> (v, ArgsReg i))
+                    fBoundedArgs
+                    [0 ..]
+        let closureArg = ArgsReg $ length iBoundedReg
+        iFreeVarsReg <-
+            mapM
+                ( \(v, i) -> do
+                    reg <- genIReg v
+                    pure (ILoad dummyLoc reg closureArg (i * 4), (v, reg))
+                )
+                iFreeVars
+        fFreeVarsReg <-
+            mapM
+                ( \(v, i) -> do
+                    reg <- genFReg v
+                    pure (IFLoad dummyLoc reg closureArg (i * 4), (v, reg))
+                )
+                fFreeVars
+
         modify $ \env ->
             env
-                { generatedIReg = 0
-                , generatedFReg = 0
-                , iArgsLen = length freeReg + length boundedReg
-                , fArgsLen = 0
-                , iMap = argReg
-                , fMap = []
+                { iArgsLen = length iBoundedReg
+                , fArgsLen = length fBoundedReg
+                , iMap = iBoundedReg ++ map snd iFreeVarsReg
+                , fMap = fBoundedReg ++ map snd fFreeVarsReg
                 }
-        toInst RetReg RetReg body
-      where
-        freeReg = zipWith (\v i -> (v, ArgsReg i)) freeVars' [0 ..]
-        boundedReg =
-            zipWith
-                (\v i -> (v, ArgsReg i))
-                boundedArgs'
-                [(length freeReg) ..]
-        argReg = freeReg ++ boundedReg
+        inst <- toInst RetReg RetReg body
+        pure $ map fst iFreeVarsReg ++ map fst fFreeVarsReg ++ inst

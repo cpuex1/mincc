@@ -223,7 +223,7 @@ instance Display (Register Int Int) where
 instance Display (Register Int Float) where
     display ZeroReg = "fz"
     display RetReg = "f0"
-    display (ArgsReg idTy) = "f" <> pack (show (idTy + 1))
+    display (ArgsReg idTy) = "f" <> pack (show idTy)
     display (TempReg idTy) = "ft" <> pack (show idTy)
 
 instance DisplayI (Inst stateTy Int branchTy) where
@@ -279,25 +279,27 @@ instance DisplayI (Inst stateTy Int branchTy) where
         "call! "
             <> func
             <> ", "
-            <> Data.Text.intercalate "," (Prelude.map display args)
+            <> Data.Text.intercalate ", " (Prelude.map display args)
             <> ", "
-            <> Data.Text.intercalate "," (Prelude.map display fArgs)
+            <> Data.Text.intercalate ", " (Prelude.map display fArgs)
     displayI (IClosureCall _ func args fArgs) _ =
         "clcall! "
             <> display func
-            <> ", "
-            <> Data.Text.intercalate "," (Prelude.map display args)
-            <> ", "
-            <> Data.Text.intercalate "," (Prelude.map display fArgs)
+            <> ", ["
+            <> Data.Text.intercalate ", " (Prelude.map display args)
+            <> "], ["
+            <> Data.Text.intercalate ", " (Prelude.map display fArgs)
+            <> "]"
     displayI (IMakeClosure _ dest func args fArgs) _ =
         "clmake! "
             <> display dest
             <> ", "
             <> func
-            <> ", "
+            <> ", ["
             <> Data.Text.intercalate "," (Prelude.map display args)
-            <> ", "
+            <> "], ["
             <> Data.Text.intercalate "," (Prelude.map display fArgs)
+            <> "]"
     displayI (ICall _ func) _ =
         "call " <> func
     displayI (ILoad _ lhs rhs offset) _ =

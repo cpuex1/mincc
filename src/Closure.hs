@@ -199,7 +199,7 @@ genFunctions (Let state (PRec func args) expr body) = do
                                 newFunc
                                 expr'
                     updateFunctionExpr func $
-                        Let state (PVar newFunc) (MakeClosure funcState func newFreeVars) replacedExpr'
+                        Let (getExprState expr) (PVar newFunc) (MakeClosure funcState func newFreeVars) replacedExpr'
                 else
                     updateFunctionExpr func expr'
             body' <- genFunctions body

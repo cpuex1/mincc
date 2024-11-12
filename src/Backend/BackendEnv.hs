@@ -99,7 +99,7 @@ findI ident = do
     case regID of
         Just actual -> pure actual
         Nothing -> do
-            throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
+            throwError $ OtherError $ "Detected an unknown non-float identifier named " <> display ident <> "."
 
 findF :: (Monad m) => Ident -> BackendStateT m (Register RegID Float)
 findF ident = do
@@ -107,4 +107,4 @@ findF ident = do
     case regID of
         Just actual -> pure actual
         Nothing -> do
-            throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
+            throwError $ OtherError $ "Detected an unknown float identifier named " <> display ident <> "."
