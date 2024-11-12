@@ -260,11 +260,20 @@ getExprState (DirectApp state _ _) = state
 
 -- | Substitute identifiers and operands. The identifiers should be unique.
 subst ::
-    (identTy -> identTy) ->
-    (operandTy -> operandTy) ->
+    (Eq identTy, Eq operandTy) =>
+    identTy ->
+    identTy ->
+    operandTy ->
+    operandTy ->
     Expr state identTy operandTy closureTy branchTy ->
     Expr state identTy operandTy closureTy branchTy
-subst fIdent fOperand expr = runIdentity $ visitExprM pure (pure . fIdent) (pure . fOperand) expr
+subst iBefore iAfter oBefore oAfter expr =
+    runIdentity $
+        visitExprM
+            pure
+            (\ident -> pure $ if ident == iBefore then iAfter else ident)
+            (\operand -> pure $ if operand == oBefore then oAfter else operand)
+            expr
 
 visitExprM ::
     (Monad m) =>

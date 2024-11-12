@@ -176,23 +176,43 @@ genFunctions (Let state (PRec func args) expr body) = do
                     foldl
                         ( \expr' (ident, newIdent) ->
                             subst
-                                (\ident' -> if ident' == ident then newIdent else ident')
-                                (\ident' -> if ident' == ident then newIdent else ident')
+                                ident
+                                newIdent
+                                ident
+                                newIdent
                                 expr'
                         )
                         expr
                         (zip reducedFreeVars newFreeVars)
             expr' <- genFunctions replacedExpr
             if isUsed func expr
-                then
+                then do
                     -- The function is a recursive function with free variables.
                     -- Create a closure inside it to avoid referencing out-of-scope closures.
+                    funcTy <- lift $ getTyOf func
+                    newFunc <- lift $ genNewVar funcTy
+                    let replacedExpr' =
+                            subst
+                                func
+                                newFunc
+                                func
+                                newFunc
+                                expr'
                     updateFunctionExpr func $
-                        Let state (PVar func) (MakeClosure funcState func newFreeVars) expr'
+                        Let state (PVar newFunc) (MakeClosure funcState func newFreeVars) replacedExpr'
                 else
                     updateFunctionExpr func expr'
             body' <- genFunctions body
-            pure $ Let state (PVar func) (MakeClosure funcState func reducedFreeVars) body'
+            funcTy <- lift $ getTyOf func
+            newFunc <- lift $ genNewVar funcTy
+            let replacedBody =
+                    subst
+                        func
+                        newFunc
+                        func
+                        newFunc
+                        body'
+            pure $ Let state (PVar newFunc) (MakeClosure funcState func reducedFreeVars) replacedBody
   where
     freeVars' = getFreeVars expr (func : args)
     isUsedAsClosure' = isUsedAsClosure func expr || isUsedAsClosure func body
