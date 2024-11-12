@@ -4,11 +4,10 @@ module NameRes (resolveNames) where
 
 import Data.Text (Text)
 import Syntax
-import Text.Megaparsec.Pos
 
-type VarTable = [(Text, SourcePos)]
+type VarTable = [(Text, Loc)]
 
-findTable :: Text -> VarTable -> Maybe SourcePos
+findTable :: Text -> VarTable -> Maybe Loc
 findTable _ [] = Nothing
 findTable ident1 ((ident2, pos) : res)
     | ident1 == ident2 = Just pos

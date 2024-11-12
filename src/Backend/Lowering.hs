@@ -22,9 +22,6 @@ import Typing (TypeKind (TFloat, TUnit))
 
 type BackendIdentState m = BackendStateT (IdentEnvT m)
 
-fromState :: TypedState -> Loc
-fromState (TypedState _ pos) = fromSourcePos pos
-
 toInstU :: (Monad m) => ClosureExpr -> BackendIdentState m [Inst Loc RegID AllowBranch]
 toInstU (Let{}) =
     throwError $ OtherError "Let itself cannot be regarded as an instruction."
@@ -40,17 +37,17 @@ toInstU (Put state dest idx src) = do
             src' <- findF src
             offset <- genTempIReg
             pure
-                [ IIntOp (fromState state) Mul offset idx' (Imm 4)
-                , IIntOp (fromState state) Add offset dest' (Reg offset)
-                , IFStore (fromState state) src' offset 0
+                [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
+                , IIntOp (getLoc state) Add offset dest' (Reg offset)
+                , IFStore (getLoc state) src' offset 0
                 ]
         _ -> do
             src' <- findI src
             offset <- genTempIReg
             pure
-                [ IIntOp (fromState state) Mul offset idx' (Imm 4)
-                , IIntOp (fromState state) Add offset dest' (Reg offset)
-                , IStore (fromState state) src' offset 0
+                [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
+                , IIntOp (getLoc state) Add offset dest' (Reg offset)
+                , IStore (getLoc state) src' offset 0
                 ]
 toInstU (ClosureApp state func args) = do
     func' <- findI func
@@ -58,13 +55,13 @@ toInstU (ClosureApp state func args) = do
     argLimit' <- asks argLimit
     when (length args' > argLimit') $ do
         throwError $ OtherError "The number of arguments exceeds the limit."
-    pure [IClosureCall (fromState state) func' args' []]
+    pure [IClosureCall (getLoc state) func' args' []]
 toInstU (DirectApp state func args) = do
     args' <- mapM findI args
     argLimit' <- asks argLimit
     when (length args' > argLimit') $ do
         throwError $ OtherError "The number of arguments exceeds the limit."
-    pure [IRichCall (fromState state) (display func) args' []]
+    pure [IRichCall (getLoc state) (display func) args' []]
 toInstU _ =
     throwError $ OtherError "The expression cannot have type unit."
 
@@ -74,28 +71,28 @@ toInstI _ (Let{}) =
 toInstI _ (If{}) =
     throwError $ OtherError "If itself cannot be regarded as an instruction."
 toInstI reg (Const state (LInt i)) =
-    pure [IMov (fromState state) reg (Imm i)]
+    pure [IMov (getLoc state) reg (Imm i)]
 toInstI reg (Const state (LBool b)) =
-    pure [IMov (fromState state) reg (Imm $ if b then 1 else 0)]
+    pure [IMov (getLoc state) reg (Imm $ if b then 1 else 0)]
 toInstI reg (Unary state Not operand) = do
     operand' <- findI operand
-    pure [ICompOp (fromState state) Eq reg ZeroReg (Reg operand')]
+    pure [ICompOp (getLoc state) Eq reg ZeroReg (Reg operand')]
 toInstI reg (Unary state Neg operand) = do
     operand' <- findI operand
-    pure [IIntOp (fromState state) Sub reg ZeroReg (Reg operand')]
+    pure [IIntOp (getLoc state) Sub reg ZeroReg (Reg operand')]
 toInstI reg (Binary state (RelationOp op) operand1 operand2) = do
     operand1' <- findI operand1
     operand2' <- findI operand2
-    pure [ICompOp (fromState state) op reg operand1' (Reg operand2')]
+    pure [ICompOp (getLoc state) op reg operand1' (Reg operand2')]
 toInstI reg (Binary state (IntOp op) operand1 operand2) = do
     operand1' <- findI operand1
     operand2' <- findI operand2
-    pure [IIntOp (fromState state) op reg operand1' (Reg operand2')]
+    pure [IIntOp (getLoc state) op reg operand1' (Reg operand2')]
 toInstI reg (Var state ident) = do
     regID <- findI ident
     if Reg reg /= Reg regID
         then
-            pure [IMov (fromState state) reg (Reg regID)]
+            pure [IMov (getLoc state) reg (Reg regID)]
         else
             pure []
 toInstI reg (Tuple state vars) = do
@@ -106,16 +103,16 @@ toInstI reg (Tuple state vars) = do
                 case varTy of
                     TFloat -> do
                         var' <- findF var
-                        pure $ IFStore (fromState state) var' HeapReg (index * 4)
+                        pure $ IFStore (getLoc state) var' HeapReg (index * 4)
                     _ -> do
                         var' <- findI var
-                        pure $ IStore (fromState state) var' HeapReg (index * 4)
+                        pure $ IStore (getLoc state) var' HeapReg (index * 4)
             )
             $ zip [0 ..] vars
     pure $
         inst
-            ++ [ IMov (fromState state) reg (Reg HeapReg)
-               , IIntOp (fromState state) Add HeapReg HeapReg (Imm $ length vars * 4)
+            ++ [ IMov (getLoc state) reg (Reg HeapReg)
+               , IIntOp (getLoc state) Add HeapReg HeapReg (Imm $ length vars * 4)
                ]
 toInstI reg (ArrayCreate state size initVal) = do
     initValTy <- lift $ lift $ lift $ getTyOf initVal
@@ -125,18 +122,18 @@ toInstI reg (ArrayCreate state size initVal) = do
         TFloat -> do
             initVal' <- findF initVal
             pure
-                [ IFStore (fromState state) initVal' HeapReg 0
-                , IIntOp (fromState state) Mul offset size' (Imm 4)
-                , IMov (fromState state) reg (Reg HeapReg)
-                , IIntOp (fromState state) Add HeapReg HeapReg (Reg offset)
+                [ IFStore (getLoc state) initVal' HeapReg 0
+                , IIntOp (getLoc state) Mul offset size' (Imm 4)
+                , IMov (getLoc state) reg (Reg HeapReg)
+                , IIntOp (getLoc state) Add HeapReg HeapReg (Reg offset)
                 ]
         _ -> do
             initVal' <- findI initVal
             pure
-                [ IStore (fromState state) initVal' HeapReg 0
-                , IIntOp (fromState state) Mul offset size' (Imm 4)
-                , IMov (fromState state) reg (Reg HeapReg)
-                , IIntOp (fromState state) Add HeapReg HeapReg (Reg offset)
+                [ IStore (getLoc state) initVal' HeapReg 0
+                , IIntOp (getLoc state) Mul offset size' (Imm 4)
+                , IMov (getLoc state) reg (Reg HeapReg)
+                , IIntOp (getLoc state) Add HeapReg HeapReg (Reg offset)
                 ]
 toInstI reg (Get state array index) = do
     array' <- findI array
@@ -144,13 +141,13 @@ toInstI reg (Get state array index) = do
     offset <- genTempIReg
     addr <- genTempIReg
     pure
-        [ IIntOp (fromState state) Mul offset index' (Imm 4)
-        , IIntOp (fromState state) Add addr array' (Reg offset)
-        , ILoad (fromState state) reg addr 0
+        [ IIntOp (getLoc state) Mul offset index' (Imm 4)
+        , IIntOp (getLoc state) Add addr array' (Reg offset)
+        , ILoad (getLoc state) reg addr 0
         ]
 toInstI reg (MakeClosure state func freeV) = do
     freeV' <- mapM findI freeV
-    pure [IMakeClosure (fromState state) reg (display func) freeV' []]
+    pure [IMakeClosure (getLoc state) reg (display func) freeV' []]
 toInstI reg (DirectApp state func args) = do
     args' <- mapM findI args
     argLimit' <- asks argLimit
@@ -159,11 +156,11 @@ toInstI reg (DirectApp state func args) = do
     if reg /= RetReg
         then
             pure
-                [ IRichCall (fromState state) (display func) args' []
-                , IMov (fromState state) reg (Reg RetReg)
+                [ IRichCall (getLoc state) (display func) args' []
+                , IMov (getLoc state) reg (Reg RetReg)
                 ]
         else
-            pure [IRichCall (fromState state) (display func) args' []]
+            pure [IRichCall (getLoc state) (display func) args' []]
 toInstI reg (ClosureApp state func args) = do
     func' <- findI func
     args' <- mapM findI args
@@ -173,11 +170,11 @@ toInstI reg (ClosureApp state func args) = do
     if reg /= RetReg
         then
             pure
-                [ IClosureCall (fromState state) func' args' []
-                , IMov (fromState state) reg (Reg RetReg)
+                [ IClosureCall (getLoc state) func' args' []
+                , IMov (getLoc state) reg (Reg RetReg)
                 ]
         else
-            pure [IClosureCall (fromState state) func' args' []]
+            pure [IClosureCall (getLoc state) func' args' []]
 toInstI _ _ =
     throwError $ OtherError "The expression cannot be represented as int."
 
@@ -187,19 +184,19 @@ toInstF _ (Let{}) =
 toInstF _ (If{}) =
     throwError $ OtherError "If itself cannot be regarded as an instruction."
 toInstF reg (Const state (LFloat f)) =
-    pure [IFMov (fromState state) reg (Imm f)]
+    pure [IFMov (getLoc state) reg (Imm f)]
 toInstF reg (Unary state FNeg operand) = do
     operand' <- findF operand
-    pure [IFOp (fromState state) FSub reg ZeroReg operand']
+    pure [IFOp (getLoc state) FSub reg ZeroReg operand']
 toInstF reg (Binary state (FloatOp op) operand1 operand2) = do
     operand1' <- findF operand1
     operand2' <- findF operand2
-    pure [IFOp (fromState state) op reg operand1' operand2']
+    pure [IFOp (getLoc state) op reg operand1' operand2']
 toInstF reg (Var state ident) = do
     regID <- findF ident
     if reg /= regID
         then
-            pure [IFMov (fromState state) reg (Reg regID)]
+            pure [IFMov (getLoc state) reg (Reg regID)]
         else
             pure []
 toInstF reg (Get state array index) = do
@@ -208,9 +205,9 @@ toInstF reg (Get state array index) = do
     offset <- genTempIReg
     addr <- genTempIReg
     pure
-        [ IIntOp (fromState state) Mul offset index' (Imm 4)
-        , IIntOp (fromState state) Add addr array' (Reg offset)
-        , IFLoad (fromState state) reg addr 0
+        [ IIntOp (getLoc state) Mul offset index' (Imm 4)
+        , IIntOp (getLoc state) Add addr array' (Reg offset)
+        , IFLoad (getLoc state) reg addr 0
         ]
 toInstF reg (DirectApp state func args) = do
     args' <- mapM findI args
@@ -220,11 +217,11 @@ toInstF reg (DirectApp state func args) = do
     if reg /= RetReg
         then
             pure
-                [ IRichCall (fromState state) (display func) args' []
-                , IFMov (fromState state) reg (Reg RetReg)
+                [ IRichCall (getLoc state) (display func) args' []
+                , IFMov (getLoc state) reg (Reg RetReg)
                 ]
         else
-            pure [IRichCall (fromState state) (display func) args' []]
+            pure [IRichCall (getLoc state) (display func) args' []]
 toInstF _ _ =
     throwError $ OtherError "The expression cannot have type float."
 
@@ -240,7 +237,7 @@ toInst iReg fReg (If state cond thenExpr elseExpr) = do
     thenExpr' <- toInst iReg fReg thenExpr
     elseExpr' <- toInst iReg fReg elseExpr
 
-    pure [IBranch (fromState state) Ne cond' ZeroReg thenExpr' elseExpr']
+    pure [IBranch (getLoc state) Ne cond' ZeroReg thenExpr' elseExpr']
 toInst _ _ (Let _ (PRec _ _) _ _) =
     throwError $ OtherError "The function should be removed during closure conversion."
 toInst iReg fReg (Let _ PUnit expr body) = do
@@ -270,10 +267,10 @@ toInst iReg fReg (Let state (PTuple vals) expr body) = do
                 case ty of
                     TFloat -> do
                         val' <- genFReg val
-                        pure $ IFLoad (fromState state) val' tuple (idx * 4)
+                        pure $ IFLoad (getLoc state) val' tuple (idx * 4)
                     _ -> do
                         val' <- genIReg val
-                        pure $ ILoad (fromState state) val' tuple (idx * 4)
+                        pure $ ILoad (getLoc state) val' tuple (idx * 4)
             )
             $ zip [0 ..] vals
     body' <- toInst iReg fReg body

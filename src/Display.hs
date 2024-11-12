@@ -7,7 +7,6 @@ module Display (display) where
 import Backend.Asm
 import Data.Text
 import Syntax
-import Text.Megaparsec.Pos (SourcePos (sourceColumn, sourceLine), unPos)
 import Typing
 
 class DisplayI a where
@@ -48,9 +47,9 @@ instance Display RawIdent where
 instance DisplayI Ident where
     displayI (UserDefined pos ident) _ =
         "__"
-            <> (pack . show . unPos . sourceLine) pos
+            <> (pack . show . locLine) pos
             <> "_"
-            <> (pack . show . unPos . sourceColumn) pos
+            <> (pack . show . locColumn) pos
             <> "_"
             <> ident
     displayI (CompilerGenerated ident) _ =
@@ -64,7 +63,7 @@ instance Display Ident where
 insertIndent :: Int -> Text
 insertIndent depth = Data.Text.replicate depth "    "
 
-instance Display SourcePos where
+instance Display Loc where
     display _ = ""
 
 instance Display TypedState where

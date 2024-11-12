@@ -19,10 +19,9 @@ import Data.Foldable (find, for_)
 import Display
 import Error (CompilerError (TypeError))
 import Syntax
-import Text.Megaparsec.Pos
 import Typing
 
-newtype ITypedExpr = ITGuard {iTExp :: Expr (ITy, SourcePos) Ident ITypedExpr DisallowClosure ()}
+newtype ITypedExpr = ITGuard {iTExp :: Expr (ITy, Loc) Ident ITypedExpr DisallowClosure ()}
     deriving (Show, Eq)
 
 getTy :: ITypedExpr -> ITy
@@ -131,7 +130,7 @@ applyEnvE (ITGuard expr) = do
     expr' <- visitExprM fState pure applyEnvE expr
     return $ TGuard expr'
   where
-    fState :: (ITy, SourcePos) -> TypingM TypedState
+    fState :: (ITy, Loc) -> TypingM TypedState
     fState (ty, pos) = applyEnv ty >>= \ty' -> return (TypedState ty' pos)
 
 occurCheck :: TypeId -> ITy -> TypingM ()
@@ -181,7 +180,7 @@ unify (TVar tId) rTy = do
 unify lTy (TVar tId) = unify (TVar tId) lTy
 unify _ _ = throwError $ TypeError Nothing "Type mismatch"
 
-doUnify :: SourcePos -> ITy -> ITy -> TypingM ()
+doUnify :: Loc -> ITy -> ITy -> TypingM ()
 doUnify pos ty1 ty2 = do
     catchError (unify ty1 ty2) $
         const

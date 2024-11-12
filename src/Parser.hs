@@ -47,7 +47,7 @@ parseIdent =
             let ident = cons firstChar name
             if ident `elem` reservedWords
                 then fail "reserved word"
-                else return $ RawIdent pos ident
+                else return $ RawIdent (fromSourcePos pos) ident
         )
         <?> "an identifier"
 
@@ -178,12 +178,12 @@ parseSimpleExpr =
                                     (cSymbol '(')
                                     (cSymbol ')')
                                     (sepBy1 parseExpr (cSymbol ','))
-                            pure (PGuard (Tuple pos exprs))
+                            pure (PGuard (Tuple (fromSourcePos pos) exprs))
                         )
                     -- Const
-                    <|> try (PGuard . Const pos <$> parseLiteral)
+                    <|> try (PGuard . Const (fromSourcePos pos) <$> parseLiteral)
                     -- Var
-                    <|> try (PGuard . Var pos <$> parseIdent)
+                    <|> try (PGuard . Var (fromSourcePos pos) <$> parseIdent)
         -- Remaining tokens can be components of Get.
         parseSimpleExpr' expr
     )
@@ -200,7 +200,7 @@ parseSimpleExpr =
                     pos <- getSourcePos
                     cSymbol '.'
                     expr2 <- between (cSymbol '(') (cSymbol ')') parseExpr
-                    parseSimpleExpr' (PGuard (Get pos expr1 expr2))
+                    parseSimpleExpr' (PGuard (Get (fromSourcePos pos) expr1 expr2))
                 )
                 -- ... or None
                 <|> return expr1
@@ -232,7 +232,7 @@ parseExpr =
             value <- parseExpr
             parseKeyword "in"
             expr <- parseExprWithPrecedence 9
-            pure (PGuard (Let pos pat (pExp value) (pExp expr)))
+            pure (PGuard (Let (fromSourcePos pos) pat (pExp value) (pExp expr)))
         | precedence == 8 = do
             -- Then
             pos <- getSourcePos
@@ -241,7 +241,7 @@ parseExpr =
                 [
                     [ InfixR
                         ( cSymbol ';'
-                            >> return (\left right -> PGuard (Let pos PUnit (pExp left) (pExp right)))
+                            >> return (\left right -> PGuard (Let (fromSourcePos pos) PUnit (pExp left) (pExp right)))
                         )
                     ]
                 ]
@@ -254,7 +254,7 @@ parseExpr =
             then' <- parseExprWithPrecedence 6
             parseKeyword "else"
             else' <- parseExprWithPrecedence 6
-            pure (PGuard (If pos cond (pExp then') (pExp else')))
+            pure (PGuard (If (fromSourcePos pos) cond (pExp then') (pExp else')))
         | precedence == 6 = do
             -- Put
             pos <- getSourcePos
@@ -262,7 +262,7 @@ parseExpr =
             case left of
                 PGuard (Get _ a idx) -> do
                     right <- symbol "<-" >> parseExprWithPrecedence 5
-                    return $ PGuard (Put pos a idx right)
+                    return $ PGuard (Put (fromSourcePos pos) a idx right)
                 _ -> fail "a Put expression"
         | precedence == 5 = do
             -- RelationBinOp
@@ -275,9 +275,9 @@ parseExpr =
                             (flipped, op) <- parseRelationBinOp
                             if flipped
                                 then
-                                    return (\left right -> PGuard (Binary pos op right left))
+                                    return (\left right -> PGuard (Binary (fromSourcePos pos) op right left))
                                 else
-                                    return (\left right -> PGuard (Binary pos op left right))
+                                    return (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
                         )
                     ]
                 ]
@@ -289,7 +289,7 @@ parseExpr =
                 [
                     [ InfixL
                         ( parseTermOp
-                            >>= \op -> return (\left right -> PGuard (Binary pos op left right))
+                            >>= \op -> return (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
                         )
                     ]
                 ]
@@ -301,7 +301,7 @@ parseExpr =
                 [
                     [ InfixL
                         ( parseFactorOp
-                            >>= \op -> return (\left right -> PGuard (Binary pos op left right))
+                            >>= \op -> return (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
                         )
                     ]
                 ]
@@ -312,14 +312,14 @@ parseExpr =
                 ( do
                     symbol "-."
                     expr <- parseExprWithPrecedence 2
-                    pure $ PGuard (Unary pos FNeg expr)
+                    pure $ PGuard (Unary (fromSourcePos pos) FNeg expr)
                 )
                 -- Neg
                 <|> try
                     ( do
                         cSymbol '-'
                         expr <- parseExprWithPrecedence 2
-                        pure $ PGuard (Unary pos Neg expr)
+                        pure $ PGuard (Unary (fromSourcePos pos) Neg expr)
                     )
         | precedence == 1 = do
             pos <- getSourcePos
@@ -328,7 +328,7 @@ parseExpr =
                 ( do
                     func <- parseSimpleExpr
                     exprs <- some parseSimpleExpr
-                    pure $ PGuard (App pos func exprs)
+                    pure $ PGuard (App (fromSourcePos pos) func exprs)
                 )
                 -- ArrayCreate
                 <|> try
@@ -336,14 +336,14 @@ parseExpr =
                         parseKeyword "Array.create"
                         expr1 <- parseSimpleExpr
                         expr2 <- parseExprWithPrecedence 1
-                        pure $ PGuard (ArrayCreate pos expr1 expr2)
+                        pure $ PGuard (ArrayCreate (fromSourcePos pos) expr1 expr2)
                     )
                 -- Not
                 <|> try
                     ( do
                         parseKeyword "not"
                         expr <- parseExprWithPrecedence 1
-                        pure $ PGuard (Unary pos Not expr)
+                        pure $ PGuard (Unary (fromSourcePos pos) Not expr)
                     )
         | precedence == 0 = parseSimpleExpr
         | otherwise = error "Invalid precedence"

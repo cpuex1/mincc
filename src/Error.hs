@@ -8,19 +8,17 @@ import qualified Data.Set as S
 import Data.Text (Text, intercalate, pack)
 import GHC.Base (Void)
 import Text.Megaparsec
+import Syntax (Loc (locFileName, locLine, locColumn), fromSourcePos)
 
 data CompilerError
     = ParserError (ParseErrorBundle Text Void)
-    | TypeError (Maybe SourcePos) Text
+    | TypeError (Maybe Loc) Text
     | OtherError Text
     deriving (Show, Eq)
 
-displaySourcePos :: SourcePos -> Text
-displaySourcePos pos =
-    pack $ " @ " ++ sourceName pos ++ ":" ++ lineNum ++ ":" ++ colNum
-  where
-    lineNum = show $ unPos $ sourceLine pos
-    colNum = show $ unPos $ sourceColumn pos
+displayLoc :: Loc -> Text
+displayLoc pos =
+    " @ " <> locFileName pos <> ":" <> pack (show $ locLine pos) <> ":" <> pack (show $ locColumn pos)
 
 displayError :: CompilerError -> [Text]
 displayError err =
@@ -28,16 +26,16 @@ displayError err =
         ParserError errors ->
             map (formatParserError errors . (\e -> (errorOffset e, displayParserError e))) (Data.List.NonEmpty.toList (bundleErrors errors))
         TypeError (Just pos) msg ->
-            ["Type error: " <> msg <> displaySourcePos pos]
+            ["Type error: " <> msg <> displayLoc pos]
         TypeError Nothing msg ->
             ["Type error: " <> msg]
         OtherError msg ->
             [msg]
   where
     formatParserError :: ParseErrorBundle Text Void -> (Int, Text) -> Text
-    formatParserError errors (pos, msg) = "Parser error: " <> msg <> displaySourcePos position
+    formatParserError errors (pos, msg) = "Parser error: " <> msg <> displayLoc position
       where
-        position = pstateSourcePos (snd (reachOffset pos (bundlePosState errors)))
+        position = fromSourcePos $ pstateSourcePos (snd (reachOffset pos (bundlePosState errors)))
 
     displayParserError :: ParseError Text Void -> Text
     displayParserError (TrivialError _ found expectedTokens) =

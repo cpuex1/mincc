@@ -7,7 +7,6 @@ import Control.Monad (unless)
 import Control.Monad.State (MonadTrans (lift), State, StateT (runStateT), execState, get, gets, modify)
 import IdentAnalysis (IdentEnvT, IdentProp (typeOf), genNewVar, searchProp)
 import Syntax
-import Text.Megaparsec (initialPos)
 import Typing (TypeKind (TUnit))
 
 newtype ClosureEnv = ClosureEnv
@@ -147,7 +146,7 @@ getFunctions expr = do
     pure $ Function (getExprState expr') True (ExternalIdent "entry") [] [] expr' : functions funcList
 
 dummyState :: TypedState
-dummyState = TypedState TUnit (initialPos "dummy")
+dummyState = TypedState TUnit dummyLoc
 
 dummyExpr :: ClosureExpr
 dummyExpr = Const dummyState LUnit
