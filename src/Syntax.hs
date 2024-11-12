@@ -16,6 +16,7 @@ module Syntax (
     RawIdent (RawIdent),
     TypedState (TypedState, getType, getLoc),
     fromSourcePos,
+    identLoc,
     Loc (Loc, locFileName, locLine, locColumn),
     dummyLoc,
     KExpr,
@@ -86,6 +87,11 @@ data Ident
     | -- | An identifier that is used to refer to an external item.
       ExternalIdent Text
     deriving (Show, Eq)
+
+identLoc :: Ident -> Loc
+identLoc (UserDefined pos _) = pos
+identLoc (CompilerGenerated _) = Loc "generated" 0 0
+identLoc (ExternalIdent _) = Loc "externel" 0 0
 
 data Pattern identTy
     = PUnit

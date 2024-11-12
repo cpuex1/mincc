@@ -9,6 +9,7 @@ module IdentAnalysis (
     registerProp,
     searchProp,
     getTyOf,
+    identState,
     updateProp,
     genNewVar,
     loadTypeEnv,
@@ -93,6 +94,11 @@ getTyOf ident = do
     case found of
         Just prop -> pure (typeOf prop)
         Nothing -> pure TUnit
+
+identState :: (Monad m) => Ident -> IdentEnvT m TypedState
+identState ident = do
+    ty <- getTyOf ident
+    pure $ TypedState ty $ identLoc ident
 
 updateProp :: (Monad m) => Ident -> (IdentProp -> IdentProp) -> IdentEnvT m ()
 updateProp ident f =

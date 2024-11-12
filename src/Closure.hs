@@ -5,7 +5,7 @@ module Closure (getFunctions, ClosureEnv (ClosureEnv)) where
 
 import Control.Monad (unless)
 import Control.Monad.State (MonadTrans (lift), State, StateT (runStateT), execState, get, gets, modify)
-import IdentAnalysis (IdentEnvT, IdentProp (typeOf), genNewVar, searchProp)
+import IdentAnalysis (IdentEnvT, genNewVar, getTyOf, identState)
 import Syntax
 import Typing (TypeKind (TUnit))
 
@@ -153,10 +153,12 @@ dummyExpr = Const dummyState LUnit
 
 genFunctions :: (Monad m) => KExpr -> ClosureT m ClosureExpr
 genFunctions (Let state (PRec func args) expr body) = do
-    if null freeVars' && not isUsedAsClosure'
+    funcState <- lift $ identState func
+    reducedFreeVars <- reduceFree freeVars'
+    if null reducedFreeVars && not isUsedAsClosure'
         then do
             -- No free variables and no usage as closure means we don't have to create a closure.
-            addFunction (Function state True func [] args dummyExpr)
+            addFunction (Function funcState True func [] args dummyExpr)
             expr' <- genFunctions expr
             updateFunctionExpr func expr'
             genFunctions body
@@ -165,13 +167,11 @@ genFunctions (Let state (PRec func args) expr body) = do
                 lift $
                     mapM
                         ( \ident -> do
-                            prop <- searchProp ident
-                            case prop of
-                                Just prop' -> genNewVar (typeOf prop')
-                                Nothing -> genNewVar TUnit
+                            ty <- getTyOf ident
+                            genNewVar ty
                         )
-                        freeVars'
-            addFunction (Function state False func newFreeVars args dummyExpr)
+                        reducedFreeVars
+            addFunction (Function funcState False func newFreeVars args dummyExpr)
             let replacedExpr =
                     foldl
                         ( \expr' (ident, newIdent) ->
@@ -181,21 +181,32 @@ genFunctions (Let state (PRec func args) expr body) = do
                                 expr'
                         )
                         expr
-                        (zip freeVars' newFreeVars)
+                        (zip reducedFreeVars newFreeVars)
             expr' <- genFunctions replacedExpr
             if isUsed func expr
                 then
                     -- The function is a recursive function with free variables.
                     -- Create a closure inside it to avoid referencing out-of-scope closures.
                     updateFunctionExpr func $
-                        Let state (PVar func) (MakeClosure state func newFreeVars) expr'
+                        Let state (PVar func) (MakeClosure funcState func newFreeVars) expr'
                 else
                     updateFunctionExpr func expr'
             body' <- genFunctions body
-            pure $ Let state (PVar func) (MakeClosure state func freeVars') body'
+            pure $ Let state (PVar func) (MakeClosure funcState func reducedFreeVars) body'
   where
     freeVars' = getFreeVars expr (func : args)
     isUsedAsClosure' = isUsedAsClosure func expr || isUsedAsClosure func body
+
+    reduceFree :: (Monad m) => [Ident] -> ClosureT m [Ident]
+    reduceFree [] = pure []
+    reduceFree (var : rest) = do
+        found <- findFunction var
+        rest' <- reduceFree rest
+        case found of
+            Just found' ->
+                pure $ if isDirect found' then rest' else var : rest'
+            Nothing ->
+                pure $ var : rest'
 genFunctions (App state func args) = do
     func' <- findFunction func
     case (func', func) of
