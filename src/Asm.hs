@@ -3,11 +3,40 @@
 
 module Asm (
     InstLabel,
-    Register (ZeroReg, RetReg, ArgsReg, TempReg, DummyReg),
-    Operand (Reg, Imm, Mem, DirectMem),
+    Register (
+        ZeroReg,
+        RetReg,
+        HeapReg,
+        StackReg,
+        ArgsReg,
+        TempReg,
+        DummyReg
+    ),
+    RegOrImm (Reg, Imm),
+    IntermediateCodeBlock (IntermediateCodeBlock),
     CodeBlock (CodeBlock),
     InstTerm (Return, Jmp, Branch, Nop),
-    Inst (InstRelationOp, InstIntBinOp, InstFloatBinOp, InstMov, InstFMov, InstCall, InstLoad, InstStore),
+    AllowBranch,
+    DisallowBranch,
+    Inst (
+        ICompOp,
+        IFCompOp,
+        IIntOp,
+        IFOp,
+        IMov,
+        IFMov,
+        IRichCall,
+        IClosureCall,
+        IMakeClosure,
+        ICall,
+        ILoad,
+        IStore,
+        IFLoad,
+        IFStore,
+        IBranch,
+        IRet,
+        IFRet
+    ),
 ) where
 
 import Data.Text (Text)
@@ -18,6 +47,8 @@ type InstLabel = Text
 data Register idTy ty where
     ZeroReg :: Register idTy ty
     RetReg :: Register idTy ty
+    HeapReg :: Register idTy Int
+    StackReg :: Register idTy Int
     ArgsReg :: idTy -> Register idTy ty
     TempReg :: idTy -> Register idTy ty
     DummyReg :: Register idTy ()
@@ -25,72 +56,146 @@ data Register idTy ty where
 deriving instance (Show idTy, Show ty) => Show (Register idTy ty)
 deriving instance (Eq idTy, Eq ty) => Eq (Register idTy ty)
 
-data Operand idTy ty where
-    Reg :: Register idTy ty -> Operand idTy ty
-    Imm :: ty -> Operand idTy ty
-    Mem :: Register idTy Int -> Int -> Operand idTy ty
-    DirectMem :: Int -> Operand idTy ty
+data RegOrImm idTy ty where
+    Reg :: Register idTy ty -> RegOrImm idTy ty
+    Imm :: ty -> RegOrImm idTy ty
 
-deriving instance (Show idTy, Show ty) => Show (Operand idTy ty)
-deriving instance (Eq idTy, Eq ty) => Eq (Operand idTy ty)
+deriving instance (Show idTy, Show ty) => Show (RegOrImm idTy ty)
+deriving instance (Eq idTy, Eq ty) => Eq (RegOrImm idTy ty)
 
-data CodeBlock stateTy regTy
-    = CodeBlock InstLabel [Inst stateTy regTy] (InstTerm stateTy regTy)
+data IntermediateCodeBlock stateTy idTy
+    = IntermediateCodeBlock
+        InstLabel
+        [Inst stateTy idTy AllowBranch]
     deriving (Show, Eq)
 
-data InstTerm stateTy regTy
+data CodeBlock stateTy idTy
+    = CodeBlock
+        InstLabel
+        [Inst stateTy idTy DisallowBranch]
+        (InstTerm stateTy idTy)
+    deriving (Show, Eq)
+
+data InstTerm stateTy idTy
     = Return stateTy
     | Jmp stateTy InstLabel
-    | Branch stateTy RelationBinOp (Operand Int regTy) (Operand Int regTy) InstLabel InstLabel
+    | Branch
+        stateTy
+        RelationBinOp
+        (Register idTy Int)
+        (Register idTy Int)
+        InstLabel
+        InstLabel
     | Nop
     deriving (Show, Eq)
 
-data Inst stateTy idTy where
-    InstRelationOp ::
+data AllowBranch = AllowBranch
+    deriving (Show, Eq)
+data DisallowBranch = DisallowBranch
+    deriving (Show, Eq)
+
+data Inst stateTy idTy branchTy where
+    ICompOp ::
         stateTy ->
         RelationBinOp ->
-        Operand idTy Int ->
-        Operand idTy Int ->
-        Operand idTy Int ->
-        Inst stateTy idTy
-    InstIntBinOp ::
+        Register idTy Int ->
+        Register idTy Int ->
+        RegOrImm idTy Int ->
+        Inst stateTy idTy branchTy
+    IFCompOp ::
+        stateTy ->
+        RelationBinOp ->
+        Register idTy Int ->
+        Register idTy Float ->
+        Register idTy Float ->
+        Inst stateTy idTy branchTy
+    IIntOp ::
         stateTy ->
         IntBinOp ->
-        Operand idTy Int ->
-        Operand idTy Int ->
-        Operand idTy Int ->
-        Inst stateTy idTy
-    InstFloatBinOp ::
+        Register idTy Int ->
+        Register idTy Int ->
+        RegOrImm idTy Int ->
+        Inst stateTy idTy branchTy
+    IFOp ::
         stateTy ->
         FloatBinOp ->
-        Operand idTy Float ->
-        Operand idTy Float ->
-        Operand idTy Float ->
-        Inst stateTy idTy
-    InstMov ::
+        Register idTy Float ->
+        Register idTy Float ->
+        Register idTy Float ->
+        Inst stateTy idTy branchTy
+    IMov ::
         stateTy ->
-        Operand idTy Int ->
-        Operand idTy Int ->
-        Inst stateTy idTy
-    InstFMov ::
+        Register idTy Int ->
+        RegOrImm idTy Int ->
+        Inst stateTy idTy branchTy
+    IFMov ::
         stateTy ->
-        Operand idTy Float ->
-        Operand idTy Float ->
-        Inst stateTy idTy
-    InstCall ::
+        Register idTy Float ->
+        RegOrImm idTy Float ->
+        Inst stateTy idTy branchTy
+    IRichCall ::
         stateTy ->
         InstLabel ->
-        Inst stateTy idTy
-    InstLoad ::
+        [Register idTy Int] ->
+        [Register idTy Float] ->
+        Inst stateTy idTy AllowBranch
+    IClosureCall ::
         stateTy ->
-        Operand idTy Int ->
-        Operand idTy Int ->
-        Inst stateTy idTy
-    InstStore ::
+        Register idTy Int ->
+        [Register idTy Int] ->
+        [Register idTy Float] ->
+        Inst stateTy idTy AllowBranch
+    IMakeClosure ::
         stateTy ->
-        Operand idTy Int ->
-        Operand idTy Int ->
-        Inst stateTy idTy
+        Register idTy Int ->
+        InstLabel ->
+        [Register idTy Int] ->
+        [Register idTy Float] ->
+        Inst stateTy idTy AllowBranch
+    ICall ::
+        stateTy ->
+        InstLabel ->
+        Inst stateTy idTy branchTy
+    ILoad ::
+        stateTy ->
+        Register idTy Int ->
+        Register idTy Int ->
+        Int ->
+        Inst stateTy idTy branchTy
+    IStore ::
+        stateTy ->
+        Register idTy Int ->
+        Register idTy Int ->
+        Int ->
+        Inst stateTy idTy branchTy
+    IFLoad ::
+        stateTy ->
+        Register idTy Float ->
+        Register idTy Int ->
+        Int ->
+        Inst stateTy idTy branchTy
+    IFStore ::
+        stateTy ->
+        Register idTy Float ->
+        Register idTy Int ->
+        Int ->
+        Inst stateTy idTy branchTy
+    IBranch ::
+        stateTy ->
+        RelationBinOp ->
+        Register idTy Int ->
+        Register idTy Int ->
+        [Inst stateTy idTy AllowBranch] ->
+        [Inst stateTy idTy AllowBranch] ->
+        Inst stateTy idTy AllowBranch
+    IRet ::
+        stateTy ->
+        Register idTy Int ->
+        Inst stateTy idTy AllowBranch
+    IFRet ::
+        stateTy ->
+        Register idTy Float ->
+        Inst stateTy idTy AllowBranch
 
-deriving instance (Show stateTy, Show idTy) => Show (Inst stateTy idTy)
-deriving instance (Eq stateTy, Eq idTy) => Eq (Inst stateTy idTy)
+deriving instance (Show stateTy, Show idTy, Show branchTy) => Show (Inst stateTy idTy branchTy)
+deriving instance (Eq stateTy, Eq idTy, Eq branchTy) => Eq (Inst stateTy idTy branchTy)

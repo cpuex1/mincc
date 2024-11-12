@@ -5,7 +5,7 @@ module Compile (
     kNormalizeIO,
     flattenExprIO,
     getFunctionsIO,
-    loadFunctionsIO,
+    toInstructionsIO,
 ) where
 
 import Asm
@@ -68,10 +68,14 @@ getFunctionsIO (expr : exprs) = do
     functions <- getFunctionsIO exprs
     pure (func ++ functions)
 
-loadFunctionsIO :: [Function] -> IdentEnvIO [CodeBlock Loc Int]
-loadFunctionsIO functions = do
+toInstructionsIO :: [Function] -> IdentEnvIO [IntermediateCodeBlock Loc Int]
+toInstructionsIO functions = do
     argsLimit' <- lift $ asks cArgsLimit
-    functions' <- loadFunctions (BackendConfig argsLimit') functions
-    case functions' of
-        Left err -> lift $ throwError err
-        Right codeBlocks -> pure codeBlocks
+    mapM
+        ( \func -> do
+            inst <- toInstructions (BackendConfig argsLimit') func
+            case inst of
+                Left err -> lift $ throwError err
+                Right inst' -> pure inst'
+        )
+        functions

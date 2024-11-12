@@ -214,67 +214,128 @@ instance Display (TypeKind a) where
     display (TVar tId) = "__t" <> pack (show tId)
 
 instance Display (Register Int Int) where
-    display ZeroReg = "x0"
+    display ZeroReg = "zero"
     display RetReg = "a0"
+    display HeapReg = "hp"
+    display StackReg = "sp"
     display (ArgsReg idTy) = "a" <> pack (show (idTy + 1))
     display (TempReg idTy) = "t" <> pack (show idTy)
 
 instance Display (Register Int Float) where
-    display ZeroReg = "xf0"
+    display ZeroReg = "fz"
     display RetReg = "f0"
     display (ArgsReg idTy) = "f" <> pack (show (idTy + 1))
-    display (TempReg idTy) = "tf" <> pack (show idTy)
+    display (TempReg idTy) = "ft" <> pack (show idTy)
 
-instance Display (Operand Int Int) where
-    display (Reg reg) = display reg
-    display (Imm imm) = pack (show imm)
-    display (Mem reg offset) = display reg <> "[" <> pack (show offset) <> "]"
-    display (DirectMem offset) = "[" <> pack (show offset) <> "]"
-
-instance Display (Operand Int Float) where
-    display (Reg reg) = display reg
-    display (Imm imm) = pack (show imm)
-    display (Mem reg offset) = display reg <> "[" <> pack (show offset) <> "]"
-    display (DirectMem offset) = "[" <> pack (show offset) <> "]"
-
-instance Display (Inst stateTy Int) where
-    display (InstRelationOp _ Eq lhs rhs1 rhs2) =
-        "eq " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstRelationOp _ Ge lhs rhs1 rhs2) =
-        "sge " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstRelationOp _ Ne lhs rhs1 rhs2) =
-        "ne " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstRelationOp _ Lt lhs rhs1 rhs2) =
-        "slt " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstIntBinOp _ Add lhs rhs1 rhs2) =
-        "add " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstIntBinOp _ Sub lhs rhs1 rhs2) =
-        "sub " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstIntBinOp _ Mul lhs rhs1 rhs2) =
-        "mul " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstIntBinOp _ Div lhs rhs1 rhs2) =
-        "div " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstFloatBinOp _ FAdd lhs rhs1 rhs2) =
-        "fadd " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstFloatBinOp _ FSub lhs rhs1 rhs2) =
-        "fsub " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstFloatBinOp _ FMul lhs rhs1 rhs2) =
-        "fmul " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstFloatBinOp _ FDiv lhs rhs1 rhs2) =
-        "fdiv " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
-    display (InstMov _ lhs rhs) =
+instance DisplayI (Inst stateTy Int branchTy) where
+    displayI (ICompOp _ op lhs rhs1 rhs2) _ =
+        case rhs2 of
+            (Reg rhs2') ->
+                toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2'
+            (Imm rhs2') ->
+                toOp op <> "i " <> display lhs <> ", " <> display rhs1 <> ", " <> pack (show rhs2')
+      where
+        toOp :: RelationBinOp -> Text
+        toOp Eq = "seq"
+        toOp Ne = "sne"
+        toOp Ge = "sge"
+        toOp Lt = "slt"
+    displayI (IFCompOp _ op lhs rhs1 rhs2) _ =
+        toOp op <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
+      where
+        toOp :: RelationBinOp -> Text
+        toOp Eq = "feq"
+        toOp Ne = "fne"
+        toOp Ge = "fge"
+        toOp Lt = "flt"
+    displayI (IIntOp _ op lhs rhs1 rhs2) _ =
+        case rhs2 of
+            (Reg rhs2') ->
+                toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2'
+            (Imm rhs2') ->
+                toOp op <> "i " <> display lhs <> ", " <> display rhs1 <> ", " <> pack (show rhs2')
+      where
+        toOp :: IntBinOp -> Text
+        toOp Add = "add"
+        toOp Sub = "sub"
+        toOp Mul = "mul"
+        toOp Div = "div"
+    displayI (IFOp _ op lhs rhs1 rhs2) _ =
+        toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
+      where
+        toOp :: FloatBinOp -> Text
+        toOp FAdd = "fadd"
+        toOp FSub = "fsub"
+        toOp FMul = "fmul"
+        toOp FDiv = "fdiv"
+    displayI (IMov _ lhs (Reg rhs)) _ =
         "mov " <> display lhs <> ", " <> display rhs
-    display (InstFMov _ lhs rhs) =
+    displayI (IMov _ lhs (Imm rhs)) _ =
+        "movi " <> display lhs <> ", " <> pack (show rhs)
+    displayI (IFMov _ lhs (Reg rhs)) _ =
         "fmov " <> display lhs <> ", " <> display rhs
-    display (InstCall _ func) =
+    displayI (IFMov _ lhs (Imm rhs)) _ =
+        "fmovi " <> display lhs <> ", " <> pack (show rhs)
+    displayI (IRichCall _ func args fArgs) _ =
+        "call! "
+            <> func
+            <> ", "
+            <> Data.Text.intercalate "," (Prelude.map display args)
+            <> ", "
+            <> Data.Text.intercalate "," (Prelude.map display fArgs)
+    displayI (IClosureCall _ func args fArgs) _ =
+        "clcall! "
+            <> display func
+            <> ", "
+            <> Data.Text.intercalate "," (Prelude.map display args)
+            <> ", "
+            <> Data.Text.intercalate "," (Prelude.map display fArgs)
+    displayI (IMakeClosure _ dest func args fArgs) _ =
+        "clmake! "
+            <> display dest
+            <> ", "
+            <> func
+            <> ", "
+            <> Data.Text.intercalate "," (Prelude.map display args)
+            <> ", "
+            <> Data.Text.intercalate "," (Prelude.map display fArgs)
+    displayI (ICall _ func) _ =
         "call " <> func
-    display (InstLoad _ lhs rhs) =
-        "lw " <> display lhs <> ", " <> display rhs
-    display (InstStore _ lhs rhs) =
-        "sw " <> display lhs <> ", " <> display rhs
+    displayI (ILoad _ lhs rhs offset) _ =
+        "lw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
+    displayI (IStore _ lhs rhs offset) _ =
+        "sw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
+    displayI (IFLoad _ lhs rhs offset) _ =
+        "flw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
+    displayI (IFStore _ lhs rhs offset) _ =
+        "fsw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
+    displayI (IBranch _ op lhs rhs thenInst elseInst) depth =
+        toOp op
+            <> " "
+            <> display lhs
+            <> ", "
+            <> display rhs
+            <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth + 1) <> displayI i (depth + 1)) thenInst)
+            <> "\n"
+            <> insertIndent depth
+            <> "else!"
+            <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth + 1) <> displayI i (depth + 1)) elseInst)
+      where
+        toOp :: RelationBinOp -> Text
+        toOp Eq = "ifeq!"
+        toOp Ne = "ifne!"
+        toOp Ge = "ifge!"
+        toOp Lt = "iflt!"
+    displayI (IRet _ reg) _ =
+        "ret! " <> display reg
+    displayI (IFRet _ reg) _ =
+        "fret! " <> display reg
+
+instance Display (Inst stateTy Int branchTy) where
+    display inst = displayI inst 0
 
 instance Display (InstTerm stateTy Int) where
-    display (Return _) = "jal ra, 0"
+    display (Return _) = "ret"
     display (Jmp _ label) = "jmp " <> label
     display (Branch _ Eq lhs rhs label1 _) =
         "beq " <> display lhs <> ", " <> display rhs <> ", " <> label1
@@ -285,6 +346,12 @@ instance Display (InstTerm stateTy Int) where
     display (Branch _ Lt lhs rhs label1 _) =
         "blt " <> display lhs <> ", " <> display rhs <> ", " <> label1
     display Nop = "nop"
+
+instance Display (IntermediateCodeBlock stateTy Int) where
+    display (IntermediateCodeBlock label inst) =
+        label
+            <> ":\n"
+            <> intercalate "\n" (Prelude.map (\i -> insertIndent 1 <> displayI i 1) inst)
 
 instance Display (CodeBlock stateTy Int) where
     display (CodeBlock label inst term) =

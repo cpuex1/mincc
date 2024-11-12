@@ -99,7 +99,7 @@ execArgs = do
                             liftIO $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
                             lift $ printLog Debug "Closure expressions are saved"
 
-                        blocks <- loadFunctionsIO functions
+                        blocks <- toInstructionsIO functions
                         lift $ printLog Done "Code generation succeeded"
                         liftIO $ TIO.writeFile (changeExt "code.s" outputFile) $ intercalate "\n" $ map display blocks
                         lift $ printLog Debug "Generated code was saved"
