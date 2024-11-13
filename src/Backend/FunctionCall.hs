@@ -3,7 +3,7 @@
 module Backend.FunctionCall (saveArgs) where
 
 import Backend.Asm
-import Backend.BackendEnv (BackendState, RegID, genTempIReg, iArgsLen, BackendEnv (fArgsLen), genTempFReg)
+import Backend.BackendEnv (BackendEnv (fArgsLen), BackendState, RegID, genTempFReg, genTempIReg, iArgsLen)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
 
@@ -15,21 +15,22 @@ saveArgs (IntermediateCodeBlock label inst) = do
     saveArgs' :: [Inst stateTy RegID AllowBranch] -> BackendState [Inst stateTy RegID AllowBranch]
     saveArgs' inst'' = do
         iLen <- gets iArgsLen
-        modInst <- foldlM
-            ( \inst' arg -> do
-                if evalState (isUsedAfterCallI arg inst') False
-                    then do
-                        reg <- genTempIReg
-                        -- The instructions must not be empty.
-                        case inst' of
-                            [] -> error "panic!"
-                            (f : _) ->
-                                pure $ IMov (getIState f) reg (Reg (ArgsReg arg)) : map (replaceIReg (ArgsReg arg) reg) inst'
-                    else
-                        pure inst'
-            )
-            inst''
-            [0 .. iLen]
+        modInst <-
+            foldlM
+                ( \inst' arg -> do
+                    if evalState (isUsedAfterCallI arg inst') False
+                        then do
+                            reg <- genTempIReg
+                            -- The instructions must not be empty.
+                            case inst' of
+                                [] -> error "panic!"
+                                (f : _) ->
+                                    pure $ IMov (getIState f) reg (Reg (ArgsReg arg)) : map (replaceIReg (ArgsReg arg) reg) inst'
+                        else
+                            pure inst'
+                )
+                inst''
+                [0 .. iLen]
 
         fLen <- gets fArgsLen
         foldlM
