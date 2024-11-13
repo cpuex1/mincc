@@ -100,8 +100,15 @@ execArgs = do
                             lift $ printLog Debug "Closure expressions are saved"
 
                         blocks <- toInstructionsIO functions
+                        lift $ printLog Done "Lowering succeeded"
+                        emitIR <- lift $ asks cEmitIR
+                        when emitIR $ do
+                            liftIO $ TIO.writeFile (changeExt "ir.s" outputFile) $ intercalate "\n" $ map display blocks
+                            lift $ printLog Debug "Intermediate representation code was saved"
+
+                        blocks' <- transformCodeBlockIO blocks
                         lift $ printLog Done "Code generation succeeded"
-                        liftIO $ TIO.writeFile (changeExt "code.s" outputFile) $ intercalate "\n" $ map display blocks
+                        liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" $ map display blocks'
                         lift $ printLog Debug "Generated code was saved"
 
                         lift $ printLog Done "Compilation succeeded"

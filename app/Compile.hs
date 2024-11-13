@@ -6,11 +6,13 @@ module Compile (
     flattenExprIO,
     getFunctionsIO,
     toInstructionsIO,
+    transformCodeBlockIO,
 ) where
 
 import Backend.Asm
 import Backend.BackendEnv
 import Backend.Lowering
+import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
@@ -80,3 +82,6 @@ toInstructionsIO functions = do
                 Right inst' -> pure inst'
         )
         functions
+
+transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> IdentEnvIO [CodeBlock Loc Int]
+transformCodeBlockIO = pure . concatMap transformCodeBlock
