@@ -427,18 +427,18 @@ toInstructions config function = do
                 boundedArgs'
         iFreeVars <-
             filterM
-                ( \(v, _) -> do
+                ( \v -> do
                     ty <- lift $ lift $ lift $ getTyOf v
                     pure $ ty /= TFloat
                 )
-                $ zip freeVars' [0 ..]
+                freeVars'
         fFreeVars <-
             filterM
-                ( \(v, _) -> do
+                ( \v -> do
                     ty <- lift $ lift $ lift $ getTyOf v
                     pure $ ty == TFloat
                 )
-                $ zip freeVars' [0 ..]
+                freeVars'
 
         let iBoundedReg =
                 zipWith
@@ -457,14 +457,14 @@ toInstructions config function = do
                     reg <- genIReg v
                     pure (ILoad dummyLoc reg closureArg (i * 4), (v, reg))
                 )
-                iFreeVars
+                $ zip iFreeVars [0 ..]
         fFreeVarsReg <-
             mapM
                 ( \(v, i) -> do
                     reg <- genFReg v
                     pure (IFLoad dummyLoc reg closureArg (i * 4), (v, reg))
                 )
-                fFreeVars
+                $ zip fFreeVars [length iFreeVars ..]
 
         modify $ \env ->
             env
