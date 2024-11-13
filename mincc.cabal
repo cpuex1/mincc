@@ -30,6 +30,7 @@ library
       Backend.FunctionCall
       Backend.Lowering
       Backend.RegisterAlloc
+      Backend.Transform
       Closure
       Display
       Error
