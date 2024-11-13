@@ -25,6 +25,7 @@ module Backend.Asm (
         IFOp,
         IMov,
         IFMov,
+        ILMov,
         IRichCall,
         IClosureCall,
         IMakeClosure,
@@ -37,7 +38,7 @@ module Backend.Asm (
     ),
     getIState,
     replaceIReg,
-    replaceFReg
+    replaceFReg,
 ) where
 
 import Data.Text (Text)
@@ -134,6 +135,11 @@ data Inst stateTy idTy branchTy where
         Register idTy Float ->
         RegOrImm idTy Float ->
         Inst stateTy idTy branchTy
+    ILMov ::
+        stateTy ->
+        Register idTy Int ->
+        InstLabel ->
+        Inst stateTy idTy DisallowBranch
     IRichCall ::
         stateTy ->
         InstLabel ->
@@ -200,6 +206,7 @@ getIState (IIntOp state _ _ _ _) = state
 getIState (IFOp state _ _ _ _) = state
 getIState (IMov state _ _) = state
 getIState (IFMov state _ _) = state
+getIState (ILMov state _ _) = state
 getIState (IRichCall state _ _ _) = state
 getIState (IClosureCall state _ _ _) = state
 getIState (IMakeClosure state _ _ _ _) = state
@@ -243,6 +250,10 @@ replaceIReg beforeReg afterReg (IMov state dest src) =
   where
     substReg' = substReg beforeReg afterReg
     substImmReg' = substImmReg beforeReg afterReg
+replaceIReg beforeReg afterReg (ILMov state dest src) =
+    ILMov state (substReg' dest) src
+  where
+    substReg' = substReg beforeReg afterReg
 replaceIReg beforeReg afterReg (IRichCall state label iArgs fArgs) =
     IRichCall state label (map substReg' iArgs) fArgs
   where

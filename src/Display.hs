@@ -275,6 +275,8 @@ instance DisplayI (Inst stateTy Int branchTy) where
         "fmov " <> display lhs <> ", " <> display rhs
     displayI (IFMov _ lhs (Imm rhs)) _ =
         "fmovi " <> display lhs <> ", " <> pack (show rhs)
+    displayI (ILMov _ lhs rhs) _ =
+        "movi " <> display lhs <> ", " <> rhs
     displayI (IRichCall _ func args fArgs) _ =
         "call! "
             <> func
