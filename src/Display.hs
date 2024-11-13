@@ -219,12 +219,16 @@ instance Display (Register Int Int) where
     display StackReg = "sp"
     display (ArgsReg idTy) = "a" <> pack (show idTy)
     display (TempReg idTy) = "t" <> pack (show idTy)
+    display (SavedReg idTy) = "s" <> pack (show idTy)
+    display (GeneralReg idTy) = "r" <> pack (show idTy)
 
 instance Display (Register Int Float) where
-    display ZeroReg = "fz"
-    display RetReg = "f0"
-    display (ArgsReg idTy) = "f" <> pack (show idTy)
+    display ZeroReg = "fzero"
+    display RetReg = "fa0"
+    display (ArgsReg idTy) = "fa" <> pack (show idTy)
     display (TempReg idTy) = "ft" <> pack (show idTy)
+    display (SavedReg idTy) = "fs" <> pack (show idTy)
+    display (GeneralReg idTy) = "fr" <> pack (show idTy)
 
 instance DisplayI (Inst stateTy Int branchTy) where
     displayI (ICompOp _ op lhs rhs1 rhs2) _ =
@@ -305,6 +309,8 @@ instance DisplayI (Inst stateTy Int branchTy) where
             <> "]"
     displayI (ICall _ func) _ =
         "call " <> func
+    displayI (ICallReg _ reg) _ =
+        "callr " <> display reg
     displayI (ILoad _ lhs rhs offset) _ =
         "lw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
     displayI (IStore _ lhs rhs offset) _ =
@@ -335,16 +341,16 @@ instance Display (Inst stateTy Int branchTy) where
     display inst = displayI inst 0
 
 instance Display (InstTerm stateTy Int) where
-    display (Return _) = "ret"
-    display (Jmp _ label) = "jmp " <> label
-    display (Branch _ Eq lhs rhs label1 _) =
-        "beq " <> display lhs <> ", " <> display rhs <> ", " <> label1
-    display (Branch _ Ge lhs rhs label1 _) =
-        "bge " <> display lhs <> ", " <> display rhs <> ", " <> label1
-    display (Branch _ Ne lhs rhs label1 _) =
-        "bne " <> display lhs <> ", " <> display rhs <> ", " <> label1
-    display (Branch _ Lt lhs rhs label1 _) =
-        "blt " <> display lhs <> ", " <> display rhs <> ", " <> label1
+    display Return = "ret"
+    display (Jmp label) = "jmp " <> label
+    display (Branch _ Eq lhs rhs label) =
+        "beq " <> display lhs <> ", " <> display rhs <> ", " <> label
+    display (Branch _ Ge lhs rhs label) =
+        "bge " <> display lhs <> ", " <> display rhs <> ", " <> label
+    display (Branch _ Ne lhs rhs label) =
+        "bne " <> display lhs <> ", " <> display rhs <> ", " <> label
+    display (Branch _ Lt lhs rhs label) =
+        "blt " <> display lhs <> ", " <> display rhs <> ", " <> label
     display Nop = "nop"
 
 instance Display (IntermediateCodeBlock stateTy Int) where

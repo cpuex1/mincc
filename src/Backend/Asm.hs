@@ -10,6 +10,8 @@ module Backend.Asm (
         StackReg,
         ArgsReg,
         TempReg,
+        SavedReg,
+        GeneralReg,
         DummyReg
     ),
     RegOrImm (Reg, Imm),
@@ -30,6 +32,7 @@ module Backend.Asm (
         IClosureCall,
         IMakeClosure,
         ICall,
+        ICallReg,
         ILoad,
         IStore,
         IFLoad,
@@ -53,6 +56,8 @@ data Register idTy ty where
     StackReg :: Register idTy Int
     ArgsReg :: idTy -> Register idTy ty
     TempReg :: idTy -> Register idTy ty
+    SavedReg :: idTy -> Register idTy ty
+    GeneralReg :: idTy -> Register idTy ty
     DummyReg :: Register idTy ()
 
 deriving instance (Show idTy, Show ty) => Show (Register idTy ty)
@@ -79,14 +84,13 @@ data CodeBlock stateTy idTy
     deriving (Show, Eq)
 
 data InstTerm stateTy idTy
-    = Return stateTy
-    | Jmp stateTy InstLabel
+    = Return
+    | Jmp InstLabel
     | Branch
         stateTy
         RelationBinOp
         (Register idTy Int)
         (Register idTy Int)
-        InstLabel
         InstLabel
     | Nop
     deriving (Show, Eq)
@@ -163,6 +167,10 @@ data Inst stateTy idTy branchTy where
         stateTy ->
         InstLabel ->
         Inst stateTy idTy branchTy
+    ICallReg ::
+        stateTy ->
+        Register idTy Int ->
+        Inst stateTy idTy DisallowBranch
     ILoad ::
         stateTy ->
         Register idTy Int ->
@@ -211,6 +219,7 @@ getIState (IRichCall state _ _ _) = state
 getIState (IClosureCall state _ _ _) = state
 getIState (IMakeClosure state _ _ _ _) = state
 getIState (ICall state _) = state
+getIState (ICallReg state _) = state
 getIState (ILoad state _ _ _) = state
 getIState (IStore state _ _ _) = state
 getIState (IFLoad state _ _ _) = state
@@ -264,6 +273,10 @@ replaceIReg beforeReg afterReg (IClosureCall state dest iArgs fArgs) =
     substReg' = substReg beforeReg afterReg
 replaceIReg beforeReg afterReg (IMakeClosure state dest label iArgs fArgs) =
     IMakeClosure state (substReg' dest) label (map substReg' iArgs) fArgs
+  where
+    substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (ICallReg state reg) =
+    ICallReg state (substReg' reg)
   where
     substReg' = substReg beforeReg afterReg
 replaceIReg beforeReg afterReg (ILoad state dest src offset) =
