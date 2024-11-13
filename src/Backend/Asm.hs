@@ -37,6 +37,7 @@ module Backend.Asm (
     ),
     getIState,
     replaceIReg,
+    replaceFReg
 ) where
 
 import Data.Text (Text)
@@ -287,3 +288,58 @@ replaceIReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =
   where
     substReg' = substReg beforeReg afterReg
 replaceIReg _ _ inst = inst
+
+replaceFReg ::
+    (Eq idTy) =>
+    Register idTy Float ->
+    Register idTy Float ->
+    Inst stateTy idTy branchTy ->
+    Inst stateTy idTy branchTy
+replaceFReg beforeReg afterReg (IFCompOp state op dest left right) =
+    IFCompOp state op dest (substReg' left) (substReg' right)
+  where
+    substReg' = substReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IFOp state op dest left right) =
+    IFOp state op (substReg' dest) (substReg' left) (substReg' right)
+  where
+    substReg' = substReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IFMov state dest src) =
+    IFMov state (substReg' dest) (substImmReg' src)
+  where
+    substReg' = substReg beforeReg afterReg
+    substImmReg' = substImmReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IRichCall state label iArgs fArgs) =
+    IRichCall state label iArgs (map substReg' fArgs)
+  where
+    substReg' = substReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IClosureCall state dest iArgs fArgs) =
+    IClosureCall state dest iArgs (map substReg' fArgs)
+  where
+    substReg' = substReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IMakeClosure state dest label iArgs fArgs) =
+    IMakeClosure state dest label iArgs (map substReg' fArgs)
+  where
+    substReg' = substReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IFLoad state dest src offset) =
+    IFLoad state (substReg' dest) src offset
+  where
+    substReg' = substReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IFStore state dest src offset) =
+    IFStore state (substReg' dest) src offset
+  where
+    substReg' = substReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =
+    IBranch
+        state
+        op
+        left
+        right
+        ( map
+            (replaceFReg beforeReg afterReg)
+            thenExpr
+        )
+        ( map
+            (replaceFReg beforeReg afterReg)
+            elseExpr
+        )
+replaceFReg _ _ inst = inst

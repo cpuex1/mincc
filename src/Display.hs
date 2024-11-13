@@ -278,10 +278,11 @@ instance DisplayI (Inst stateTy Int branchTy) where
     displayI (IRichCall _ func args fArgs) _ =
         "call! "
             <> func
-            <> ", "
+            <> ", ["
             <> Data.Text.intercalate ", " (Prelude.map display args)
-            <> ", "
+            <> "], ["
             <> Data.Text.intercalate ", " (Prelude.map display fArgs)
+            <> "]"
     displayI (IClosureCall _ func args fArgs) _ =
         "clcall! "
             <> display func
