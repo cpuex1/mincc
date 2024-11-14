@@ -7,11 +7,13 @@ module Compile (
     getFunctionsIO,
     toInstructionsIO,
     transformCodeBlockIO,
+    livenessIO,
 ) where
 
 import Backend.Asm
 import Backend.BackendEnv
 import Backend.Lowering
+import Backend.RegisterAlloc (LivenessLoc, liveness)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
@@ -85,3 +87,9 @@ toInstructionsIO functions = do
 
 transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> IdentEnvIO [CodeBlock Loc Int]
 transformCodeBlockIO = pure . concatMap transformCodeBlock
+
+livenessIO :: [IntermediateCodeBlock Loc Int] -> IdentEnvIO [IntermediateCodeBlock LivenessLoc Int]
+livenessIO = mapM livenessIO'
+  where
+    livenessIO' :: IntermediateCodeBlock Loc Int -> IdentEnvIO (IntermediateCodeBlock LivenessLoc Int)
+    livenessIO' (IntermediateCodeBlock label' inst) = pure $ IntermediateCodeBlock label' $ liveness inst

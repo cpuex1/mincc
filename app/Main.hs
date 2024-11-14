@@ -106,6 +106,12 @@ execArgs = do
                             liftIO $ TIO.writeFile (changeExt "ir.s" outputFile) $ intercalate "\n" $ map display blocks
                             lift $ printLog Debug "Intermediate representation code was saved"
 
+                        liveness <- livenessIO blocks
+                        lift $ printLog Done "Liveness analysis succeeded"
+                        when emitIR $ do
+                            liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display liveness
+                            lift $ printLog Debug "The result of liveness analysis was saved"
+
                         blocks' <- transformCodeBlockIO blocks
                         lift $ printLog Done "Code generation succeeded"
                         liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" $ map display blocks'
