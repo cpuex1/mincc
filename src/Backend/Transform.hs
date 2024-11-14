@@ -163,8 +163,6 @@ transformCodeBlock (IntermediateCodeBlock label inst) =
             $ zip fFreeV [1 + length iFreeV ..]
         insertBuf $ IMov state dest (Reg HeapReg)
         insertBuf $ IIntOp state Add HeapReg HeapReg (Imm $ 1 + length iFreeV + length fFreeV)
-    transformInst (ICall state label') =
-        insertBuf $ ICall state label'
     transformInst (ILoad state dest src offset) =
         insertBuf $ ILoad state dest src offset
     transformInst (IStore state dest src offset) =

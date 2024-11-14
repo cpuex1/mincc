@@ -83,9 +83,6 @@ saveArgs (IntermediateCodeBlock label inst) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
         pure $ (called && elem (ArgsReg reg) args) || rest'
-    isUsedAfterCallI reg (ICall _ _ : rest) = do
-        put True
-        isUsedAfterCallI reg rest
     isUsedAfterCallI reg (ILoad _ _ reg' _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
@@ -155,9 +152,6 @@ saveArgs (IntermediateCodeBlock label inst) = do
         called <- get
         rest' <- isUsedAfterCallF reg rest
         pure $ (called && elem reg fArgs) || rest'
-    isUsedAfterCallF reg (ICall _ _ : rest) = do
-        put True
-        isUsedAfterCallF reg rest
     isUsedAfterCallF reg (IFStore _ reg' _ _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallF reg rest

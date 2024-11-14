@@ -28,7 +28,6 @@ import Control.Monad.Except (ExceptT, MonadError (throwError))
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State (MonadState (get), StateT, gets, modify)
 import Data.Functor.Identity (Identity)
-import Display (display)
 import Error (CompilerError (OtherError))
 import Syntax (Ident)
 
@@ -99,7 +98,7 @@ findI ident = do
     case regID of
         Just actual -> pure actual
         Nothing -> do
-            throwError $ OtherError $ "Detected an unknown non-float identifier named " <> display ident <> "."
+            throwError $ OtherError "Detected an unknown non-float identifier."
 
 findF :: (Monad m) => Ident -> BackendStateT m (Register RegID Float)
 findF ident = do
@@ -107,4 +106,4 @@ findF ident = do
     case regID of
         Just actual -> pure actual
         Nothing -> do
-            throwError $ OtherError $ "Detected an unknown float identifier named " <> display ident <> "."
+            throwError $ OtherError "Detected an unknown float identifier."

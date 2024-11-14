@@ -166,7 +166,7 @@ data Inst stateTy idTy branchTy where
     ICall ::
         stateTy ->
         InstLabel ->
-        Inst stateTy idTy branchTy
+        Inst stateTy idTy DisallowBranch
     ICallReg ::
         stateTy ->
         Register idTy Int ->
