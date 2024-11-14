@@ -28,6 +28,7 @@ library
       Backend.Asm
       Backend.BackendEnv
       Backend.FunctionCall
+      Backend.Liveness
       Backend.Lowering
       Backend.RegisterAlloc
       Backend.Transform

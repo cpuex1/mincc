@@ -13,7 +13,7 @@ module Compile (
 import Backend.Asm
 import Backend.BackendEnv
 import Backend.Lowering
-import Backend.RegisterAlloc (LivenessLoc, liveness)
+import Backend.Liveness (LivenessLoc, liveness)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
