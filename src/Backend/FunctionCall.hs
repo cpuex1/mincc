@@ -1,11 +1,16 @@
 {-# LANGUAGE GADTs #-}
 
-module Backend.FunctionCall (saveArgs) where
+module Backend.FunctionCall (
+    saveArgs,
+    saveRegisters,
+) where
 
 import Backend.Asm
 import Backend.BackendEnv (BackendEnv (fArgsLen), BackendStateT, RegID, genTempFReg, genTempIReg, iArgsLen)
+import Backend.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
+import Syntax (IntBinOp (Add, Sub), Loc, dummyLoc)
 
 saveArgs :: (Monad m) => IntermediateCodeBlock stateTy RegID -> BackendStateT m (IntermediateCodeBlock stateTy RegID)
 saveArgs (IntermediateCodeBlock label inst) = do
@@ -170,3 +175,97 @@ saveArgs (IntermediateCodeBlock label inst) = do
                 put $ thenCalled || elseCalled
                 isUsedAfterCallF reg rest
     isUsedAfterCallF reg (_ : rest) = isUsedAfterCallF reg rest
+
+registerBeyondCall :: Inst LivenessLoc RegID AllowBranch -> [Inst Loc RegID AllowBranch]
+registerBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) label iArgs fArgs) =
+    prologue ++ [IRichCall loc label iArgs fArgs] ++ epilogue
+  where
+    iToBeSaved = filter ((`notElem` iArgs) . TempReg) iArgs'
+    fToBeSaved = filter ((`notElem` fArgs) . TempReg) fArgs'
+
+    prologue =
+        if null iToBeSaved && null fToBeSaved
+            then
+                []
+            else
+                IIntOp dummyLoc Sub StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
+    iPrologue =
+        zipWith
+            (\i arg -> IStore dummyLoc (TempReg arg) StackReg (i * 4))
+            [0 ..]
+            iToBeSaved
+    fPrologue =
+        zipWith
+            (\i arg -> IFStore dummyLoc (TempReg arg) StackReg (i * 4))
+            [length iToBeSaved ..]
+            fToBeSaved
+
+    epilogue =
+        if null iToBeSaved && null fToBeSaved
+            then
+                []
+            else
+                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc Add StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
+    iEpilogue =
+        zipWith
+            (\i arg -> ILoad dummyLoc (TempReg arg) StackReg (i * 4))
+            [0 ..]
+            iToBeSaved
+    fEpilogue =
+        zipWith
+            (\i arg -> IFLoad dummyLoc (TempReg arg) StackReg (i * 4))
+            [length iToBeSaved ..]
+            fToBeSaved
+registerBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) cl iArgs fArgs) =
+    prologue ++ [IClosureCall loc cl iArgs fArgs] ++ epilogue
+  where
+    iToBeSaved = filter ((`notElem` iArgs) . TempReg) iArgs'
+    fToBeSaved = filter ((`notElem` fArgs) . TempReg) fArgs'
+
+    prologue =
+        if null iToBeSaved && null fToBeSaved
+            then
+                []
+            else
+                IIntOp dummyLoc Sub StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
+    iPrologue =
+        zipWith
+            (\i arg -> IStore dummyLoc (TempReg arg) StackReg (i * 4))
+            [0 ..]
+            iToBeSaved
+    fPrologue =
+        zipWith
+            (\i arg -> IFStore dummyLoc (TempReg arg) StackReg (i * 4))
+            [length iToBeSaved ..]
+            fToBeSaved
+
+    epilogue =
+        if null iToBeSaved && null fToBeSaved
+            then
+                []
+            else
+                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc Add StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
+    iEpilogue =
+        zipWith
+            (\i arg -> ILoad dummyLoc (TempReg arg) StackReg (i * 4))
+            [0 ..]
+            iToBeSaved
+    fEpilogue =
+        zipWith
+            (\i arg -> IFLoad dummyLoc (TempReg arg) StackReg (i * 4))
+            [length iToBeSaved ..]
+            fToBeSaved
+registerBeyondCall (IBranch state op left right thenBlock elseBlock) =
+    [ IBranch
+        (livenessLoc state)
+        op
+        left
+        right
+        (concatMap registerBeyondCall thenBlock)
+        (concatMap registerBeyondCall elseBlock)
+    ]
+registerBeyondCall i = [substIState livenessLoc i]
+
+saveRegisters :: IntermediateCodeBlock Loc RegID -> IntermediateCodeBlock Loc RegID
+saveRegisters (IntermediateCodeBlock label inst) =
+    IntermediateCodeBlock label $ concatMap registerBeyondCall $ liveness inst

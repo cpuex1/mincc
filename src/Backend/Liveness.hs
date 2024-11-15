@@ -2,8 +2,8 @@
 
 module Backend.Liveness (
     liveness,
-    LivenessLoc (livenessLoc, livenessState),
-    LivenessState (iAlive, fAlive),
+    LivenessLoc (LivenessLoc, livenessLoc, livenessState),
+    LivenessState (LivenessState, iAlive, fAlive),
     LivenessGraph (LivenessGraph),
     toGraph,
 ) where

@@ -9,7 +9,7 @@ module Backend.Lowering (
 
 import Backend.Asm
 import Backend.BackendEnv
-import Backend.FunctionCall (saveArgs)
+import Backend.FunctionCall (saveArgs, saveRegisters)
 import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.Reader (MonadTrans (lift))
@@ -388,7 +388,8 @@ toInst iReg fReg expr = do
 toInstructions :: (Monad m) => Function -> BackendIdentState m (IntermediateCodeBlock Loc RegID)
 toInstructions function = do
     inst <- toInstructions' function
-    saveArgs (IntermediateCodeBlock (display $ funcName function) inst)
+    inst' <- saveArgs (IntermediateCodeBlock (display $ funcName function) inst)
+    pure $ saveRegisters inst'
   where
     toInstructions' :: (Monad m) => Function -> BackendIdentState m [Inst Loc RegID AllowBranch]
     toInstructions' (Function _ _ _ freeVars' boundedArgs' body) = do
