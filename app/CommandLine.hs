@@ -1,6 +1,7 @@
 module CommandLine (
     ConfigIO,
     IdentEnvIO,
+    BackendIdentStateIO,
     CompilerConfig (CompilerConfig),
     CommandLineArg (CommandLineArg),
     cInput,
@@ -20,6 +21,7 @@ module CommandLine (
     toCompilerConfig,
 ) where
 
+import Backend.Lowering (BackendIdentState)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
 import Error (CompilerError)
@@ -30,6 +32,7 @@ import System.IO (stdout)
 
 type ConfigIO = ReaderT CompilerConfig (ExceptT CompilerError IO)
 type IdentEnvIO = IdentEnvT ConfigIO
+type BackendIdentStateIO = BackendIdentState ConfigIO
 
 data CompilerConfig = CompilerConfig
     { cInput :: [String]

@@ -8,18 +8,18 @@ module Compile (
     toInstructionsIO,
     transformCodeBlockIO,
     livenessIO,
+    assignRegisterIO,
 ) where
 
 import Backend.Asm
-import Backend.BackendEnv
-import Backend.Lowering
 import Backend.Liveness (LivenessLoc, liveness)
+import Backend.Lowering
+import Backend.RegisterAlloc (assignRegister)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.Trans.Class
-import Control.Monad.Trans.Reader (asks)
 import qualified Data.Text.IO as TIO
 import Error
 import Flatten (flattenExpr)
@@ -73,23 +73,17 @@ getFunctionsIO (expr : exprs) = do
     functions <- getFunctionsIO exprs
     pure (func ++ functions)
 
-toInstructionsIO :: [Function] -> IdentEnvIO [IntermediateCodeBlock Loc Int]
-toInstructionsIO functions = do
-    argsLimit' <- lift $ asks cArgsLimit
-    mapM
-        ( \func -> do
-            inst <- toInstructions (BackendConfig argsLimit') func
-            case inst of
-                Left err -> lift $ throwError err
-                Right inst' -> pure inst'
-        )
-        functions
+toInstructionsIO :: [Function] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
+toInstructionsIO = mapM toInstructions
 
-transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> IdentEnvIO [CodeBlock Loc Int]
+transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [CodeBlock Loc Int]
 transformCodeBlockIO = pure . concatMap transformCodeBlock
 
-livenessIO :: [IntermediateCodeBlock Loc Int] -> IdentEnvIO [IntermediateCodeBlock LivenessLoc Int]
+livenessIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [IntermediateCodeBlock LivenessLoc Int]
 livenessIO = mapM livenessIO'
   where
-    livenessIO' :: IntermediateCodeBlock Loc Int -> IdentEnvIO (IntermediateCodeBlock LivenessLoc Int)
+    livenessIO' :: IntermediateCodeBlock Loc Int -> BackendIdentStateIO (IntermediateCodeBlock LivenessLoc Int)
     livenessIO' (IntermediateCodeBlock label' inst) = pure $ IntermediateCodeBlock label' $ liveness inst
+
+assignRegisterIO :: [IntermediateCodeBlock LivenessLoc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
+assignRegisterIO = mapM assignRegister
