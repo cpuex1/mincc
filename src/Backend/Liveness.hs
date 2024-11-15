@@ -1,6 +1,12 @@
 {-# LANGUAGE GADTs #-}
 
-module Backend.Liveness (liveness, LivenessLoc(livenessState), LivenessState(iAlived, fAlived)) where
+module Backend.Liveness (
+    liveness,
+    LivenessLoc (livenessLoc, livenessState),
+    LivenessState (iAlive, fAlive),
+    LivenessGraph (LivenessGraph),
+    toGraph,
+) where
 
 import Backend.Asm
 import Backend.BackendEnv (RegID)
@@ -9,37 +15,57 @@ import Control.Monad.State (MonadState (get, put), State, evalState, gets, modif
 import Syntax (Loc)
 
 data LivenessState = LivenessState
-    { iAlived :: [RegID]
-    , fAlived :: [RegID]
+    { iAlive :: [RegID]
+    , fAlive :: [RegID]
     }
     deriving (Show, Eq)
 
 data LivenessLoc = LivenessLoc
-    { loc :: Loc
+    { livenessLoc :: Loc
     , livenessState :: LivenessState
     }
     deriving (Show, Eq)
 
 type LivenessStateM = State LivenessState
 
-mergeLivenessState :: LivenessState -> LivenessState -> LivenessState
-mergeLivenessState (LivenessState iAlived1 fAlived1) (LivenessState iAlived2 fAlived2) =
-    LivenessState (merge iAlived1 iAlived2) (merge fAlived1 fAlived2)
+data LivenessGraph = LivenessGraph
+    { iGraph :: [(RegID, RegID)]
+    , fGraph :: [(RegID, RegID)]
+    }
+    deriving (Show, Eq)
+
+merge :: (Eq a) => [a] -> [a] -> [a]
+merge [] arr = arr
+merge (x : xs) arr =
+    if x `elem` arr
+        then
+            merge xs arr
+        else
+            merge xs (x : arr)
+
+toGraph :: [LivenessState] -> LivenessGraph
+toGraph [] = LivenessGraph [] []
+toGraph (s : rest) = LivenessGraph (merge (iGraph xGraph) (iGraph xsGraph)) (merge (fGraph xGraph) (fGraph xsGraph))
   where
-    merge :: (Eq a) => [a] -> [a] -> [a]
-    merge [] arr = arr
-    merge (x : xs) arr =
-        if x `elem` arr
-            then
-                merge xs arr
-            else
-                merge xs (x : arr)
+    xGraph = toGraph' s
+    xsGraph = toGraph rest
+
+    toGraph' :: LivenessState -> LivenessGraph
+    toGraph' (LivenessState iAlive' fAlive') =
+        LivenessGraph
+            { iGraph = [(x, y) | x <- iAlive', y <- iAlive', x /= y]
+            , fGraph = [(x, y) | x <- fAlive', y <- fAlive', x /= y]
+            }
+
+mergeLivenessState :: LivenessState -> LivenessState -> LivenessState
+mergeLivenessState (LivenessState iAlive1 fAlive1) (LivenessState iAlive2 fAlive2) =
+    LivenessState (merge iAlive1 iAlive2) (merge fAlive1 fAlive2)
 
 markUsedI :: Register RegID Int -> LivenessStateM ()
 markUsedI (TempReg regId) = do
     env <- get
-    unless (regId `elem` iAlived env) $
-        put env{iAlived = regId : iAlived env}
+    unless (regId `elem` iAlive env) $
+        put env{iAlive = regId : iAlive env}
 markUsedI _ = pure ()
 
 markUsedI' :: RegOrImm RegID Int -> LivenessStateM ()
@@ -49,8 +75,8 @@ markUsedI' (Imm _) = pure ()
 markUsedF :: Register RegID Float -> LivenessStateM ()
 markUsedF (TempReg regId) = do
     env <- get
-    unless (regId `elem` fAlived env) $
-        put env{fAlived = regId : fAlived env}
+    unless (regId `elem` fAlive env) $
+        put env{fAlive = regId : fAlive env}
 markUsedF _ = pure ()
 
 markUsedF' :: RegOrImm RegID Float -> LivenessStateM ()
@@ -60,13 +86,13 @@ markUsedF' (Imm _) = pure ()
 removeI :: Register RegID Int -> LivenessStateM ()
 removeI (TempReg regId) = do
     modify $ \env ->
-        env{iAlived = filter (/= regId) $ iAlived env}
+        env{iAlive = filter (/= regId) $ iAlive env}
 removeI _ = pure ()
 
 removeF :: Register RegID Float -> LivenessStateM ()
 removeF (TempReg regId) = do
     modify $ \env ->
-        env{fAlived = filter (/= regId) $ fAlived env}
+        env{fAlive = filter (/= regId) $ fAlive env}
 removeF _ = pure ()
 
 getState :: Loc -> LivenessStateM LivenessLoc

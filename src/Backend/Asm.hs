@@ -40,6 +40,7 @@ module Backend.Asm (
         IBranch
     ),
     getIState,
+    substIState,
     replaceIReg,
     replaceFReg,
 ) where
@@ -225,6 +226,38 @@ getIState (IStore state _ _ _) = state
 getIState (IFLoad state _ _ _) = state
 getIState (IFStore state _ _ _) = state
 getIState (IBranch state _ _ _ _ _) = state
+
+substIState :: (stateTy -> stateTy') -> Inst stateTy idTy branchTy -> Inst stateTy' idTy branchTy
+substIState f (ICompOp state op dest src1 src2) = ICompOp (f state) op dest src1 src2
+substIState f (IFCompOp state op dest src1 src2) = IFCompOp (f state) op dest src1 src2
+substIState f (IIntOp state op dest src1 src2) = IIntOp (f state) op dest src1 src2
+substIState f (IFOp state op dest src1 src2) = IFOp (f state) op dest src1 src2
+substIState f (IMov state dest src) = IMov (f state) dest src
+substIState f (IFMov state dest src) = IFMov (f state) dest src
+substIState f (ILMov state dest src) = ILMov (f state) dest src
+substIState f (IRichCall state label iArgs fArgs) = IRichCall (f state) label iArgs fArgs
+substIState f (IClosureCall state dest iArgs fArgs) = IClosureCall (f state) dest iArgs fArgs
+substIState f (IMakeClosure state dest label iArgs fArgs) = IMakeClosure (f state) dest label iArgs fArgs
+substIState f (ICall state label) = ICall (f state) label
+substIState f (ICallReg state reg) = ICallReg (f state) reg
+substIState f (ILoad state dest src offset) = ILoad (f state) dest src offset
+substIState f (IStore state dest src offset) = IStore (f state) dest src offset
+substIState f (IFLoad state dest src offset) = IFLoad (f state) dest src offset
+substIState f (IFStore state dest src offset) = IFStore (f state) dest src offset
+substIState f (IBranch state op left right thenExpr elseExpr) =
+    IBranch
+        (f state)
+        op
+        left
+        right
+        ( map
+            (substIState f)
+            thenExpr
+        )
+        ( map
+            (substIState f)
+            elseExpr
+        )
 
 substReg :: (Eq idTy, Eq ty) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
 substReg beforeReg afterReg victim =

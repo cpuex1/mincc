@@ -6,7 +6,7 @@ module Display (display) where
 
 import Backend.Asm
 import Backend.BackendEnv (RegID)
-import Backend.Liveness (LivenessLoc (livenessState), LivenessState (fAlived, iAlived))
+import Backend.Liveness (LivenessLoc (livenessState), LivenessState (fAlive, iAlive))
 import Data.Text
 import Syntax
 import Typing
@@ -362,9 +362,9 @@ instance Display (InstTerm stateTy Int) where
 instance Display LivenessState where
     display state =
         " # ["
-            <> Data.Text.intercalate "," (Prelude.map (\i -> display (TempReg i :: Register RegID Int)) (iAlived state))
+            <> Data.Text.intercalate "," (Prelude.map (\i -> display (TempReg i :: Register RegID Int)) (iAlive state))
             <> "], ["
-            <> Data.Text.intercalate "," (Prelude.map (\i -> display (TempReg i :: Register RegID Float)) (fAlived state))
+            <> Data.Text.intercalate "," (Prelude.map (\i -> display (TempReg i :: Register RegID Float)) (fAlive state))
             <> "]"
 
 instance Display LivenessLoc where
