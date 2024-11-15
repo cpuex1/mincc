@@ -380,6 +380,8 @@ instance (Display stateTy) => Display (CodeBlock stateTy Int) where
     display (CodeBlock label inst term) =
         label
             <> ":\n"
-            <> intercalate "" (Prelude.map (\i -> insertIndent 1 <> display i <> "\n") inst)
-            <> insertIndent 1
-            <> display term
+            <> intercalate "\n" (Prelude.map (\i -> insertIndent 1 <> display i) inst)
+            <> ( case term of
+                    Nop -> ""
+                    _ -> "\n" <> insertIndent 1 <> display term
+               )

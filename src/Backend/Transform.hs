@@ -92,7 +92,7 @@ transformCodeBlock (IntermediateCodeBlock label inst) =
         modify $ \e ->
             e
                 { currentLabel = thenLabel
-                , currentTerm = Jmp endLabel
+                , currentTerm = Nop
                 }
         traverseInst thenInst
         modify $ \e ->
