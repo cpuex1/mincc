@@ -3,16 +3,16 @@
 module Backend.FunctionCall (saveArgs) where
 
 import Backend.Asm
-import Backend.BackendEnv (BackendEnv (fArgsLen), BackendState, RegID, genTempFReg, genTempIReg, iArgsLen)
+import Backend.BackendEnv (BackendEnv (fArgsLen), BackendStateT, RegID, genTempFReg, genTempIReg, iArgsLen)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
 
-saveArgs :: IntermediateCodeBlock stateTy RegID -> BackendState (IntermediateCodeBlock stateTy RegID)
+saveArgs :: (Monad m) => IntermediateCodeBlock stateTy RegID -> BackendStateT m (IntermediateCodeBlock stateTy RegID)
 saveArgs (IntermediateCodeBlock label inst) = do
     inst' <- saveArgs' inst
     pure $ IntermediateCodeBlock label inst'
   where
-    saveArgs' :: [Inst stateTy RegID AllowBranch] -> BackendState [Inst stateTy RegID AllowBranch]
+    saveArgs' :: (Monad m) => [Inst stateTy RegID AllowBranch] -> BackendStateT m [Inst stateTy RegID AllowBranch]
     saveArgs' inst'' = do
         iLen <- gets iArgsLen
         modInst <-

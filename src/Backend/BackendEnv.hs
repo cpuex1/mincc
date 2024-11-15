@@ -15,6 +15,8 @@ module Backend.BackendEnv (
     defaultBackendEnv,
     BackendState,
     BackendStateT,
+    liftB,
+    runBackendStateT,
     genTempIReg,
     genTempFReg,
     genIReg,
@@ -24,9 +26,9 @@ module Backend.BackendEnv (
 ) where
 
 import Backend.Asm (Register (TempReg))
-import Control.Monad.Except (ExceptT, MonadError (throwError))
-import Control.Monad.Reader (ReaderT)
-import Control.Monad.State (MonadState (get), StateT, gets, modify)
+import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
+import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
+import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
 import Error (CompilerError (OtherError))
 import Syntax (Ident)
@@ -61,6 +63,13 @@ defaultBackendEnv =
 
 type BackendStateT m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv m))
 type BackendState = BackendStateT Identity
+
+runBackendStateT :: (Monad m) => BackendStateT m a -> BackendConfig -> m (Either CompilerError a)
+runBackendStateT s config =
+    evalStateT (runExceptT $ runReaderT s config) defaultBackendEnv
+
+liftB :: (Monad m) => m a -> BackendStateT m a
+liftB = lift . lift . lift
 
 genTempIReg :: (Monad m) => BackendStateT m (Register RegID Int)
 genTempIReg = do

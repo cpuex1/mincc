@@ -40,6 +40,7 @@ module Backend.Asm (
         IBranch
     ),
     getIState,
+    getAllIState,
     substIState,
     replaceIReg,
     replaceFReg,
@@ -226,6 +227,11 @@ getIState (IStore state _ _ _) = state
 getIState (IFLoad state _ _ _) = state
 getIState (IFStore state _ _ _) = state
 getIState (IBranch state _ _ _ _ _) = state
+
+getAllIState :: Inst stateTy idTy branchTy -> [stateTy]
+getAllIState (IBranch state _ _ _ thenInst elseInst) =
+    state : (concatMap getAllIState thenInst ++ concatMap getAllIState elseInst)
+getAllIState inst = [getIState inst]
 
 substIState :: (stateTy -> stateTy') -> Inst stateTy idTy branchTy -> Inst stateTy' idTy branchTy
 substIState f (ICompOp state op dest src1 src2) = ICompOp (f state) op dest src1 src2

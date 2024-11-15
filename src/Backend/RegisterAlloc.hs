@@ -2,7 +2,16 @@
 
 module Backend.RegisterAlloc (assignRegister) where
 
-import Backend.Asm (AllowBranch, Inst, IntermediateCodeBlock (IntermediateCodeBlock), Register (SavedReg, TempReg), getIState, replaceFReg, replaceIReg, substIState)
+import Backend.Asm (
+    AllowBranch,
+    Inst,
+    IntermediateCodeBlock (IntermediateCodeBlock),
+    Register (SavedReg, TempReg),
+    getAllIState,
+    replaceFReg,
+    replaceIReg,
+    substIState,
+ )
 import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg), BackendStateT, RegID)
 import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
@@ -62,4 +71,4 @@ assignRegister (IntermediateCodeBlock label inst) = do
     pure $ IntermediateCodeBlock label $ map (substIState livenessLoc) inst''
   where
     retrieveGraph :: [Inst LivenessLoc RegID AllowBranch] -> LivenessGraph
-    retrieveGraph inst' = toGraph $ map (livenessState . getIState) inst'
+    retrieveGraph inst' = toGraph $ concatMap (map livenessState . getAllIState) inst'

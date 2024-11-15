@@ -3,7 +3,7 @@
 
 module Backend.Lowering (
     RegID,
-    BackendStateT,
+    BackendIdentState,
     toInstructions,
 ) where
 
@@ -11,9 +11,9 @@ import Backend.Asm
 import Backend.BackendEnv
 import Backend.FunctionCall (saveArgs)
 import Control.Monad (filterM)
-import Control.Monad.Except (MonadError (throwError), runExceptT)
-import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
-import Control.Monad.State (StateT (runStateT), evalState, modify)
+import Control.Monad.Except (MonadError (throwError))
+import Control.Monad.Reader (MonadTrans (lift))
+import Control.Monad.State (modify)
 import Display (display)
 import Error (CompilerError (OtherError))
 import IdentAnalysis (IdentEnvT, getTyOf)
@@ -385,29 +385,10 @@ toInst iReg fReg expr = do
         _ -> do
             toInstI iReg expr
 
-toInstructions :: (Monad m) => BackendConfig -> Function -> IdentEnvT m (Either CompilerError (IntermediateCodeBlock Loc RegID))
-toInstructions config function = do
-    result <-
-        runStateT
-            ( runExceptT $
-                runReaderT
-                    ( toInstructions' function
-                    )
-                    config
-            )
-            defaultBackendEnv
-    case result of
-        (Left err, _) -> pure $ Left err
-        (Right inst, env) ->
-            pure $
-                evalState
-                    ( runExceptT $
-                        runReaderT
-                            ( saveArgs (IntermediateCodeBlock (display $ funcName function) inst)
-                            )
-                            config
-                    )
-                    env
+toInstructions :: (Monad m) => Function -> BackendIdentState m (IntermediateCodeBlock Loc RegID)
+toInstructions function = do
+    inst <- toInstructions' function
+    saveArgs (IntermediateCodeBlock (display $ funcName function) inst)
   where
     toInstructions' :: (Monad m) => Function -> BackendIdentState m [Inst Loc RegID AllowBranch]
     toInstructions' (Function _ _ _ freeVars' boundedArgs' body) = do
