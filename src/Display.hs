@@ -47,13 +47,14 @@ instance Display RawIdent where
     display (RawIdent _ ident) = ident
 
 instance DisplayI Ident where
+    displayI (Entry _) _ = "__entry"
     displayI (UserDefined pos ident) _ =
         "__"
+            <> ident
+            <> "_"
             <> (pack . show . locLine) pos
             <> "_"
             <> (pack . show . locColumn) pos
-            <> "_"
-            <> ident
     displayI (CompilerGenerated ident) _ =
         "__gen_" <> pack (show ident)
     displayI (ExternalIdent ident) _ =
@@ -380,8 +381,8 @@ instance (Display stateTy) => Display (IntermediateCodeBlock stateTy Int) where
 instance (Display stateTy) => Display (CodeBlock stateTy Int) where
     display (CodeBlock label inst term) =
         label
-            <> ":\n"
-            <> intercalate "\n" (Prelude.map (\i -> insertIndent 1 <> display i) inst)
+            <> ":"
+            <> intercalate "" (Prelude.map (\i -> "\n" <> insertIndent 1 <> display i) inst)
             <> ( case term of
                     Nop -> ""
                     _ -> "\n" <> insertIndent 1 <> display term

@@ -143,7 +143,7 @@ isUsed _ _ = False
 getFunctions :: (Monad m) => KExpr -> IdentEnvT m [Function]
 getFunctions expr = do
     (expr', funcList) <- runStateT (genFunctions expr) (ClosureEnv [])
-    pure $ Function (getExprState expr') True (ExternalIdent "entry") [] [] expr' : functions funcList
+    pure $ Function (getExprState expr') True (Entry dummyLoc) [] [] expr' : functions funcList
 
 dummyState :: TypedState
 dummyState = TypedState TUnit dummyLoc

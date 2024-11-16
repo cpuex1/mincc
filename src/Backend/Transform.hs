@@ -51,20 +51,29 @@ genLabel tag = do
         e
             { generatedLabel = label + 1
             }
-    return $ mainLabel' <> "_" <> pack (show label) <> "_" <> tag
+    return $ mainLabel' <> "_" <> tag <> "_" <> pack (show label)
 
 transformCodeBlock :: (Eq stateTy) => IntermediateCodeBlock stateTy RegID -> [CodeBlock stateTy RegID]
 transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
-    blocks
-        $ execState
-            ( do
-                insertPrologue prologue
-                traverseInst inst
-            )
-        $ CodeBlockGenEnv [] label label 0 [] Return epilogue'
+    if label == "__entry"
+        then
+            -- If the block is the entry block, we can skip the prologue and the epilogue.
+            -- Also, we need to add a jump to the exit block.
+            blocks $
+                execState (traverseInst inst) $
+                    CodeBlockGenEnv [] label label 0 [] (Jmp "__exit") []
+        else
+            blocks
+                $ execState
+                    ( do
+                        insertPrologue prologue
+                        traverseInst inst
+                    )
+                $ CodeBlockGenEnv [] label label 0 [] Return epilogue'
   where
     insertPrologue :: (Eq stateTy) => [Inst stateTy RegID DisallowBranch] -> CodeBlockGenState stateTy RegID ()
     insertPrologue prologue' = do
+        term <- gets currentTerm
         modify $ \env ->
             env
                 { instBuf = prologue'
@@ -74,7 +83,7 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
         modify $ \env ->
             env
                 { currentLabel = mainLabel env <> "_start"
-                , currentTerm = Return
+                , currentTerm = term
                 }
 
     traverseInst :: (Eq stateTy) => [Inst stateTy RegID AllowBranch] -> CodeBlockGenState stateTy RegID ()
