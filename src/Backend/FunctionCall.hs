@@ -11,7 +11,7 @@ import Backend.BackendEnv (BackendEnv (fArgsLen), BackendStateT, RegID, genTempF
 import Backend.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
-import Syntax (IntBinOp (Add, Sub), Loc, dummyLoc)
+import Syntax (IntBinOp (Add), Loc, dummyLoc)
 
 saveArgs :: (Monad m) => IntermediateCodeBlock stateTy RegID -> BackendStateT m (IntermediateCodeBlock stateTy RegID)
 saveArgs (IntermediateCodeBlock label prologue inst epilogue) = do
@@ -189,7 +189,7 @@ registerBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) la
             then
                 []
             else
-                IIntOp dummyLoc Sub StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
+                IIntOp dummyLoc Add StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
             (\i arg -> IStore dummyLoc (TempReg arg) StackReg (i * 4))
