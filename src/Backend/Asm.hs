@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Backend.Asm (
     InstLabel,
@@ -50,7 +50,7 @@ module Backend.Asm (
 ) where
 
 import Data.Text (Text)
-import Syntax (FloatBinOp, IntBinOp, RelationBinOp, Loc)
+import Syntax (FloatBinOp, IntBinOp, Loc, RelationBinOp)
 
 type InstLabel = Text
 
@@ -106,7 +106,6 @@ data InstTerm stateTy idTy
 
 exitBlock :: CodeBlock Loc Int
 exitBlock = CodeBlock "__exit" [] Nop
-
 
 data AllowBranch = AllowBranch
     deriving (Show, Eq)
