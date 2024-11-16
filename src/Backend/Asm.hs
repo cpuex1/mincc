@@ -5,6 +5,7 @@ module Backend.Asm (
     InstLabel,
     Register (
         ZeroReg,
+        ReturnReg,
         RetReg,
         HeapReg,
         StackReg,
@@ -53,6 +54,7 @@ type InstLabel = Text
 
 data Register idTy ty where
     ZeroReg :: Register idTy ty
+    ReturnReg :: Register idTy Int
     RetReg :: Register idTy ty
     HeapReg :: Register idTy Int
     StackReg :: Register idTy Int
@@ -74,8 +76,11 @@ deriving instance (Eq idTy, Eq ty) => Eq (RegOrImm idTy ty)
 
 data IntermediateCodeBlock stateTy idTy
     = IntermediateCodeBlock
-        InstLabel
-        [Inst stateTy idTy AllowBranch]
+    { getICBLabel :: InstLabel
+    , getICBPrologue :: [Inst stateTy idTy DisallowBranch]
+    , getICBInst :: [Inst stateTy idTy AllowBranch]
+    , getICBEpilogue :: [Inst stateTy idTy DisallowBranch]
+    }
     deriving (Show, Eq)
 
 data CodeBlock stateTy idTy

@@ -3,6 +3,7 @@
 module Backend.FunctionCall (
     saveArgs,
     saveRegisters,
+    saveReturnAddress,
 ) where
 
 import Backend.Asm
@@ -13,9 +14,9 @@ import Data.Foldable (foldlM)
 import Syntax (IntBinOp (Add, Sub), Loc, dummyLoc)
 
 saveArgs :: (Monad m) => IntermediateCodeBlock stateTy RegID -> BackendStateT m (IntermediateCodeBlock stateTy RegID)
-saveArgs (IntermediateCodeBlock label inst) = do
+saveArgs (IntermediateCodeBlock label prologue inst epilogue) = do
     inst' <- saveArgs' inst
-    pure $ IntermediateCodeBlock label inst'
+    pure $ IntermediateCodeBlock label prologue inst' epilogue
   where
     saveArgs' :: (Monad m) => [Inst stateTy RegID AllowBranch] -> BackendStateT m [Inst stateTy RegID AllowBranch]
     saveArgs' inst'' = do
@@ -227,7 +228,7 @@ registerBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs'))
             then
                 []
             else
-                IIntOp dummyLoc Sub StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
+                IIntOp dummyLoc Add StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
             (\i arg -> IStore dummyLoc (TempReg arg) StackReg (i * 4))
@@ -267,5 +268,24 @@ registerBeyondCall (IBranch state op left right thenBlock elseBlock) =
 registerBeyondCall i = [substIState livenessLoc i]
 
 saveRegisters :: IntermediateCodeBlock Loc RegID -> IntermediateCodeBlock Loc RegID
-saveRegisters (IntermediateCodeBlock label inst) =
-    IntermediateCodeBlock label $ concatMap registerBeyondCall $ liveness inst
+saveRegisters (IntermediateCodeBlock label prologue inst epilogue) =
+    IntermediateCodeBlock label prologue (concatMap registerBeyondCall $ liveness inst) epilogue
+
+isCallingFunction :: Inst Loc RegID AllowBranch -> Bool
+isCallingFunction (IRichCall{}) = True
+isCallingFunction (IClosureCall{}) = True
+isCallingFunction (IBranch _ _ _ _ thenBlock elseBlock) =
+    any isCallingFunction thenBlock || any isCallingFunction elseBlock
+isCallingFunction _ = False
+
+saveReturnAddress :: IntermediateCodeBlock Loc RegID -> IntermediateCodeBlock Loc RegID
+saveReturnAddress (IntermediateCodeBlock label prologue inst epilogue) =
+    if any isCallingFunction inst
+        then
+            IntermediateCodeBlock
+                label
+                ([IIntOp dummyLoc Add StackReg StackReg (Imm (-4)), IStore dummyLoc ReturnReg StackReg 0] ++ prologue)
+                inst
+                (epilogue ++ [ILoad dummyLoc ReturnReg StackReg 0, IIntOp dummyLoc Add StackReg StackReg (Imm 4)])
+        else
+            IntermediateCodeBlock label prologue inst epilogue

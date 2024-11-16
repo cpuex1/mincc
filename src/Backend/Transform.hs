@@ -16,6 +16,7 @@ data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
     , generatedLabel :: Int
     , instBuf :: [Inst stateTy idTy DisallowBranch]
     , currentTerm :: InstTerm stateTy idTy
+    , epilogue :: [Inst stateTy idTy DisallowBranch]
     }
     deriving (Show, Eq)
 
@@ -28,11 +29,17 @@ insertBuf i =
             { instBuf = instBuf e ++ [i]
             }
 
-flushBuf :: CodeBlockGenState stateTy idTy ()
+flushBuf :: (Eq stateTy, Eq idTy) => CodeBlockGenState stateTy idTy ()
 flushBuf =
     modify $ \e ->
         e
-            { blocks = blocks e ++ [CodeBlock (currentLabel e) (instBuf e) (currentTerm e)]
+            { blocks =
+                blocks e
+                    ++ [ CodeBlock
+                            (currentLabel e)
+                            (instBuf e ++ if currentTerm e == Return then epilogue e else [])
+                            (currentTerm e)
+                       ]
             , instBuf = []
             }
 
@@ -46,11 +53,31 @@ genLabel tag = do
             }
     return $ mainLabel' <> "_" <> pack (show label) <> "_" <> tag
 
-transformCodeBlock :: IntermediateCodeBlock stateTy RegID -> [CodeBlock stateTy RegID]
-transformCodeBlock (IntermediateCodeBlock label inst) =
-    blocks $ execState (traverseInst inst) $ CodeBlockGenEnv [] label label 0 [] Return
+transformCodeBlock :: (Eq stateTy) => IntermediateCodeBlock stateTy RegID -> [CodeBlock stateTy RegID]
+transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
+    blocks
+        $ execState
+            ( do
+                insertPrologue prologue
+                traverseInst inst
+            )
+        $ CodeBlockGenEnv [] label label 0 [] Return epilogue'
   where
-    traverseInst :: [Inst stateTy RegID AllowBranch] -> CodeBlockGenState stateTy RegID ()
+    insertPrologue :: (Eq stateTy) => [Inst stateTy RegID DisallowBranch] -> CodeBlockGenState stateTy RegID ()
+    insertPrologue prologue' = do
+        modify $ \env ->
+            env
+                { instBuf = prologue'
+                , currentTerm = Nop
+                }
+        flushBuf
+        modify $ \env ->
+            env
+                { currentLabel = mainLabel env <> "_start"
+                , currentTerm = Return
+                }
+
+    traverseInst :: (Eq stateTy) => [Inst stateTy RegID AllowBranch] -> CodeBlockGenState stateTy RegID ()
     traverseInst [] = flushBuf
     traverseInst [IBranch state op left right thenInst elseInst] = do
         term <- gets currentTerm

@@ -12,7 +12,7 @@ module Compile (
 ) where
 
 import Backend.Asm
-import Backend.Liveness (LivenessLoc, liveness)
+import Backend.Liveness (LivenessLoc (LivenessLoc), LivenessState (LivenessState), liveness)
 import Backend.Lowering
 import Backend.RegisterAlloc (assignRegister)
 import Backend.Transform (transformCodeBlock)
@@ -83,7 +83,19 @@ livenessIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [Intermedia
 livenessIO = mapM livenessIO'
   where
     livenessIO' :: IntermediateCodeBlock Loc Int -> BackendIdentStateIO (IntermediateCodeBlock LivenessLoc Int)
-    livenessIO' (IntermediateCodeBlock label' inst) = pure $ IntermediateCodeBlock label' $ liveness inst
+    livenessIO' (IntermediateCodeBlock label' prologue inst epilogue) =
+        pure $
+            IntermediateCodeBlock
+                label'
+                prologue'
+                (liveness inst)
+                epilogue'
+      where
+        prologue' = map (substIState toLivenessLoc) prologue
+        epilogue' = map (substIState toLivenessLoc) epilogue
+
+    toLivenessLoc :: Loc -> LivenessLoc
+    toLivenessLoc loc = LivenessLoc loc (LivenessState [] [])
 
 assignRegisterIO :: [IntermediateCodeBlock LivenessLoc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
 assignRegisterIO = mapM assignRegister

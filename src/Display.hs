@@ -216,6 +216,7 @@ instance Display (TypeKind a) where
 
 instance Display (Register Int Int) where
     display ZeroReg = "zero"
+    display ReturnReg = "ra"
     display RetReg = "a0"
     display HeapReg = "hp"
     display StackReg = "sp"
@@ -371,7 +372,7 @@ instance Display LivenessLoc where
     display loc = display $ livenessState loc
 
 instance (Display stateTy) => Display (IntermediateCodeBlock stateTy Int) where
-    display (IntermediateCodeBlock label inst) =
+    display (IntermediateCodeBlock label _ inst _) =
         label
             <> ":\n"
             <> intercalate "\n" (Prelude.map (\i -> insertIndent 1 <> displayI i 1) inst)
