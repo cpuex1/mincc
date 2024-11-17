@@ -104,6 +104,13 @@ toInstI reg (Unary state Neg operand) = do
     operand' <- findI operand
     pure [IIntOp (getLoc state) Sub reg ZeroReg (Reg operand')]
 toInstI reg (Binary state (RelationOp op) operand1 operand2) = do
+    t <- liftB $ getTyOf operand1
+    case t of
+        TFloat -> do
+            operand1' <- findF operand1
+            operand2' <- findF operand2
+            pure [IFCompOp (getLoc state) op reg operand1' operand2']
+        _ -> do
             operand1' <- findI operand1
             operand2' <- findI operand2
             pure [ICompOp (getLoc state) op reg operand1' (Reg operand2')]
