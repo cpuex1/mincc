@@ -4,7 +4,6 @@
 module Backend.Transform (transformCodeBlock) where
 
 import Backend.Asm
-import Backend.BackendEnv (RegID)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Text (Text, pack)
 import Syntax (IntBinOp (Add))
@@ -137,6 +136,35 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
                 , currentTerm = term
                 }
         traverseInst rest
+    traverseInst [IRichCall state label' iArgs fArgs] = do
+        -- Check whether tail recursion optimization can be applied.
+        mainLabel' <- gets mainLabel
+        term <- gets currentTerm
+        if mainLabel' == label' && term == Return
+            then do
+                -- Found a tail call!
+                -- TODO: shuffle
+                mapM_
+                    ( \(arg, i) ->
+                        insertBuf $ IMov state (ArgsReg i) (Reg arg)
+                    )
+                    $ zip iArgs [0 ..]
+                mapM_
+                    ( \(arg, i) ->
+                        insertBuf $ IFMov state (ArgsReg i) (Reg arg)
+                    )
+                    $ zip fArgs [0 ..]
+                -- Jump to the start label of the function instead.
+                -- The prologue should be skipped.
+                modify $ \env ->
+                    env
+                        { currentTerm = Jmp $ mainLabel env <> "_start"
+                        }
+                flushBuf
+            else do
+                -- If not, just call a function.
+                transformInst $ IRichCall state label' iArgs fArgs
+                flushBuf
     traverseInst [inst'] = do
         transformInst inst'
         flushBuf
