@@ -12,7 +12,6 @@ import Backend.BackendEnv
 import Backend.FunctionCall (saveArgs, saveRegisters, saveReturnAddress)
 import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError))
-import Control.Monad.Reader (MonadTrans (lift))
 import Control.Monad.State (modify)
 import Display (display)
 import Error (CompilerError (OtherError))
@@ -31,7 +30,7 @@ toInstU (Const _ LUnit) = pure []
 toInstU (Put state dest idx src) = do
     dest' <- findI dest
     idx' <- findI idx
-    srcTy <- lift $ lift $ lift $ getTyOf src
+    srcTy <- liftB $ getTyOf src
     case srcTy of
         TFloat -> do
             src' <- findF src
@@ -54,14 +53,14 @@ toInstU (ClosureApp state func args) = do
     iArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty /= TFloat
             )
             args
     fArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty == TFloat
             )
             args
@@ -72,14 +71,14 @@ toInstU (DirectApp state func args) = do
     iArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty /= TFloat
             )
             args
     fArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty == TFloat
             )
             args
@@ -105,9 +104,9 @@ toInstI reg (Unary state Neg operand) = do
     operand' <- findI operand
     pure [IIntOp (getLoc state) Sub reg ZeroReg (Reg operand')]
 toInstI reg (Binary state (RelationOp op) operand1 operand2) = do
-    operand1' <- findI operand1
-    operand2' <- findI operand2
-    pure [ICompOp (getLoc state) op reg operand1' (Reg operand2')]
+            operand1' <- findI operand1
+            operand2' <- findI operand2
+            pure [ICompOp (getLoc state) op reg operand1' (Reg operand2')]
 toInstI reg (Binary state (IntOp op) operand1 operand2) = do
     operand1' <- findI operand1
     operand2' <- findI operand2
@@ -123,7 +122,7 @@ toInstI reg (Tuple state vars) = do
     inst <-
         mapM
             ( \(index, var) -> do
-                varTy <- lift $ lift $ lift $ getTyOf var
+                varTy <- liftB $ getTyOf var
                 case varTy of
                     TFloat -> do
                         var' <- findF var
@@ -139,7 +138,7 @@ toInstI reg (Tuple state vars) = do
                , IIntOp (getLoc state) Add HeapReg HeapReg (Imm $ length vars * 4)
                ]
 toInstI reg (ArrayCreate state size initVal) = do
-    initValTy <- lift $ lift $ lift $ getTyOf initVal
+    initValTy <- liftB $ getTyOf initVal
     size' <- findI size
     offset <- genTempIReg
     case initValTy of
@@ -173,14 +172,14 @@ toInstI reg (MakeClosure state func freeV) = do
     iFreeV <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty /= TFloat
             )
             freeV
     fFreeV <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty == TFloat
             )
             freeV
@@ -191,14 +190,14 @@ toInstI reg (DirectApp state func args) = do
     iArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty /= TFloat
             )
             args
     fArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty == TFloat
             )
             args
@@ -217,14 +216,14 @@ toInstI reg (ClosureApp state func args) = do
     iArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty /= TFloat
             )
             args
     fArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty == TFloat
             )
             args
@@ -276,14 +275,14 @@ toInstF reg (DirectApp state func args) = do
     iArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty /= TFloat
             )
             args
     fArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty == TFloat
             )
             args
@@ -302,14 +301,14 @@ toInstF reg (ClosureApp state func args) = do
     iArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty /= TFloat
             )
             args
     fArgs <-
         filterM
             ( \arg -> do
-                ty <- lift $ lift $ lift $ getTyOf arg
+                ty <- liftB $ getTyOf arg
                 pure $ ty == TFloat
             )
             args
@@ -346,7 +345,7 @@ toInst iReg fReg (Let _ PUnit expr body) = do
     body' <- toInst iReg fReg body
     pure $ expr' ++ body'
 toInst iReg fReg (Let _ (PVar v) expr body) = do
-    vTy <- lift $ lift $ lift $ getTyOf v
+    vTy <- liftB $ getTyOf v
     case vTy of
         TFloat -> do
             v' <- genFReg v
@@ -364,7 +363,7 @@ toInst iReg fReg (Let state (PTuple vals) expr body) = do
     store <-
         mapM
             ( \(idx, val) -> do
-                ty <- lift $ lift $ lift $ getTyOf val
+                ty <- liftB $ getTyOf val
                 case ty of
                     TFloat -> do
                         val' <- genFReg val
@@ -396,28 +395,28 @@ toInstructions function = do
         iBoundedArgs <-
             filterM
                 ( \v -> do
-                    ty <- lift $ lift $ lift $ getTyOf v
+                    ty <- liftB $ getTyOf v
                     pure $ ty /= TFloat
                 )
                 boundedArgs'
         fBoundedArgs <-
             filterM
                 ( \v -> do
-                    ty <- lift $ lift $ lift $ getTyOf v
+                    ty <- liftB $ getTyOf v
                     pure $ ty == TFloat
                 )
                 boundedArgs'
         iFreeVars <-
             filterM
                 ( \v -> do
-                    ty <- lift $ lift $ lift $ getTyOf v
+                    ty <- liftB $ getTyOf v
                     pure $ ty /= TFloat
                 )
                 freeVars'
         fFreeVars <-
             filterM
                 ( \v -> do
-                    ty <- lift $ lift $ lift $ getTyOf v
+                    ty <- liftB $ getTyOf v
                     pure $ ty == TFloat
                 )
                 freeVars'

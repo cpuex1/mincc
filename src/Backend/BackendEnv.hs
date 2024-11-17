@@ -25,15 +25,14 @@ module Backend.BackendEnv (
     findF,
 ) where
 
-import Backend.Asm (Register (TempReg))
+import Backend.Asm (Register (TempReg), RegID)
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
 import Error (CompilerError (OtherError))
 import Syntax (Ident)
-
-type RegID = Int
+import Display (display)
 
 newtype BackendConfig = BackendConfig
     { argLimit :: Int
@@ -107,7 +106,7 @@ findI ident = do
     case regID of
         Just actual -> pure actual
         Nothing -> do
-            throwError $ OtherError "Detected an unknown non-float identifier."
+            throwError $ OtherError $ "Detected an unknown non-float identifier named " <> display ident <> "."
 
 findF :: (Monad m) => Ident -> BackendStateT m (Register RegID Float)
 findF ident = do
@@ -115,4 +114,4 @@ findF ident = do
     case regID of
         Just actual -> pure actual
         Nothing -> do
-            throwError $ OtherError "Detected an unknown float identifier."
+            throwError $ OtherError $ "Detected an unknown float identifier named " <> display ident <> "."

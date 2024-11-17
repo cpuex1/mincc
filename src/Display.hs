@@ -5,7 +5,6 @@
 module Display (display) where
 
 import Backend.Asm
-import Backend.BackendEnv (RegID)
 import Backend.Liveness (LivenessLoc (livenessState), LivenessState (fAlive, iAlive))
 import Data.Text
 import Syntax

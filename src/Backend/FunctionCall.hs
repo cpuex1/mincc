@@ -7,7 +7,7 @@ module Backend.FunctionCall (
 ) where
 
 import Backend.Asm
-import Backend.BackendEnv (BackendEnv (fArgsLen), BackendStateT, RegID, genTempFReg, genTempIReg, iArgsLen)
+import Backend.BackendEnv (BackendEnv (fArgsLen), BackendStateT, genTempFReg, genTempIReg, iArgsLen)
 import Backend.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)

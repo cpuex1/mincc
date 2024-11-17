@@ -3,6 +3,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 module Backend.Asm (
+    RegID,
     InstLabel,
     Register (
         ZeroReg,
@@ -52,6 +53,7 @@ module Backend.Asm (
 import Data.Text (Text)
 import Syntax (FloatBinOp, IntBinOp, Loc, RelationBinOp)
 
+type RegID = Int
 type InstLabel = Text
 
 data Register idTy ty where

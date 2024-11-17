@@ -9,7 +9,6 @@ module Backend.Liveness (
 ) where
 
 import Backend.Asm
-import Backend.BackendEnv (RegID)
 import Control.Monad (unless)
 import Control.Monad.State (MonadState (get, put), State, evalState, gets, modify)
 import Syntax (Loc)
