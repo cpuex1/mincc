@@ -25,14 +25,14 @@ module Backend.BackendEnv (
     findF,
 ) where
 
-import Backend.Asm (Register (TempReg), RegID)
+import Backend.Asm (RegID, Register (TempReg))
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
+import Display (display)
 import Error (CompilerError (OtherError))
 import Syntax (Ident)
-import Display (display)
 
 newtype BackendConfig = BackendConfig
     { argLimit :: Int
