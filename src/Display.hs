@@ -247,7 +247,7 @@ instance (Display stateTy) => DisplayI (Inst stateTy Int branchTy) where
         toOp Ge = "sge"
         toOp Lt = "slt"
     displayI (IFCompOp state op lhs rhs1 rhs2) _ =
-        toOp op <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2 <> display state
+        toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2 <> display state
       where
         toOp :: RelationBinOp -> Text
         toOp Eq = "feq"

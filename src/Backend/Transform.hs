@@ -211,7 +211,8 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
                 insertBuf $ IFMov state (ArgsReg i) (Reg arg)
             )
             $ zip fArgs [0 ..]
-        insertBuf $ ICallReg state cl
+        insertBuf $ ILoad state (TempReg 0) cl 0
+        insertBuf $ ICallReg state (TempReg 0)
     transformInst (IMakeClosure state dest label' iFreeV fFreeV) = do
         insertBuf $ ILMov state dest label'
         insertBuf $ IStore state dest HeapReg 0
@@ -226,7 +227,7 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
             )
             $ zip fFreeV [1 + length iFreeV ..]
         insertBuf $ IMov state dest (Reg HeapReg)
-        insertBuf $ IIntOp state Add HeapReg HeapReg (Imm $ 1 + length iFreeV + length fFreeV)
+        insertBuf $ IIntOp state Add HeapReg HeapReg (Imm $ 4 * (1 + length iFreeV + length fFreeV))
     transformInst (ILoad state dest src offset) =
         insertBuf $ ILoad state dest src offset
     transformInst (IStore state dest src offset) =
