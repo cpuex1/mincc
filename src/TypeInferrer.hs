@@ -15,7 +15,6 @@ module TypeInferrer (
 import Control.Monad (void)
 import Control.Monad.Except (ExceptT, MonadError (catchError, throwError), runExceptT)
 import Control.Monad.State
-import Data.Foldable (find, for_)
 import Display
 import Error (CompilerError (TypeError))
 import Syntax
@@ -40,10 +39,10 @@ defaultEnv :: TypeEnv
 defaultEnv = TypeEnv 0 [] []
 
 genNewId :: TypingM TypeId
-genNewId =
-    get >>= \env ->
-        modify (\e -> e{assigned = assigned e + 1, table = table e ++ [Nothing]})
-            >> return (assigned env)
+genNewId = do
+    a <- gets assigned
+    modify (\e -> e{assigned = assigned e + 1, table = table e ++ [Nothing]})
+    pure a
 
 fromTypeId :: TypeId -> TypingM (Maybe ITy)
 fromTypeId tId = get >>= \env -> return $ table env !! tId
@@ -51,7 +50,7 @@ fromTypeId tId = get >>= \env -> return $ table env !! tId
 registerIdent :: Ident -> TypingM ()
 registerIdent ident = do
     env <- get
-    case find ((== ident) . fst) $ variables env of
+    case lookup ident $ variables env of
         Just _ -> pure ()
         Nothing -> do
             tId <- genNewId
@@ -64,37 +63,29 @@ registerAll (RGuard expr) =
 getTyOfIdent :: Ident -> TypingM TypeId
 getTyOfIdent ident = do
     env <- get
-    case find ((== ident) . fst) $ variables env of
-        Just (_, tId) ->
+    case lookup ident $ variables env of
+        Just tId ->
             pure tId
-        Nothing -> throwError $ TypeError Nothing "Detected an identifier not tracked"
+        Nothing -> throwError $ TypeError (Just $ identLoc ident) "Detected an identifier not tracked"
 
 updateEnv :: TypeId -> ITy -> TypingM ()
 updateEnv typeId ty = do
     env <- get
-    let env' =
-            map
-                ( \case
-                    Just ty' -> Just $ updateTy typeId ty ty'
-                    Nothing -> Nothing
-                )
-                $ replaceWithIdx typeId ty (table env)
-     in modify (\e -> e{table = env'})
-    pure ()
+    env' <-
+        mapM
+            ( \case
+                Just ty' -> do
+                    t <- resolveTy ty'
+                    pure $ Just t
+                Nothing -> pure Nothing
+            )
+            $ replaceWithIdx typeId ty (table env)
+    modify (\e -> e{table = env'})
   where
     replaceWithIdx :: Int -> ITy -> [Maybe ITy] -> [Maybe ITy]
     replaceWithIdx _ _ [] = []
     replaceWithIdx 0 replaced (_ : xs) = Just replaced : xs
     replaceWithIdx idx replaced (x : xs) = x : replaceWithIdx (idx - 1) replaced xs
-
-    updateTy :: TypeId -> ITy -> ITy -> ITy
-    updateTy tId replaced (TVar tId')
-        | tId == tId' = replaced
-        | otherwise = TVar tId'
-    updateTy tId replaced (TFun args ret) = TFun (map (updateTy tId replaced) args) (updateTy tId replaced ret)
-    updateTy tId replaced (TTuple values) = TTuple $ map (updateTy tId replaced) values
-    updateTy tId replaced (TArray value) = TArray $ updateTy tId replaced value
-    updateTy _ _ ty' = ty'
 
 -- | Remove all type variables from a type.
 removeVar :: TypeEnv -> ITy -> Ty
@@ -107,6 +98,20 @@ removeVar env ty =
                 Right ty' -> pure ty'
         )
         env
+
+resolveTy :: ITy -> TypingM ITy
+resolveTy TUnit = pure TUnit
+resolveTy TBool = pure TBool
+resolveTy TInt = pure TInt
+resolveTy TFloat = pure TFloat
+resolveTy (TFun args ret) = TFun <$> mapM resolveTy args <*> resolveTy ret
+resolveTy (TTuple values) = TTuple <$> mapM resolveTy values
+resolveTy (TArray value) = TArray <$> resolveTy value
+resolveTy (TVar tId) = do
+    t <- fromTypeId tId
+    case t of
+        Just t' -> resolveTy t'
+        Nothing -> pure $ TVar tId
 
 applyEnv :: ITy -> TypingM Ty
 applyEnv TUnit = pure TUnit
@@ -144,10 +149,10 @@ occurCheck tId (TTuple values) = mapM_ (occurCheck tId) values
 occurCheck tId (TArray value) = occurCheck tId value
 occurCheck tId (TVar tId') = do
     if tId == tId'
-        then throwError $ TypeError Nothing "Recursive type"
+        then throwError $ TypeError Nothing "Recursive type detected"
         else do
             ty <- fromTypeId tId'
-            for_ ty $ \ty' -> occurCheck tId ty'
+            mapM_ (occurCheck tId) ty
 
 unifyList :: [ITy] -> [ITy] -> TypingM ()
 unifyList [] [] = pure ()
@@ -166,28 +171,29 @@ unify (TFun args1 ret1) (TFun args2 ret2) = do
 unify (TTuple values1) (TTuple values2) = unifyList values1 values2
 unify (TArray value1) (TArray value2) = unify value1 value2
 unify (TVar tId) rTy = do
-    if rTy == TVar tId
+    rTy' <- resolveTy rTy
+    if rTy' == TVar tId
         then
             pure ()
         else do
-            lTy <- fromTypeId tId
-            case lTy of
-                Just lTy' -> unify lTy' rTy
-                Nothing -> do
-                    occurCheck tId rTy
-                    updateEnv tId rTy
+            lTy <- resolveTy (TVar tId)
+            if lTy == TVar tId
+                then do
+                    -- The type variable is not yet assigned.
+                    occurCheck tId rTy'
+                    updateEnv tId rTy'
+                else
+                    unify lTy rTy'
 unify lTy (TVar tId) = unify (TVar tId) lTy
 unify _ _ = throwError $ TypeError Nothing "Type mismatch"
 
 doUnify :: Loc -> ITy -> ITy -> TypingM ()
 doUnify pos ty1 ty2 = do
     catchError (unify ty1 ty2) $
-        const
-            ( do
-                expected <- applyEnv ty1
-                actual <- applyEnv ty2
-                throwError $ TypeError (Just pos) $ "Expected type " <> display expected <> " but got " <> display actual
-            )
+        const $ do
+            expected <- resolveTy ty1
+            actual <- resolveTy ty2
+            throwError $ TypeError (Just pos) $ "Expected type " <> display expected <> " but got " <> display actual
 
 inferType :: ResolvedExpr -> (Either CompilerError TypedExpr, TypeEnv)
 inferType expr = runState (runExceptT $ inferE expr) defaultEnv
