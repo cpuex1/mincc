@@ -79,6 +79,7 @@ executable mincc
       Cabal
     , ansi-terminal
     , base >=4.7 && <5
+    , bytestring
     , containers
     , hspec
     , megaparsec

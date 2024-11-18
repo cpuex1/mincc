@@ -19,8 +19,10 @@ import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
+import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Class
-import qualified Data.Text.IO as TIO
+import qualified Data.ByteString as B
+import Data.Text.Encoding (decodeUtf8)
 import Error
 import Flatten (flattenExpr)
 import IdentAnalysis (loadTypeEnv)
@@ -34,8 +36,8 @@ import TypeInferrer (inferType)
 
 parseIO :: FilePath -> ConfigIO ParsedExpr
 parseIO path = do
-    content <- lift $ lift $ TIO.readFile path
-    case parse (parseExpr <* eof) path content of
+    content <- liftIO $ B.readFile path
+    case parse (parseExpr <* eof) path $ decodeUtf8 content of
         Left err ->
             throwError $ ParserError err
         Right expr -> do
