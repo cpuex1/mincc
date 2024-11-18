@@ -205,7 +205,7 @@ parseExpr :: Parser ParsedExpr
 parseExpr =
     do
         spaced
-        parseExprWithPrecedence 9
+        parseExprWithPrecedence 6
         <?> "an expression"
   where
     parseExprWithPrecedence :: Int -> Parser ParsedExpr
@@ -217,8 +217,8 @@ parseExpr =
 
     parseExprWithPrecedence' :: Int -> Parser ParsedExpr
     parseExprWithPrecedence' precedence
-        | precedence > 9 = error "Invalid precedence"
-        | precedence == 9 = do
+        | precedence > 6 = error $ "Invalid precedence " <> show precedence
+        | precedence == 6 = do
             -- Let
             pos <- getSourcePos
             parseKeyword "let"
@@ -226,16 +226,16 @@ parseExpr =
             cSymbol '='
             value <- parseExpr
             parseKeyword "in"
-            expr <- parseExprWithPrecedence 9
+            expr <- parseExprWithPrecedence 6
             pure (PGuard (Let (fromSourcePos pos) pat (pExp value) (pExp expr)))
-        | precedence == 8 = do
+        | precedence == 5 = do
             -- Then
             pos <- getSourcePos
-            left <- parseExprWithPrecedence 7
+            left <- parseExprWithPrecedence 4
             cSymbol ';'
             PGuard . Let (fromSourcePos pos) PUnit (pExp left) . pExp
                 <$> parseExpr
-        | precedence == 7 = do
+        | precedence == 4 = do
             -- If
             pos <- getSourcePos
             parseKeyword "if"
@@ -245,7 +245,7 @@ parseExpr =
             parseKeyword "else"
             PGuard . If (fromSourcePos pos) cond (pExp then') . pExp
                 <$> parseExpr
-        | precedence == 6 = do
+        | precedence == 3 = do
             -- Put
             pos <- getSourcePos
             left <- parseSimpleExpr
@@ -254,63 +254,45 @@ parseExpr =
                     right <- symbol "<-" >> parseExpr
                     return $ PGuard (Put (fromSourcePos pos) a idx right)
                 _ -> fail "a Put expression"
-        | precedence == 5 = do
+        | precedence == 2 = do
             -- RelationBinOp
             pos <- getSourcePos
             makeExprParser
-                (parseExprWithPrecedence 4)
+                (parseExprWithPrecedence 1)
                 [
+                    [
+                        Prefix (do
+                                symbol "-."
+                                pure $ PGuard . Unary (fromSourcePos pos) FNeg
+                            ),
+                        Prefix (do
+                                symbol "-"
+                                pure $ PGuard . Unary (fromSourcePos pos) Neg
+                            )
+                    ],
+                    [ InfixL
+                        ( do
+                            op <- parseFactorOp
+                            pure (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
+                        )
+                    ],
+                    [ InfixL
+                        ( do
+                            op <- parseTermOp
+                            pure (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
+                        )
+                    ],
                     [ InfixL
                         ( do
                             (flipped, op) <- parseRelationBinOp
                             if flipped
                                 then
-                                    return (\left right -> PGuard (Binary (fromSourcePos pos) op right left))
+                                    pure (\left right -> PGuard (Binary (fromSourcePos pos) op right left))
                                 else
-                                    return (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
+                                    pure (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
                         )
                     ]
                 ]
-        | precedence == 4 = do
-            -- TermOp
-            pos <- getSourcePos
-            makeExprParser
-                (parseExprWithPrecedence 3)
-                [
-                    [ InfixL
-                        ( parseTermOp
-                            >>= \op -> return (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
-                        )
-                    ]
-                ]
-        | precedence == 3 = do
-            -- FactorOp
-            pos <- getSourcePos
-            makeExprParser
-                (parseExprWithPrecedence 2)
-                [
-                    [ InfixL
-                        ( parseFactorOp
-                            >>= \op -> return (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
-                        )
-                    ]
-                ]
-        | precedence == 2 = do
-            pos <- getSourcePos
-            -- FNeg
-            try
-                ( do
-                    symbol "-."
-                    expr <- parseExprWithPrecedence 2
-                    pure $ PGuard (Unary (fromSourcePos pos) FNeg expr)
-                )
-                -- Neg
-                <|> try
-                    ( do
-                        cSymbol '-'
-                        expr <- parseExprWithPrecedence 2
-                        pure $ PGuard (Unary (fromSourcePos pos) Neg expr)
-                    )
         | precedence == 1 = do
             pos <- getSourcePos
             -- App
