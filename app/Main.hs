@@ -28,6 +28,7 @@ import IdentAnalysis (IdentEnvT (runIdentEnvT), defaultIdentE, reportEnv)
 import Log
 import Path
 import Syntax (Function, ResolvedExpr)
+import System.Exit (exitWith, ExitCode (ExitFailure))
 
 main :: IO ()
 main = do
@@ -83,6 +84,7 @@ execArgs = do
         $ \err -> do
             mapM_ (printTextLog Error) $ displayError err
             printLog Error "Compilation failed"
+            liftIO $ exitWith $ ExitFailure 1
 
 execArgsWithIdent :: [ResolvedExpr] -> IdentEnvIO ()
 execArgsWithIdent resolvedExprs = do

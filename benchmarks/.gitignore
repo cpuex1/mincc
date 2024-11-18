@@ -1,0 +1,13 @@
+# RINANA assembler "r72b"
+r72b
+config.json
+
+# Simulator files
+simulation/
+
+# Intermediate files
+build/
+
+# Output files
+out.*
+*.txt
