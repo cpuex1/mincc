@@ -199,20 +199,27 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
             $ zip fArgs [0 ..]
         insertBuf $ ICall state label'
     transformInst (IClosureCall state cl iArgs fArgs) = do
+        -- Make sure the closure is not in an argument register.
+        cl' <- case cl of
+            ArgsReg _ -> do
+                insertBuf $ IMov state (TempReg 1) (Reg cl)
+                pure $ TempReg 1
+            _ -> pure cl
+
         -- TODO: shuffle
         mapM_
             ( \(arg, i) ->
                 insertBuf $ IMov state (ArgsReg i) (Reg arg)
             )
             $ zip iArgs [0 ..]
-        insertBuf $ IIntOp state Add (ArgsReg (length iArgs)) cl (Imm 4)
+        insertBuf $ IIntOp state Add (ArgsReg (length iArgs)) cl' (Imm 4)
         mapM_
             ( \(arg, i) ->
                 insertBuf $ IFMov state (ArgsReg i) (Reg arg)
             )
             $ zip fArgs [0 ..]
-        insertBuf $ ILoad state (TempReg 0) cl 0
-        insertBuf $ ICallReg state (TempReg 0)
+        insertBuf $ ILoad state (TempReg 2) cl' 0
+        insertBuf $ ICallReg state (TempReg 2)
     transformInst (IMakeClosure state dest label' iFreeV fFreeV) = do
         insertBuf $ ILMov state dest label'
         insertBuf $ IStore state dest HeapReg 0
