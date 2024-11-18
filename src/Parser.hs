@@ -39,8 +39,8 @@ cSymbol = lexeme . void . char
 -- | An identifier parser
 parseIdent :: Parser RawIdent
 parseIdent =
-    try
-        ( lexeme $ do
+    lexeme
+        ( do
             pos <- getSourcePos
             firstChar <- lowerChar <|> char '_'
             name <- takeWhileP (Just "an identifier") (\c -> isAlphaNum c || c == '_')
@@ -60,11 +60,12 @@ parseKeyword word =
 parseLiteral :: Parser Literal
 parseLiteral =
     lexeme
-        ( try (cSymbol '(' >> cSymbol ')' >> return LUnit)
-            <|> try (parseKeyword "true" >> return (LBool True))
-            <|> try (parseKeyword "false" >> return (LBool False))
+        ( (cSymbol '(' >> cSymbol ')' >> return LUnit)
+            <|> (parseKeyword "true" >> return (LBool True))
+            <|> (parseKeyword "false" >> return (LBool False))
+            -- Can consume a numeric.
             <|> try (parseFloat >>= \num -> return $ LFloat num)
-            <|> try (parseNum >>= \num -> return $ LInt num)
+            <|> (parseNum >>= \num -> return $ LInt num)
         )
         <?> "a literal"
   where
@@ -74,8 +75,7 @@ parseLiteral =
     parseNumStr :: Parser String
     parseNumStr =
         try (char '0' >> return "0")
-            <|> try
-                ( do
+            <|> ( do
                     num <- satisfy isNonZero
                     rest <- takeWhileP Nothing isDigit
                     return $ num : unpack rest
@@ -86,54 +86,50 @@ parseLiteral =
         read <$> parseNumStr
 
     parseFloat :: Parser Float
-    parseFloat =
-        try $
-            do
-                sign <- option "" $ string "-"
-                num <- parseNumStr
-                _ <- char '.'
-                num2 <- many digitChar
-                e <- option "" parseExp
-                pure $ read $ (if null num2 then unpack sign ++ num else unpack sign ++ num ++ "." ++ num2) ++ e
+    parseFloat = do
+        sign <- option "" $ string "-"
+        num <- parseNumStr
+        _ <- char '.'
+        num2 <- many digitChar
+        e <- option "" parseExp
+        pure $ read $ (if null num2 then unpack sign ++ num else unpack sign ++ num ++ "." ++ num2) ++ e
       where
         parseExp :: Parser String
-        parseExp =
-            try $
-                do
-                    _ <- char 'e' <|> char 'E'
-                    sign <- option "" (string "+" <|> string "-")
-                    num <- many digitChar
-                    pure $ "e" ++ unpack sign ++ num
+        parseExp = do
+            _ <- char 'e' <|> char 'E'
+            sign <- option "" (string "+" <|> string "-")
+            num <- many digitChar
+            pure $ "e" ++ unpack sign ++ num
 
 parseRelationBinOp :: Parser (Bool, BinaryOp)
 parseRelationBinOp =
     lexeme
-        ( try (string "=" >> pure (False, RelationOp Eq))
-            <|> try (string "<=" >> pure (True, RelationOp Ge))
-            <|> try (string ">=" >> pure (False, RelationOp Ge))
-            <|> try (string "<>" >> pure (False, RelationOp Ne))
-            <|> try (string "<" >> pure (False, RelationOp Lt))
-            <|> try (string ">" >> pure (True, RelationOp Lt))
+        ( (string "=" >> pure (False, RelationOp Eq))
+            <|> (string "<=" >> pure (True, RelationOp Ge))
+            <|> (string ">=" >> pure (False, RelationOp Ge))
+            <|> (string "<>" >> pure (False, RelationOp Ne))
+            <|> (string "<" >> pure (False, RelationOp Lt))
+            <|> (string ">" >> pure (True, RelationOp Lt))
         )
         <?> "a relation binary operator"
 
 parseTermOp :: Parser BinaryOp
 parseTermOp =
     lexeme
-        ( try (string "+." >> pure (FloatOp FAdd))
-            <|> try (string "-." >> pure (FloatOp FSub))
-            <|> try (string "+" >> pure (IntOp Add))
-            <|> try (string "-" >> pure (IntOp Sub))
+        ( (string "+." >> pure (FloatOp FAdd))
+            <|> (string "-." >> pure (FloatOp FSub))
+            <|> (string "+" >> pure (IntOp Add))
+            <|> (string "-" >> pure (IntOp Sub))
         )
         <?> "a term operator"
 
 parseFactorOp :: Parser BinaryOp
 parseFactorOp =
     lexeme
-        ( try (string "*." >> pure (FloatOp FMul))
-            <|> try (string "/." >> pure (FloatOp FDiv))
-            <|> try (string "*" >> pure (IntOp Mul))
-            <|> try (string "/" >> pure (IntOp Div))
+        ( (string "*." >> pure (FloatOp FMul))
+            <|> (string "/." >> pure (FloatOp FDiv))
+            <|> (string "*" >> pure (IntOp Mul))
+            <|> (string "/" >> pure (IntOp Div))
         )
         <?> "a factor operator"
 
@@ -142,23 +138,21 @@ parsePattern :: Parser (Pattern RawIdent)
 parsePattern =
     lexeme
         ( -- PRec
-          try
-            ( do
+          ( do
                 parseKeyword "rec"
                 ident <- parseIdent
                 idents <- some parseIdent
                 pure (PRec ident idents)
-            )
+          )
             -- PTuple
-            <|> try
-                ( do
+            <|> ( do
                     cSymbol '('
                     idents <- sepBy1 parseIdent (cSymbol ',')
                     cSymbol ')'
                     pure (PTuple idents)
                 )
             -- PVar
-            <|> try (parseIdent >>= \ident -> return (PVar ident))
+            <|> (parseIdent >>= \ident -> return (PVar ident))
         )
         <?> "a pattern"
 
@@ -167,11 +161,12 @@ parseSimpleExpr :: Parser ParsedExpr
 parseSimpleExpr =
     ( do
         pos <- getSourcePos
-        -- Expr with parentheses
         expr <-
             lexeme $
+                -- Expr with parentheses
                 try (between (cSymbol '(') (cSymbol ')') parseExpr)
                     -- Tuple
+                    -- Can backtrack due to the existence of unit.
                     <|> try
                         ( do
                             exprs <-
@@ -196,13 +191,12 @@ parseSimpleExpr =
     parseSimpleExpr' expr1 =
         -- Get
         lexeme $
-            try
-                ( do
-                    pos <- getSourcePos
-                    cSymbol '.'
-                    expr2 <- between (cSymbol '(') (cSymbol ')') parseExpr
-                    parseSimpleExpr' (PGuard (Get (fromSourcePos pos) expr1 expr2))
-                )
+            ( do
+                pos <- getSourcePos
+                cSymbol '.'
+                expr2 <- between (cSymbol '(') (cSymbol ')') parseExpr
+                parseSimpleExpr' (PGuard (Get (fromSourcePos pos) expr1 expr2))
+            )
                 -- ... or None
                 <|> return expr1
 
