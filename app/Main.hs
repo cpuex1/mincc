@@ -28,7 +28,7 @@ import IdentAnalysis (IdentEnvT (runIdentEnvT), defaultIdentE, reportEnv)
 import Log
 import Path
 import Syntax (Function, ResolvedExpr)
-import System.Exit (exitWith, ExitCode (ExitFailure))
+import System.Exit (ExitCode (ExitFailure), exitWith)
 
 main :: IO ()
 main = do
