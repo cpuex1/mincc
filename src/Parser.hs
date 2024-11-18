@@ -236,15 +236,10 @@ parseExpr =
         | precedence == 8 = do
             -- Then
             pos <- getSourcePos
-            makeExprParser
-                (parseExprWithPrecedence 7)
-                [
-                    [ InfixR
-                        ( cSymbol ';'
-                            >> return (\left right -> PGuard (Let (fromSourcePos pos) PUnit (pExp left) (pExp right)))
-                        )
-                    ]
-                ]
+            left <- parseExprWithPrecedence 7
+            cSymbol ';'
+            PGuard . Let (fromSourcePos pos) PUnit (pExp left) . pExp
+                <$> parseExpr
         | precedence == 7 = do
             -- If
             pos <- getSourcePos
