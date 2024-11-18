@@ -257,7 +257,7 @@ parseExpr =
             left <- parseSimpleExpr
             case left of
                 PGuard (Get _ a idx) -> do
-                    right <- symbol "<-" >> parseExprWithPrecedence 5
+                    right <- symbol "<-" >> parseExpr
                     return $ PGuard (Put (fromSourcePos pos) a idx right)
                 _ -> fail "a Put expression"
         | precedence == 5 = do
