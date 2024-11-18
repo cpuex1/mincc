@@ -260,28 +260,32 @@ parseExpr =
             makeExprParser
                 (parseExprWithPrecedence 1)
                 [
-                    [
-                        Prefix (do
-                                symbol "-."
-                                pure $ PGuard . Unary (fromSourcePos pos) FNeg
-                            ),
-                        Prefix (do
-                                symbol "-"
-                                pure $ PGuard . Unary (fromSourcePos pos) Neg
-                            )
-                    ],
+                    [ Prefix
+                        ( do
+                            symbol "-."
+                            pure $ PGuard . Unary (fromSourcePos pos) FNeg
+                        )
+                    , Prefix
+                        ( do
+                            symbol "-"
+                            pure $ PGuard . Unary (fromSourcePos pos) Neg
+                        )
+                    ]
+                ,
                     [ InfixL
                         ( do
                             op <- parseFactorOp
                             pure (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
                         )
-                    ],
+                    ]
+                ,
                     [ InfixL
                         ( do
                             op <- parseTermOp
                             pure (\left right -> PGuard (Binary (fromSourcePos pos) op left right))
                         )
-                    ],
+                    ]
+                ,
                     [ InfixL
                         ( do
                             (flipped, op) <- parseRelationBinOp
