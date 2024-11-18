@@ -329,7 +329,7 @@ parseExpr =
                 -- ArrayCreate
                 <|> try
                     ( do
-                        parseKeyword "Array.create"
+                        parseKeyword "Array.create" <|> parseKeyword "Array.make"
                         expr1 <- parseSimpleExpr
                         expr2 <- parseExprWithPrecedence 1
                         pure $ PGuard (ArrayCreate (fromSourcePos pos) expr1 expr2)
