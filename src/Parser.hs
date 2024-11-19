@@ -246,7 +246,7 @@ parseExpr =
             cSymbol '='
             value <- parseExpr
             parseKeyword "in"
-            expr <- parseExprWithPrecedence 6
+            expr <- parseExprWithPrecedence 7
             case pat of
                 PRec func args -> do
                     -- If the pattern is a PRec, it should be curried.
@@ -286,7 +286,7 @@ parseExpr =
             left <- parseSimpleExpr
             case left of
                 PGuard (Get _ a idx) -> do
-                    right <- symbol "<-" >> parseExpr
+                    right <- symbol "<-" >> parseSimpleExpr
                     return $ PGuard (Put (fromSourcePos pos) a idx right)
                 _ -> fail "a Put expression"
         | precedence == 2 = do
