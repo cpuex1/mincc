@@ -181,8 +181,9 @@ registerBeyondCall :: Inst LivenessLoc RegID AllowBranch -> [Inst Loc RegID Allo
 registerBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) label iArgs fArgs) =
     prologue ++ [IRichCall loc label iArgs fArgs] ++ epilogue
   where
-    iToBeSaved = filter ((`notElem` iArgs) . TempReg) iArgs'
-    fToBeSaved = filter ((`notElem` fArgs) . TempReg) fArgs'
+    -- TODO: Look ahead!
+    iToBeSaved = iArgs'
+    fToBeSaved = fArgs'
 
     prologue =
         if null iToBeSaved && null fToBeSaved
@@ -220,8 +221,9 @@ registerBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) la
 registerBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) cl iArgs fArgs) =
     prologue ++ [IClosureCall loc cl iArgs fArgs] ++ epilogue
   where
-    iToBeSaved = filter ((`notElem` iArgs) . TempReg) iArgs'
-    fToBeSaved = filter ((`notElem` fArgs) . TempReg) fArgs'
+    -- TODO: Look ahead!
+    iToBeSaved = iArgs'
+    fToBeSaved = fArgs'
 
     prologue =
         if null iToBeSaved && null fToBeSaved
