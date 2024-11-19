@@ -31,6 +31,7 @@ library
       Backend.Liveness
       Backend.Lowering
       Backend.RegisterAlloc
+      Backend.Shuffle
       Backend.Transform
       Closure
       Display
@@ -95,6 +96,7 @@ test-suite mincc-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Backend.ShuffleSpec
       ParserSpec
       TypeInferrerSpec
       Paths_mincc

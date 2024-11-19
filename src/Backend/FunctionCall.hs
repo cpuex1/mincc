@@ -36,7 +36,7 @@ saveArgs (IntermediateCodeBlock label prologue inst epilogue) = do
                             pure inst'
                 )
                 inst''
-                [0 .. iLen]
+                [0 .. iLen - 1]
 
         fLen <- gets fArgsLen
         foldlM
@@ -53,7 +53,7 @@ saveArgs (IntermediateCodeBlock label prologue inst epilogue) = do
                         pure inst'
             )
             modInst
-            [0 .. fLen]
+            [0 .. fLen - 1]
 
     isUsedAfterCallI :: Int -> [Inst stateTy RegID AllowBranch] -> State Bool Bool
     isUsedAfterCallI _ [] = pure False

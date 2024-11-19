@@ -1,12 +1,14 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Backend.Transform (transformCodeBlock) where
+module Backend.Transform (transformCodeBlock, CodeBlockGenState, insertBuf) where
 
 import Backend.Asm
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Text (Text, pack)
 import Syntax (IntBinOp (Add))
+import Prelude hiding (lookup)
+import Backend.Shuffle (shuffleRegs)
 
 data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
     { blocks :: [CodeBlock stateTy idTy]
@@ -51,6 +53,14 @@ genLabel tag = do
             { generatedLabel = label + 1
             }
     return $ mainLabel' <> "_" <> tag <> "_" <> pack (show label)
+
+insertIShuffle :: stateTy -> [(Register RegID Int, Register RegID Int)] -> CodeBlockGenState stateTy RegID ()
+insertIShuffle state assign =
+    mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 (Reg r2)) $ shuffleRegs assign
+
+insertFShuffle :: stateTy -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenState stateTy RegID ()
+insertFShuffle state assign =
+    mapM_ (\(r1, r2) -> insertBuf $ IFMov state r1 (Reg r2)) $ shuffleRegs assign
 
 transformCodeBlock :: (Eq stateTy) => IntermediateCodeBlock stateTy RegID -> [CodeBlock stateTy RegID]
 transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
@@ -143,17 +153,9 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
         if mainLabel' == label' && term == Return
             then do
                 -- Found a tail call!
-                -- TODO: shuffle
-                mapM_
-                    ( \(arg, i) ->
-                        insertBuf $ IMov state (ArgsReg i) (Reg arg)
-                    )
-                    $ zip iArgs [0 ..]
-                mapM_
-                    ( \(arg, i) ->
-                        insertBuf $ IFMov state (ArgsReg i) (Reg arg)
-                    )
-                    $ zip fArgs [0 ..]
+                -- Shuffle arguments
+                insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] iArgs
+                insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] fArgs
                 -- Jump to the start label of the function instead.
                 -- The prologue should be skipped.
                 modify $ \env ->
@@ -186,17 +188,9 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
     transformInst (IFMov state dest src) =
         insertBuf $ IFMov state dest src
     transformInst (IRichCall state label' iArgs fArgs) = do
-        -- TODO: shuffle
-        mapM_
-            ( \(arg, i) ->
-                insertBuf $ IMov state (ArgsReg i) (Reg arg)
-            )
-            $ zip iArgs [0 ..]
-        mapM_
-            ( \(arg, i) ->
-                insertBuf $ IFMov state (ArgsReg i) (Reg arg)
-            )
-            $ zip fArgs [0 ..]
+        -- Shuffle arguments
+        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] iArgs
+        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] fArgs
         insertBuf $ ICall state label'
     transformInst (IClosureCall state cl iArgs fArgs) = do
         -- Make sure the closure is not in an argument register.
@@ -206,18 +200,10 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
                 pure $ TempReg 1
             _ -> pure cl
 
-        -- TODO: shuffle
-        mapM_
-            ( \(arg, i) ->
-                insertBuf $ IMov state (ArgsReg i) (Reg arg)
-            )
-            $ zip iArgs [0 ..]
+        -- Shuffle arguments
+        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] iArgs
+        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] fArgs
         insertBuf $ IIntOp state Add (ArgsReg (length iArgs)) cl' (Imm 4)
-        mapM_
-            ( \(arg, i) ->
-                insertBuf $ IFMov state (ArgsReg i) (Reg arg)
-            )
-            $ zip fArgs [0 ..]
         insertBuf $ ILoad state (TempReg 2) cl' 0
         insertBuf $ ICallReg state (TempReg 2)
     transformInst (IMakeClosure state dest label' iFreeV fFreeV) = do

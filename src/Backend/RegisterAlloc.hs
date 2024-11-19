@@ -40,7 +40,7 @@ getMin l = until (`notElem` l) (+ 1) 0
 
 sortByDegree :: Int -> [(RegID, RegID)] -> [RegID]
 sortByDegree maxID graph =
-    map fst $ sortOn (negate . snd) $ map (\i -> (i, length $ lookup i graph)) [0 .. maxID]
+    map fst $ sortOn (negate . snd) $ map (\i -> (i, length $ lookup i graph)) [0 .. maxID - 1]
 
 registerAlloc :: Int -> Int -> LivenessGraph -> ([(RegID, RegID)], [(RegID, RegID)])
 registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
