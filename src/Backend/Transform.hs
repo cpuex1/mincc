@@ -4,11 +4,11 @@
 module Backend.Transform (transformCodeBlock, CodeBlockGenState, insertBuf) where
 
 import Backend.Asm
+import Backend.Shuffle (shuffleRegs)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Text (Text, pack)
 import Syntax (IntBinOp (Add))
 import Prelude hiding (lookup)
-import Backend.Shuffle (shuffleRegs)
 
 data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
     { blocks :: [CodeBlock stateTy idTy]
@@ -154,8 +154,8 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
             then do
                 -- Found a tail call!
                 -- Shuffle arguments
-                insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] iArgs
-                insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] fArgs
+                insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
+                insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
                 -- Jump to the start label of the function instead.
                 -- The prologue should be skipped.
                 modify $ \env ->
@@ -189,8 +189,8 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
         insertBuf $ IFMov state dest src
     transformInst (IRichCall state label' iArgs fArgs) = do
         -- Shuffle arguments
-        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] iArgs
-        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] fArgs
+        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
+        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
         insertBuf $ ICall state label'
     transformInst (IClosureCall state cl iArgs fArgs) = do
         -- Make sure the closure is not in an argument register.
@@ -201,8 +201,8 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
             _ -> pure cl
 
         -- Shuffle arguments
-        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] iArgs
-        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 .. ] fArgs
+        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
+        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
         insertBuf $ IIntOp state Add (ArgsReg (length iArgs)) cl' (Imm 4)
         insertBuf $ ILoad state (TempReg 2) cl' 0
         insertBuf $ ICallReg state (TempReg 2)
