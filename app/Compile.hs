@@ -20,6 +20,8 @@ import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
+import Control.Monad.Identity (Identity (runIdentity))
+import Control.Monad.State (evalStateT)
 import Control.Monad.Trans.Class
 import qualified Data.ByteString as B
 import Data.Text.Encoding (decodeUtf8)
@@ -37,7 +39,8 @@ import TypeInferrer (inferType)
 parseIO :: FilePath -> ConfigIO ParsedExpr
 parseIO path = do
     content <- liftIO $ B.readFile path
-    case parse (parseExpr <* eof) path $ decodeUtf8 content of
+    -- Since the parser uses Identity monad and StateT monad, we should unwrap them.
+    case runIdentity $ evalStateT (runParserT (parseExpr <* eof) path $ decodeUtf8 content) 0 of
         Left err ->
             throwError $ ParserError err
         Right expr -> do

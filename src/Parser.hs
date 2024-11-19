@@ -4,21 +4,41 @@ module Parser (lexeme, parseLiteral, parseIdent, parsePattern, parseSimpleExpr, 
 
 import Control.Monad (void)
 import Control.Monad.Combinators.Expr
+import Control.Monad.Identity (Identity)
+import Control.Monad.State (MonadState (get, put), StateT)
 import Data.Char (isAlphaNum, isDigit)
-import Data.Text (Text, cons, unpack)
+import Data.Text (Text, cons, pack, unpack)
 import GHC.Base (Void)
 import Syntax
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
-type Parser = Parsec Void Text
+type Parser = ParsecT Void Text (StateT Int Identity)
 
 {- | Reserved words.
 The words "true" and "false" are regarded as literals.
 -}
 reservedWords :: [Text]
-reservedWords = ["let", "in", "rec", "if", "then", "else", "not"]
+reservedWords = ["let", "in", "rec", "if", "then", "else", "not", "fun"]
+
+{- | Curry the functions.
+i.e. fun x y z -> expr
+ => let rec __fresh_0 x = let rec __fresh_1 y = let rec __fresh_2 z = expr in __fresh_2 in __fresh_1 in __fresh_0
+-}
+curryFunc :: Loc -> [RawIdent] -> ParsedExpr -> Parser ParsedExpr
+curryFunc _ [] expr = pure expr
+curryFunc state (arg : args) expr = do
+    -- Retrieves the counter from the State monad.
+    counter <- get
+    -- Increments the counter.
+    put (counter + 1)
+    -- Generates a fresh name.
+    let freshName = RawIdent dummyLoc $ "__fresh_" <> pack (show counter)
+    -- Calculates the function body recursively.
+    body <- curryFunc state args expr
+    -- Returns a function.
+    pure $ PGuard (Let state (PRec freshName [arg]) (pExp body) (Var state freshName))
 
 -- | A space consumer
 spaced :: Parser ()
@@ -205,7 +225,7 @@ parseExpr :: Parser ParsedExpr
 parseExpr =
     do
         spaced
-        parseExprWithPrecedence 6
+        parseExprWithPrecedence 7
         <?> "an expression"
   where
     parseExprWithPrecedence :: Int -> Parser ParsedExpr
@@ -217,8 +237,8 @@ parseExpr =
 
     parseExprWithPrecedence' :: Int -> Parser ParsedExpr
     parseExprWithPrecedence' precedence
-        | precedence > 6 = error $ "Invalid precedence " <> show precedence
-        | precedence == 6 = do
+        | precedence > 7 = error $ "Invalid precedence " <> show precedence
+        | precedence == 7 = do
             -- Let
             pos <- getSourcePos
             parseKeyword "let"
@@ -227,7 +247,22 @@ parseExpr =
             value <- parseExpr
             parseKeyword "in"
             expr <- parseExprWithPrecedence 6
-            pure (PGuard (Let (fromSourcePos pos) pat (pExp value) (pExp expr)))
+            case pat of
+                PRec func args -> do
+                    -- If the pattern is a PRec, it should be curried.
+                    value' <- curryFunc (fromSourcePos pos) args value
+                    -- let rec f x y z = expr in ... => let f = fun x -> fun y -> fun z -> expr in ...
+                    pure (PGuard (Let (fromSourcePos pos) (PVar func) (pExp value') (pExp expr)))
+                _ ->
+                    pure (PGuard (Let (fromSourcePos pos) pat (pExp value) (pExp expr)))
+        | precedence == 6 = do
+            -- Fun
+            pos <- getSourcePos
+            parseKeyword "fun" -- Receives a fun keyword
+            args <- some parseIdent -- Receives arguments (the "some" function means "at least once")
+            symbol "->" -- Receives an arrow
+            body <- parseExpr -- Receives a body
+            curryFunc (fromSourcePos pos) args body -- curries the function and returns it.
         | precedence == 5 = do
             -- Then
             pos <- getSourcePos
@@ -304,7 +339,9 @@ parseExpr =
                 ( do
                     func <- parseSimpleExpr
                     exprs <- some parseSimpleExpr
-                    pure $ PGuard (App (fromSourcePos pos) func exprs)
+                    -- Converts a list of arguments to a list of application with foldl.
+                    -- e.g. f x y z => ((f x) y) z
+                    pure $ foldl (\f e -> PGuard (App (fromSourcePos pos) f [e])) func exprs
                 )
                 -- ArrayCreate
                 <|> try
