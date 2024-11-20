@@ -248,11 +248,14 @@ parseExpr =
             parseKeyword "in"
             expr <- parseExprWithPrecedence 7
             case pat of
-                PRec func args -> do
+                PRec func (arg : args) -> do
                     -- If the pattern is a PRec, it should be curried.
                     value' <- curryFunc (fromSourcePos pos) args value
-                    -- let rec f x y z = expr in ... => let f = fun x -> fun y -> fun z -> expr in ...
-                    pure (PGuard (Let (fromSourcePos pos) (PVar func) (pExp value') (pExp expr)))
+                    -- let rec f x y z = expr in ... => let rec f x = fun y -> fun z -> expr in ...
+                    pure (PGuard (Let (fromSourcePos pos) (PRec func [arg]) (pExp value') (pExp expr)))
+                PRec _ [] -> do
+                    -- Never.
+                    pure (PGuard (Let (fromSourcePos pos) pat (pExp value) (pExp expr)))
                 _ ->
                     pure (PGuard (Let (fromSourcePos pos) pat (pExp value) (pExp expr)))
         | precedence == 6 = do
