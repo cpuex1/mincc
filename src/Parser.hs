@@ -53,7 +53,7 @@ parseIdent =
                 name <- takeWhileP (Just "an identifier") (\c -> isAlphaNum c || c == '_')
                 let ident = cons firstChar name
                 if ident `elem` reservedWords
-                    then fail "reserved word"
+                    then fail "a reserved word"
                     else return $ RawIdent pos ident
             )
             <?> "an identifier"
@@ -116,7 +116,7 @@ parseRelationBinOp =
             <|> (string "<=" >> pure (True, RelationOp Ge))
             <|> (string ">=" >> pure (False, RelationOp Ge))
             <|> (string "<>" >> pure (False, RelationOp Ne))
-            <|> (string "<" >> pure (False, RelationOp Lt))
+            <|> try (string "<" >> notFollowedBy "-" >> pure (False, RelationOp Lt))
             <|> (string ">" >> pure (True, RelationOp Lt))
         )
         <?> "a relation binary operator"
@@ -147,7 +147,7 @@ parsePattern =
     lexeme
         ( -- PRec
           ( do
-                parseKeyword "rec"
+                try $ parseKeyword "rec"
                 ident <- parseIdent
                 args <- some parseIdent
                 pure (PRec ident args)
@@ -301,29 +301,46 @@ parseThenExpr =
                 -- If
                 pos <- getSourceLoc
                 parseKeyword "if"
-                cond <- parseExpr
+                cond <- parseExpr'
                 parseKeyword "then"
-                then' <- parseExpr
+                then' <- parseExpr'
                 parseKeyword "else"
-                PGuard . If pos cond (pExp then') . pExp <$> parseExpr
+                PGuard . If pos cond (pExp then') . pExp <$> parseExpr'
           )
-            <|> try
-                ( do
-                    -- Put
-                    -- Can backtrack if the expression is not in the ".(x)" style.
+            <|> ( do
                     pos <- getSourceLoc
-                    left <- parseSimpleExpr
-                    case left of
-                        PGuard (Get _ array idx) -> do
-                            right <- symbol "<-" >> parseExpr
-                            pure $ PGuard (Put pos array idx right)
-                        _ -> fail "a Put expression"
+                    expr <- parseOperatorExpr
+                    case expr of
+                        PGuard (Get _ array idx) ->
+                            ( do
+                                -- Put
+                                symbol "<-"
+                                PGuard . Put pos array idx <$> parseExpr'
+                            )
+                                <|>
+                                -- An expression related to operators
+                                pure expr
+                        _ ->
+                            -- An expression related to operators
+                            pure expr
                 )
-            <|>
-            -- An expression related to operators
-            parseOperatorExpr
             <?> "an \"if\" expression or \"<-\" expression"
         )
+
+-- | Parses a let expression
+parseLetExpr :: Parser ParsedExpr
+parseLetExpr = do
+    pos <- getSourceLoc
+    parseKeyword "let"
+    pat <- parsePattern
+    cSymbol '='
+    value <- parseExpr
+    parseKeyword "in"
+    PGuard . Let pos pat (pExp value) . pExp <$> parseExpr
+
+-- | Parses a general expression without ";" at the top.
+parseExpr' :: Parser ParsedExpr
+parseExpr' = parseLetExpr <|> parseThenExpr
 
 -- | Parses a general expression
 parseExpr :: Parser ParsedExpr
@@ -331,30 +348,20 @@ parseExpr =
     do
         spaced
         lexeme
-            ( ( do
-                    -- Let
-                    pos <- getSourceLoc
-                    parseKeyword "let"
-                    pat <- parsePattern
-                    cSymbol '='
-                    value <- parseExpr
-                    parseKeyword "in"
-                    PGuard . Let pos pat (pExp value) . pExp
-                        <$> parseExpr
-              )
+            ( -- Let
+              parseLetExpr
                 <|> ( do
-                        -- Then
                         pos <- getSourceLoc
-                        left <-
-                            try
-                                ( do
-                                    expr <- parseThenExpr
-                                    cSymbol ';'
-                                    pure expr
-                                )
-                        PGuard . Let pos PUnit (pExp left) . pExp
-                            <$> parseExpr
+                        expr <- parseThenExpr
+                        ( do
+                                -- Then
+                                cSymbol ';'
+                                PGuard . Let pos PUnit (pExp expr) . pExp
+                                    <$> parseExpr
+                            )
+                            <|>
+                            -- A then expression
+                            pure expr
                     )
-                <|> parseThenExpr
                 <?> "an expression"
             )
