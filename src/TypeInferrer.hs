@@ -222,6 +222,9 @@ inferIE (RGuard (Unary pos Not expr)) = do
     expr' <- inferIE expr
     doUnify (getExprState $ rExp expr) TBool $ getTy expr'
     pure $ ITGuard $ Unary (TBool, pos) Not expr'
+inferIE (RGuard (Unary pos Neg (RGuard (Const _ (LFloat f))))) =
+    -- Negative float literals
+    pure $ ITGuard $ Const (TFloat, pos) (LFloat (-f))
 inferIE (RGuard (Unary pos Neg expr)) = do
     expr' <- inferIE expr
     doUnify (getExprState $ rExp expr) TInt $ getTy expr'

@@ -95,12 +95,11 @@ parseLiteral =
 
     parseFloat :: Parser Float
     parseFloat = do
-        sign <- option "" $ string "-"
         num <- parseNumStr
         _ <- char '.'
         num2 <- many digitChar
         e <- option "" parseExp
-        pure $ read $ (if null num2 then unpack sign ++ num else unpack sign ++ num ++ "." ++ num2) ++ e
+        pure $ read $ (if null num2 then num else num ++ "." ++ num2) ++ e
       where
         parseExp :: Parser String
         parseExp = do
