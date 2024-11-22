@@ -10,6 +10,7 @@ module Backend.Lowering (
 import Backend.Asm
 import Backend.BackendEnv
 import Backend.FunctionCall (saveArgs, saveRegisters, saveReturnAddress)
+import Builtin (BuiltinFunction (builtinInst), findBuiltin)
 import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (modify)
@@ -20,6 +21,26 @@ import Syntax
 import Typing (TypeKind (TFloat, TUnit))
 
 type BackendIdentState m = BackendStateT (IdentEnvT m)
+
+resolveArgs :: (Monad m) => [Ident] -> BackendIdentState m ([Register RegID Int], [Register RegID Float])
+resolveArgs args = do
+    iArgs <-
+        filterM
+            ( \arg -> do
+                ty <- liftB $ getTyOf arg
+                pure $ ty /= TFloat
+            )
+            args
+    fArgs <-
+        filterM
+            ( \arg -> do
+                ty <- liftB $ getTyOf arg
+                pure $ ty == TFloat
+            )
+            args
+    iArgs' <- mapM findI iArgs
+    fArgs' <- mapM findF fArgs
+    pure (iArgs', fArgs')
 
 toInstU :: (Monad m) => ClosureExpr -> BackendIdentState m [Inst Loc RegID AllowBranch]
 toInstU (Let{}) =
@@ -50,41 +71,15 @@ toInstU (Put state dest idx src) = do
                 ]
 toInstU (ClosureApp state func args) = do
     func' <- findI func
-    iArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty /= TFloat
-            )
-            args
-    fArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty == TFloat
-            )
-            args
-    iArgs' <- mapM findI iArgs
-    fArgs' <- mapM findF fArgs
+    (iArgs', fArgs') <- resolveArgs args
     pure [IClosureCall (getLoc state) func' iArgs' fArgs']
 toInstU (DirectApp state func args) = do
-    iArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty /= TFloat
-            )
-            args
-    fArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty == TFloat
-            )
-            args
-    iArgs' <- mapM findI iArgs
-    fArgs' <- mapM findF fArgs
-    pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
+    (iArgs', fArgs') <- resolveArgs args
+    case findBuiltin func of
+        Just builtin -> do
+            pure [IRawInst (getLoc state) (builtinInst builtin) RIRUnit iArgs' fArgs']
+        Nothing -> do
+            pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
 toInstU _ =
     throwError $ OtherError "The expression cannot have type unit."
 
@@ -194,56 +189,24 @@ toInstI reg (MakeClosure state func freeV) = do
     fFreeV' <- mapM findF fFreeV
     pure [IMakeClosure (getLoc state) reg (display func) iFreeV' fFreeV']
 toInstI reg (DirectApp state func args) = do
-    iArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty /= TFloat
-            )
-            args
-    fArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty == TFloat
-            )
-            args
-    iArgs' <- mapM findI iArgs
-    fArgs' <- mapM findF fArgs
-    if reg /= RetReg
-        then
-            pure
-                [ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                , IMov (getLoc state) reg (Reg RetReg)
-                ]
-        else
-            pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
+    (iArgs', fArgs') <- resolveArgs args
+    case findBuiltin func of
+        Just builtin ->
+            pure [IRawInst (getLoc state) (builtinInst builtin) (RIRInt reg) iArgs' fArgs']
+        Nothing ->
+            let called = [IRichCall (getLoc state) (display func) iArgs' fArgs']
+             in if reg /= RetReg
+                    then
+                        pure $ called ++ [IMov (getLoc state) reg (Reg RetReg)]
+                    else
+                        pure called
 toInstI reg (ClosureApp state func args) = do
-    func' <- findI func
-    iArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty /= TFloat
-            )
-            args
-    fArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty == TFloat
-            )
-            args
-    iArgs' <- mapM findI iArgs
-    fArgs' <- mapM findF fArgs
+    called <- toInstU (ClosureApp state func args)
     if reg /= RetReg
         then
-            pure
-                [ IClosureCall (getLoc state) func' iArgs' fArgs'
-                , IMov (getLoc state) reg (Reg RetReg)
-                ]
+            pure $ called ++ [IMov (getLoc state) reg (Reg RetReg)]
         else
-            pure [IClosureCall (getLoc state) func' iArgs' fArgs']
+            pure called
 toInstI _ _ =
     throwError $ OtherError "The expression cannot be represented as int."
 
@@ -279,56 +242,24 @@ toInstF reg (Get state array index) = do
         , IFLoad (getLoc state) reg addr 0
         ]
 toInstF reg (DirectApp state func args) = do
-    iArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty /= TFloat
-            )
-            args
-    fArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty == TFloat
-            )
-            args
-    iArgs' <- mapM findI iArgs
-    fArgs' <- mapM findF fArgs
-    if reg /= RetReg
-        then
-            pure
-                [ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                , IFMov (getLoc state) reg (Reg RetReg)
-                ]
-        else
-            pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
+    (iArgs', fArgs') <- resolveArgs args
+    case findBuiltin func of
+        Just builtin ->
+            pure [IRawInst (getLoc state) (builtinInst builtin) (RIRFloat reg) iArgs' fArgs']
+        Nothing ->
+            let called = [IRichCall (getLoc state) (display func) iArgs' fArgs']
+             in if reg /= RetReg
+                    then
+                        pure $ called ++ [IFMov (getLoc state) reg (Reg RetReg)]
+                    else
+                        pure called
 toInstF reg (ClosureApp state func args) = do
-    func' <- findI func
-    iArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty /= TFloat
-            )
-            args
-    fArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty == TFloat
-            )
-            args
-    iArgs' <- mapM findI iArgs
-    fArgs' <- mapM findF fArgs
+    called <- toInstU (ClosureApp state func args)
     if reg /= RetReg
         then
-            pure
-                [ IClosureCall (getLoc state) func' iArgs' fArgs'
-                , IFMov (getLoc state) reg (Reg RetReg)
-                ]
+            pure $ called ++ [IFMov (getLoc state) reg (Reg RetReg)]
         else
-            pure [IClosureCall (getLoc state) func' iArgs' fArgs']
+            pure called
 toInstF _ _ =
     throwError $ OtherError "The expression cannot have type float."
 

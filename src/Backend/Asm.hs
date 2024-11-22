@@ -24,6 +24,7 @@ module Backend.Asm (
     InstTerm (Return, Jmp, Branch, Nop),
     AllowBranch,
     DisallowBranch,
+    RawInstRetTy (..),
     Inst (
         ICompOp,
         IFCompOp,
@@ -41,6 +42,7 @@ module Backend.Asm (
         IStore,
         IFLoad,
         IFStore,
+        IRawInst,
         IBranch
     ),
     getIState,
@@ -112,6 +114,9 @@ exitBlock = CodeBlock "__exit" [] Nop
 data AllowBranch = AllowBranch
     deriving (Show, Eq)
 data DisallowBranch = DisallowBranch
+    deriving (Show, Eq)
+
+data RawInstRetTy idTy = RIRUnit | RIRInt (Register idTy Int) | RIRFloat (Register idTy Float)
     deriving (Show, Eq)
 
 data Inst stateTy idTy branchTy where
@@ -209,6 +214,13 @@ data Inst stateTy idTy branchTy where
         Register idTy Int ->
         Int ->
         Inst stateTy idTy branchTy
+    IRawInst ::
+        stateTy ->
+        Text ->
+        RawInstRetTy idTy ->
+        [Register idTy Int] ->
+        [Register idTy Float] ->
+        Inst stateTy idTy branchTy
     IBranch ::
         stateTy ->
         RelationBinOp ->
@@ -238,6 +250,7 @@ getIState (ILoad state _ _ _) = state
 getIState (IStore state _ _ _) = state
 getIState (IFLoad state _ _ _) = state
 getIState (IFStore state _ _ _) = state
+getIState (IRawInst state _ _ _ _) = state
 getIState (IBranch state _ _ _ _ _) = state
 
 getAllIState :: Inst stateTy idTy branchTy -> [stateTy]
@@ -262,6 +275,7 @@ substIState f (ILoad state dest src offset) = ILoad (f state) dest src offset
 substIState f (IStore state dest src offset) = IStore (f state) dest src offset
 substIState f (IFLoad state dest src offset) = IFLoad (f state) dest src offset
 substIState f (IFStore state dest src offset) = IFStore (f state) dest src offset
+substIState f (IRawInst state inst retTy iArgs fArgs) = IRawInst (f state) inst retTy iArgs fArgs
 substIState f (IBranch state op left right thenExpr elseExpr) =
     IBranch
         (f state)
@@ -346,6 +360,13 @@ replaceIReg beforeReg afterReg (IFStore state dest src offset) =
     IFStore state dest (substReg' src) offset
   where
     substReg' = substReg beforeReg afterReg
+replaceIReg beforeReg afterReg (IRawInst state inst retTy iArgs fArgs) =
+    case retTy of
+        RIRUnit -> IRawInst state inst retTy (map substReg' iArgs) fArgs
+        RIRInt reg -> IRawInst state inst (RIRInt (substReg' reg)) (map substReg' iArgs) fArgs
+        RIRFloat reg -> IRawInst state inst (RIRFloat reg) (map substReg' iArgs) fArgs
+  where
+    substReg' = substReg beforeReg afterReg
 replaceIReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =
     IBranch
         state
@@ -362,7 +383,9 @@ replaceIReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =
         )
   where
     substReg' = substReg beforeReg afterReg
-replaceIReg _ _ inst = inst
+replaceIReg _ _ (IFOp state op dest left right) = IFOp state op dest left right
+replaceIReg _ _ (IFMov state dest src) = IFMov state dest src
+replaceIReg _ _ (ICall state label) = ICall state label
 
 replaceFReg ::
     (Eq idTy) =>
@@ -401,6 +424,13 @@ replaceFReg beforeReg afterReg (IFLoad state dest src offset) =
     substReg' = substReg beforeReg afterReg
 replaceFReg beforeReg afterReg (IFStore state dest src offset) =
     IFStore state (substReg' dest) src offset
+  where
+    substReg' = substReg beforeReg afterReg
+replaceFReg beforeReg afterReg (IRawInst state inst retTy iArgs fArgs) =
+    case retTy of
+        RIRUnit -> IRawInst state inst retTy iArgs (map substReg' fArgs)
+        RIRInt reg -> IRawInst state inst (RIRInt reg) iArgs (map substReg' fArgs)
+        RIRFloat reg -> IRawInst state inst (RIRFloat (substReg' reg)) iArgs (map substReg' fArgs)
   where
     substReg' = substReg beforeReg afterReg
 replaceFReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =

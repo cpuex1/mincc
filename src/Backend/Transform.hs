@@ -229,4 +229,6 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
         insertBuf $ IFLoad state dest src offset
     transformInst (IFStore state dest src offset) =
         insertBuf $ IFStore state dest src offset
+    transformInst (IRawInst state name ret iArgs fArgs) =
+        insertBuf $ IRawInst state name ret iArgs fArgs
     transformInst (IBranch{}) = undefined

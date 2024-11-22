@@ -12,6 +12,7 @@ module TypeInferrer (
     removeVar,
 ) where
 
+import Builtin (BuiltinFunction (builtinName, builtinType), builtinFunctions)
 import Control.Monad (void)
 import Control.Monad.Except (ExceptT, MonadError (catchError, throwError), runExceptT)
 import Control.Monad.State
@@ -36,7 +37,12 @@ data TypeEnv = TypeEnv
 type TypingM = ExceptT CompilerError (State TypeEnv)
 
 defaultEnv :: TypeEnv
-defaultEnv = TypeEnv 0 [] []
+defaultEnv =
+    TypeEnv builtinLength builtinVarsTable builtinVars
+  where
+    builtinVars = zip (map builtinName builtinFunctions) ([0 ..] :: [TypeId])
+    builtinVarsTable = map (Just . weakenTy . builtinType) builtinFunctions
+    builtinLength = length builtinFunctions
 
 genNewId :: TypingM TypeId
 genNewId = do

@@ -325,6 +325,21 @@ instance (Display stateTy) => DisplayI (Inst stateTy Int branchTy) where
         "flw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")" <> display state
     displayI (IFStore state lhs rhs offset) _ =
         "fsw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")" <> display state
+    displayI (IRawInst state name RIRUnit iArgs fArgs) _ =
+        name
+            <> " "
+            <> Data.Text.intercalate ", " (Prelude.map display iArgs ++ Prelude.map display fArgs)
+            <> display state
+    displayI (IRawInst state name (RIRInt reg) iArgs fArgs) _ =
+        name
+            <> " "
+            <> Data.Text.intercalate ", " (display reg : Prelude.map display iArgs ++ Prelude.map display fArgs)
+            <> display state
+    displayI (IRawInst state name (RIRFloat reg) iArgs fArgs) _ =
+        name
+            <> " "
+            <> Data.Text.intercalate ", " (display reg : Prelude.map display iArgs ++ Prelude.map display fArgs)
+            <> display state
     displayI (IBranch state op lhs rhs thenInst elseInst) depth =
         toOp op
             <> " "

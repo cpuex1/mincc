@@ -173,6 +173,17 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessSt
         markUsedI src
         state' <- getState state
         pure $ IFStore state' dest src offset
+    liveness' (IRawInst state name retTy iArgs fArgs) = do
+        remove retTy
+        mapM_ markUsedI iArgs
+        mapM_ markUsedF fArgs
+        state' <- getState state
+        pure $ IRawInst state' name retTy iArgs fArgs
+      where
+        remove :: RawInstRetTy RegID -> LivenessStateM ()
+        remove RIRUnit = pure ()
+        remove (RIRInt reg) = removeI reg
+        remove (RIRFloat reg) = removeF reg
     liveness' (IBranch state op left right thenInst elseInst) = do
         env <- get
         thenInst' <- mapM liveness' $ reverse thenInst

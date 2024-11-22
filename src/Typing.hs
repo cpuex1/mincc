@@ -6,6 +6,7 @@ module Typing (
     ITy,
     Ty,
     TypeKind (TUnit, TBool, TInt, TFloat, TFun, TTuple, TArray, TVar),
+    weakenTy,
 ) where
 
 data TypeNotResolved = TypeNotResolved
@@ -30,3 +31,12 @@ data TypeKind resolvedTy where
 
 deriving instance (Show a) => Show (TypeKind a)
 deriving instance (Eq a) => Eq (TypeKind a)
+
+weakenTy :: Ty -> ITy
+weakenTy TUnit = TUnit
+weakenTy TBool = TBool
+weakenTy TInt = TInt
+weakenTy TFloat = TFloat
+weakenTy (TFun args ret) = TFun (map weakenTy args) (weakenTy ret)
+weakenTy (TTuple vals) = TTuple (map weakenTy vals)
+weakenTy (TArray array) = TArray (weakenTy array)

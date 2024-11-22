@@ -105,6 +105,10 @@ saveArgs (IntermediateCodeBlock label prologue inst epilogue) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
         pure $ (called && ArgsReg reg == reg') || rest'
+    isUsedAfterCallI reg (IRawInst _ _ _ iArgs _ : rest) = do
+        called <- get
+        rest' <- isUsedAfterCallI reg rest
+        pure $ (called && (ArgsReg reg `elem` iArgs)) || rest'
     isUsedAfterCallI reg (IBranch _ _ left right thenBlock elseBlock : rest) = do
         called <- get
         if called && (ArgsReg reg == left || ArgsReg reg == right)
@@ -162,6 +166,10 @@ saveArgs (IntermediateCodeBlock label prologue inst epilogue) = do
         called <- get
         rest' <- isUsedAfterCallF reg rest
         pure $ (called && reg == reg') || rest'
+    isUsedAfterCallF reg (IRawInst _ _ _ _ fArgs : rest) = do
+        called <- get
+        rest' <- isUsedAfterCallF reg rest
+        pure $ (called && (reg `elem` fArgs)) || rest'
     isUsedAfterCallF reg (IBranch _ _ _ _ thenBlock elseBlock : rest) = do
         called <- get
         thenBlock' <- isUsedAfterCallF reg thenBlock

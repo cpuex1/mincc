@@ -33,6 +33,7 @@ library
       Backend.RegisterAlloc
       Backend.Shuffle
       Backend.Transform
+      Builtin
       Closure
       Display
       Error
