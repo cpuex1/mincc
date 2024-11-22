@@ -99,7 +99,6 @@ test-suite mincc-test
   other-modules:
       Backend.ShuffleSpec
       ParserSpec
-      TypeInferrerSpec
       Paths_mincc
   autogen-modules:
       Paths_mincc
