@@ -6,9 +6,9 @@ module Builtin (
     findBuiltin,
 ) where
 
+import Data.Text (Text)
 import Syntax (Ident (ExternalIdent))
 import Typing (Ty, TypeKind (TFloat, TFun, TInt))
-import Data.Text (Text)
 
 data BuiltinFunction
     = BuiltinFunction
