@@ -9,9 +9,9 @@ module Backend.Shuffle (
 import Backend.Asm (RegID, Register (ArgsReg, TempReg))
 import Control.Monad (when)
 import Control.Monad.State (State, evalState, gets, modify)
+import Data.List ((\\))
 import Data.Map.Lazy (Map, alter, empty, insert, lookup)
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.Set (difference, fromList, toList)
 import Prelude hiding (lookup)
 
 newtype RegGraph a = RegGraph
@@ -57,7 +57,7 @@ detectAllLoops [] _ = []
 detectAllLoops (a : args) assign =
     case runDetectLoop a assign of
         Just loop ->
-            let args' = toList $ difference (fromList args) (fromList loop)
+            let args' = args \\ loop
              in loop : detectAllLoops args' assign
         Nothing ->
             detectAllLoops args assign
@@ -77,7 +77,7 @@ shuffle temp assign =
     args' = map fst assign'
     loops = detectAllLoops args' assign
     resolve_in_loops = concat loops
-    simple_args = toList $ difference (fromList args') (fromList resolve_in_loops)
+    simple_args = args' \\ resolve_in_loops
 
 shuffleRegs :: [(Register RegID a, Register RegID a)] -> [(Register RegID a, Register RegID a)]
 shuffleRegs assign =
