@@ -3,15 +3,7 @@
 module Backend.BackendEnv (
     RegID,
     BackendConfig (BackendConfig, argLimit),
-    BackendEnv (
-        BackendEnv,
-        generatedIReg,
-        generatedFReg,
-        iArgsLen,
-        fArgsLen,
-        iMap,
-        fMap
-    ),
+    BackendEnv (..),
     defaultBackendEnv,
     BackendState,
     BackendStateT,
@@ -46,6 +38,8 @@ data BackendEnv = BackendEnv
     , fArgsLen :: Int
     , iMap :: [(Ident, Register RegID Int)]
     , fMap :: [(Ident, Register RegID Float)]
+    , usedIRegLen :: Int
+    , usedFRegLen :: Int
     }
     deriving (Show, Eq)
 
@@ -58,6 +52,8 @@ defaultBackendEnv =
         , fArgsLen = 0
         , iMap = []
         , fMap = []
+        , usedIRegLen = 0
+        , usedFRegLen = 0
         }
 
 type BackendStateT m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv m))

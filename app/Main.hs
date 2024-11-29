@@ -155,4 +155,4 @@ execArgsWithBackend functions = do
     liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" $ map display blocks'
     liftB' $ printLog Debug "Generated code was saved"
   where
-    liftB' a = liftB $ lift a
+    liftB' = liftB . lift

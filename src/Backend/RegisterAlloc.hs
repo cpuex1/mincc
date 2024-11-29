@@ -12,7 +12,7 @@ import Backend.Asm (
     replaceIReg,
     substIState,
  )
-import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg), BackendStateT, RegID)
+import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), BackendStateT, RegID)
 import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.List (sortOn)
@@ -68,6 +68,11 @@ assignRegister (IntermediateCodeBlock label prologue inst epilogue) = do
     let (iMap, fMap) = registerAlloc iMaxID fMaxID $ retrieveGraph inst
     let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (TempReg a) (SavedReg b) i') i iMap) inst
     let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (TempReg a) (SavedReg b) i') i fMap) inst'
+    modify $ \env ->
+        env
+            { usedIRegLen = max (usedIRegLen env) $ (+ 1) $ foldl max (-1) $ map snd iMap
+            , usedFRegLen = max (usedFRegLen env) $ (+ 1) $ foldl max (-1) $ map snd fMap
+            }
     pure $
         IntermediateCodeBlock
             label

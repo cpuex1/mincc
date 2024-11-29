@@ -12,6 +12,7 @@ module Compile (
 ) where
 
 import Backend.Asm
+import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), liftB)
 import Backend.Liveness (LivenessLoc (LivenessLoc), LivenessState (LivenessState), liveness)
 import Backend.Lowering
 import Backend.RegisterAlloc (assignRegister)
@@ -20,6 +21,7 @@ import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
+import Control.Monad.State.Lazy (gets)
 import Control.Monad.Trans.Class
 import qualified Data.ByteString as B
 import Data.Text.Encoding (decodeUtf8)
@@ -100,4 +102,16 @@ livenessIO = mapM livenessIO'
     toLivenessLoc loc = LivenessLoc loc (LivenessState [] [])
 
 assignRegisterIO :: [IntermediateCodeBlock LivenessLoc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
-assignRegisterIO = mapM assignRegister
+assignRegisterIO blocks = do
+    -- Report used registers.
+    usedIRegLen' <- gets generatedIReg
+    usedFRegLen' <- gets generatedFReg
+    liftB $ lift $ printLog Debug $ "Before: int: " <> show usedIRegLen' <> ", float: " <> show usedFRegLen'
+
+    blocks' <- mapM assignRegister blocks
+
+    -- Report used registers.
+    usedIRegLen'' <- gets usedIRegLen
+    usedFRegLen'' <- gets usedFRegLen
+    liftB $ lift $ printLog Debug $ "After: int: " <> show usedIRegLen'' <> ", float: " <> show usedFRegLen''
+    pure blocks'
