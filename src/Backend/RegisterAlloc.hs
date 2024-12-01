@@ -62,7 +62,7 @@ registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
         sorted = sortByDegree maxID graph
 
 assignRegister :: (Monad m) => IntermediateCodeBlock LivenessLoc RegID -> BackendStateT m (IntermediateCodeBlock Loc RegID)
-assignRegister (IntermediateCodeBlock label prologue inst epilogue) = do
+assignRegister (IntermediateCodeBlock label localVars inst) = do
     iMaxID <- gets generatedIReg
     fMaxID <- gets generatedFReg
     let (iMap, fMap) = registerAlloc iMaxID fMaxID $ retrieveGraph inst
@@ -76,9 +76,8 @@ assignRegister (IntermediateCodeBlock label prologue inst epilogue) = do
     pure $
         IntermediateCodeBlock
             label
-            (map (substIState livenessLoc) prologue)
+            localVars
             (map (substIState livenessLoc) inst'')
-            (map (substIState livenessLoc) epilogue)
   where
     retrieveGraph :: [Inst LivenessLoc RegID AllowBranch] -> LivenessGraph
     retrieveGraph inst' = toGraph $ concatMap (map livenessState . getAllIState) inst'

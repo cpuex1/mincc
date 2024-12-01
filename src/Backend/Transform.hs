@@ -7,7 +7,7 @@ import Backend.Asm
 import Backend.Shuffle (shuffleRegs)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Text (Text, pack)
-import Syntax (IntBinOp (Add))
+import Syntax (IntBinOp (Add), Loc, dummyLoc)
 import Prelude hiding (lookup)
 
 data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
@@ -17,7 +17,7 @@ data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
     , generatedLabel :: Int
     , instBuf :: [Inst stateTy idTy DisallowBranch]
     , currentTerm :: InstTerm stateTy idTy
-    , epilogue :: [Inst stateTy idTy DisallowBranch]
+    , getLocalVars :: Int
     }
     deriving (Show, Eq)
 
@@ -30,15 +30,24 @@ insertBuf i =
             { instBuf = instBuf e ++ [i]
             }
 
-flushBuf :: (Eq stateTy, Eq idTy) => CodeBlockGenState stateTy idTy ()
-flushBuf =
+epilogue :: CodeBlockGenState Loc RegID [Inst Loc RegID DisallowBranch]
+epilogue = do
+    localVars' <- gets getLocalVars
+    pure
+        [ ILoad dummyLoc ReturnReg StackReg (4 * localVars')
+        , IIntOp dummyLoc Add StackReg StackReg (Imm (4 * (localVars' + 1)))
+        ]
+
+flushBuf :: CodeBlockGenState Loc RegID ()
+flushBuf = do
+    ep <- epilogue
     modify $ \e ->
         e
             { blocks =
                 blocks e
                     ++ [ CodeBlock
                             (currentLabel e)
-                            (instBuf e ++ if currentTerm e == Return then epilogue e else [])
+                            (instBuf e ++ if currentTerm e == Return then ep else [])
                             (currentTerm e)
                        ]
             , instBuf = []
@@ -54,48 +63,66 @@ genLabel tag = do
             }
     return $ mainLabel' <> "_" <> tag <> "_" <> pack (show label)
 
-insertIShuffle :: stateTy -> [(Register RegID Int, Register RegID Int)] -> CodeBlockGenState stateTy RegID ()
+tailCallLabel :: InstLabel -> InstLabel
+tailCallLabel label = label <> "_start"
+
+tailRecCallLabel :: InstLabel -> InstLabel
+tailRecCallLabel label = label <> "_rec"
+
+insertIShuffle :: Loc -> [(Register RegID Int, Register RegID Int)] -> CodeBlockGenState Loc RegID ()
 insertIShuffle state assign =
     mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 (Reg r2)) $ shuffleRegs assign
 
-insertFShuffle :: stateTy -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenState stateTy RegID ()
+insertFShuffle :: Loc -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenState Loc RegID ()
 insertFShuffle state assign =
     mapM_ (\(r1, r2) -> insertBuf $ IFMov state r1 (Reg r2)) $ shuffleRegs assign
 
-transformCodeBlock :: (Eq stateTy) => IntermediateCodeBlock stateTy RegID -> [CodeBlock stateTy RegID]
-transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
+transformCodeBlock :: IntermediateCodeBlock Loc RegID -> [CodeBlock Loc RegID]
+transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
     if label == "__entry"
         then
             -- If the block is the entry block, we can skip the prologue and the epilogue.
             -- Also, we need to add a jump to the exit block.
             blocks $
                 execState (traverseInst inst) $
-                    CodeBlockGenEnv [] label label 0 [] (Jmp "__exit") []
+                    CodeBlockGenEnv [] label label 0 [] (Jmp "__exit") localVars'
         else
             blocks
                 $ execState
                     ( do
-                        insertPrologue prologue
+                        insertPrologue
                         traverseInst inst
                     )
-                $ CodeBlockGenEnv [] label label 0 [] Return epilogue'
+                $ CodeBlockGenEnv [] label label 0 [] Return localVars'
   where
-    insertPrologue :: (Eq stateTy) => [Inst stateTy RegID DisallowBranch] -> CodeBlockGenState stateTy RegID ()
-    insertPrologue prologue' = do
+    insertPrologue :: CodeBlockGenState Loc RegID ()
+    insertPrologue = do
         term <- gets currentTerm
         modify $ \env ->
             env
-                { instBuf = prologue'
+                { instBuf =
+                    [ IIntOp dummyLoc Add StackReg StackReg (Imm (-4))
+                    , IStore dummyLoc ReturnReg StackReg 0
+                    ]
                 , currentTerm = Nop
                 }
         flushBuf
         modify $ \env ->
             env
-                { currentLabel = mainLabel env <> "_start"
+                { currentLabel = tailCallLabel $ mainLabel env
+                , instBuf =
+                    [ IIntOp dummyLoc Add StackReg StackReg (Imm (-(4 * localVars')))
+                    ]
+                , currentTerm = Nop
+                }
+        flushBuf
+        modify $ \env ->
+            env
+                { currentLabel = tailRecCallLabel $ mainLabel env
                 , currentTerm = term
                 }
 
-    traverseInst :: (Eq stateTy) => [Inst stateTy RegID AllowBranch] -> CodeBlockGenState stateTy RegID ()
+    traverseInst :: [Inst Loc RegID AllowBranch] -> CodeBlockGenState Loc RegID ()
     traverseInst [] = flushBuf
     traverseInst [IBranch state op left right thenInst elseInst] = do
         term <- gets currentTerm
@@ -150,19 +177,34 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
         -- Check whether tail recursion optimization can be applied.
         mainLabel' <- gets mainLabel
         term <- gets currentTerm
-        if mainLabel' == label' && term == Return
+        if term == Return
             then do
-                -- Found a tail call!
-                -- Shuffle arguments
-                insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
-                insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
-                -- Jump to the start label of the function instead.
-                -- The prologue should be skipped.
-                modify $ \env ->
-                    env
-                        { currentTerm = Jmp $ mainLabel env <> "_start"
-                        }
-                flushBuf
+                if mainLabel' == label'
+                    then do
+                        -- Found a tail rec call!
+                        -- Shuffle arguments.
+                        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
+                        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
+                        -- Jump to the rec label of the function instead.
+                        -- The prologue should be skipped.
+                        modify $ \env ->
+                            env
+                                { currentTerm = Jmp $ tailRecCallLabel $ mainLabel env
+                                }
+                        flushBuf
+                    else do
+                        -- Found a tail call!
+                        -- Shuffle arguments.
+                        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
+                        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
+                        -- Jump to the start label of the function instead.
+                        -- The prologue should be skipped.
+                        insertBuf $ IIntOp state Add StackReg StackReg (Imm (4 * localVars'))
+                        modify $ \env ->
+                            env
+                                { currentTerm = Jmp $ tailCallLabel $ mainLabel env
+                                }
+                        flushBuf
             else do
                 -- If not, just call a function.
                 transformInst $ IRichCall state label' iArgs fArgs
@@ -174,7 +216,7 @@ transformCodeBlock (IntermediateCodeBlock label prologue inst epilogue') =
         transformInst inst'
         traverseInst rest
 
-    transformInst :: Inst stateTy RegID AllowBranch -> CodeBlockGenState stateTy RegID ()
+    transformInst :: Inst Loc RegID AllowBranch -> CodeBlockGenState Loc RegID ()
     transformInst (ICompOp state op dest src1 src2) =
         insertBuf $ ICompOp state op dest src1 src2
     transformInst (IFCompOp state op dest src1 src2) =

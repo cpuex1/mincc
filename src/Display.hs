@@ -387,7 +387,7 @@ instance Display LivenessLoc where
     display loc = display $ livenessState loc
 
 instance (Display stateTy) => Display (IntermediateCodeBlock stateTy Int) where
-    display (IntermediateCodeBlock label _ inst _) =
+    display (IntermediateCodeBlock label _ inst) =
         label
             <> ":\n"
             <> intercalate "\n" (Prelude.map (\i -> insertIndent 1 <> displayI i 1) inst)

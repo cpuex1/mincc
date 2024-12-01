@@ -18,7 +18,7 @@ module Backend.Asm (
         DummyReg
     ),
     RegOrImm (Reg, Imm),
-    IntermediateCodeBlock (IntermediateCodeBlock),
+    IntermediateCodeBlock (..),
     CodeBlock (CodeBlock),
     exitBlock,
     InstTerm (Return, Jmp, Branch, Nop),
@@ -83,9 +83,8 @@ deriving instance (Eq idTy, Eq ty) => Eq (RegOrImm idTy ty)
 data IntermediateCodeBlock stateTy idTy
     = IntermediateCodeBlock
     { getICBLabel :: InstLabel
-    , getICBPrologue :: [Inst stateTy idTy DisallowBranch]
+    , localVars :: Int
     , getICBInst :: [Inst stateTy idTy AllowBranch]
-    , getICBEpilogue :: [Inst stateTy idTy DisallowBranch]
     }
     deriving (Show, Eq)
 
