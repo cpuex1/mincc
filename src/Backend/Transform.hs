@@ -111,8 +111,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
             env
                 { currentLabel = tailCallLabel $ mainLabel env
                 , instBuf =
-                    [ IIntOp dummyLoc Add StackReg StackReg (Imm (-(4 * localVars')))
-                    ]
+                    [IIntOp dummyLoc Add StackReg StackReg (Imm (-(4 * localVars'))) | localVars' /= 0]
                 , currentTerm = Nop
                 }
         flushBuf
