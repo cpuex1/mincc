@@ -2,21 +2,8 @@ module CommandLine (
     ConfigIO,
     IdentEnvIO,
     BackendIdentStateIO,
-    CompilerConfig (CompilerConfig),
+    CompilerConfig (..),
     CommandLineArg (CommandLineArg),
-    cInput,
-    cOutput,
-    cVerbose,
-    cOptimize,
-    cArgsLimit,
-    cANSI,
-    cEmitParsed,
-    cEmitResolved,
-    cEmitTyped,
-    cEmitKNorm,
-    cEmitFlatten,
-    cEmitClosure,
-    cEmitIR,
     parseArg,
     toCompilerConfig,
 ) where
@@ -39,7 +26,8 @@ data CompilerConfig = CompilerConfig
     , cOutput :: String
     , cVerbose :: Bool
     , cOptimize :: Int
-    , cArgsLimit :: Int
+    , cILimit :: Int
+    , cFLimit :: Int
     , cANSI :: Bool
     , cEmitParsed :: Bool
     , cEmitResolved :: Bool
@@ -55,7 +43,8 @@ data CommandLineArg = CommandLineArg
     , output :: String
     , verbose :: Bool
     , optimize :: Int
-    , argsLimit :: Int
+    , iLimit :: Int
+    , fLimit :: Int
     , emitAll :: Bool
     , emitParsed :: Bool
     , emitResolved :: Bool
@@ -99,10 +88,18 @@ parseArg =
             )
         <*> option
             auto
-            ( long "args-limit"
-                <> help "The maximum number of arguments"
+            ( long "i-limit"
+                <> help "The maximum number of int registers"
                 <> showDefault
-                <> value 7
+                <> value 13
+                <> metavar "INT"
+            )
+        <*> option
+            auto
+            ( long "f-limit"
+                <> help "The maximum number of float registers"
+                <> showDefault
+                <> value 19
                 <> metavar "INT"
             )
         <*> switch
@@ -148,7 +145,8 @@ toCompilerConfig arg = do
             , cOutput = output arg
             , cVerbose = verbose arg
             , cOptimize = optimize arg
-            , cArgsLimit = argsLimit arg
+            , cILimit = iLimit arg
+            , cFLimit = fLimit arg
             , cANSI = ansiSupported
             , cEmitParsed = emitAll arg || emitParsed arg
             , cEmitResolved = emitAll arg || emitResolved arg

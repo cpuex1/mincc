@@ -121,8 +121,9 @@ execArgsWithIdent resolvedExprs = do
         liftIO $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
         lift $ printLog Debug "Closure expressions are saved"
 
-    argsLimit' <- lift $ asks cArgsLimit
-    blocks <- runBackendStateT (execArgsWithBackend functions) $ BackendConfig argsLimit'
+    iLimit' <- lift $ asks cILimit
+    fLimit' <- lift $ asks cFLimit
+    blocks <- runBackendStateT (execArgsWithBackend functions) $ BackendConfig iLimit' fLimit'
     case blocks of
         Left err -> lift $ throwError err
         Right _ -> pure ()

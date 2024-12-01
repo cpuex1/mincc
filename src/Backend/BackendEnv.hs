@@ -2,7 +2,7 @@
 
 module Backend.BackendEnv (
     RegID,
-    BackendConfig (BackendConfig, argLimit),
+    BackendConfig (..),
     BackendEnv (..),
     defaultBackendEnv,
     BackendState,
@@ -26,8 +26,9 @@ import Display (display)
 import Error (CompilerError (OtherError))
 import Syntax (Ident)
 
-newtype BackendConfig = BackendConfig
-    { argLimit :: Int
+data BackendConfig = BackendConfig
+    { iRegLimit :: Int
+    , fRegLimit :: Int
     }
     deriving (Show, Eq)
 

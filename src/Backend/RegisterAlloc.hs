@@ -66,12 +66,14 @@ assignRegister (IntermediateCodeBlock label localVars inst) = do
     iMaxID <- gets generatedIReg
     fMaxID <- gets generatedFReg
     let (iMap, fMap) = registerAlloc iMaxID fMaxID $ retrieveGraph inst
+    let usedI = (+ 1) $ foldl max (-1) $ map snd iMap
+    let usedF = (+ 1) $ foldl max (-1) $ map snd fMap
     let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (TempReg a) (SavedReg b) i') i iMap) inst
     let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (TempReg a) (SavedReg b) i') i fMap) inst'
     modify $ \env ->
         env
-            { usedIRegLen = max (usedIRegLen env) $ (+ 1) $ foldl max (-1) $ map snd iMap
-            , usedFRegLen = max (usedFRegLen env) $ (+ 1) $ foldl max (-1) $ map snd fMap
+            { usedIRegLen = max (usedIRegLen env) usedI
+            , usedFRegLen = max (usedFRegLen env) usedF
             }
     pure $
         IntermediateCodeBlock
