@@ -32,6 +32,7 @@ library
       Backend.Lowering
       Backend.RegisterAlloc
       Backend.Shuffle
+      Backend.Spill
       Backend.Transform
       Builtin
       Closure
@@ -98,6 +99,7 @@ test-suite mincc-test
   main-is: Spec.hs
   other-modules:
       Backend.ShuffleSpec
+      Backend.SpillSpec
       ParserSpec
       Paths_mincc
   autogen-modules:
