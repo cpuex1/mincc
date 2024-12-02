@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Compile (
     parseAllIO,
     resolveAllIO,
@@ -98,7 +100,17 @@ assignRegisterIO blocks = do
     usedFRegLen' <- gets generatedFReg
     liftB $ lift $ printLog Debug $ "Before: int: " <> show usedIRegLen' <> ", float: " <> show usedFRegLen'
 
-    blocks' <- mapM assignRegister blocks
+    blocks' <-
+        mapM
+            ( \block -> do
+                liftB $ lift $ printTextLog Debug $ "Allocating registers for " <> getICBLabel block
+
+                block' <- assignRegister block
+
+                liftB $ lift $ printTextLog Debug $ "Allocated registers for " <> getICBLabel block
+                pure block'
+            )
+            blocks
 
     -- Report used registers.
     usedIRegLen'' <- gets usedIRegLen

@@ -5,18 +5,20 @@ module Backend.RegisterAlloc (assignRegister) where
 import Backend.Asm (
     AllowBranch,
     Inst,
-    IntermediateCodeBlock (IntermediateCodeBlock),
+    IntermediateCodeBlock (getICBInst),
     Register (SavedReg, TempReg),
     getAllIState,
     replaceFReg,
     replaceIReg,
     substIState,
  )
-import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), BackendStateT, RegID)
-import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), toGraph)
+import Backend.BackendEnv (BackendConfig (fRegLimit, iRegLimit), BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), BackendStateT, RegID)
+import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), liveness, toGraph)
+import Backend.Spill (spillF, spillI)
+import Control.Monad.Reader (asks)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.List (sortOn)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (listToMaybe, mapMaybe)
 import Syntax (Loc)
 
 newtype RegAllocEnv = RegAllocEnv
@@ -42,6 +44,12 @@ sortByDegree :: Int -> [(RegID, RegID)] -> [RegID]
 sortByDegree maxID graph =
     map fst $ sortOn (negate . snd) $ map (\i -> (i, length $ lookup i graph)) [0 .. maxID - 1]
 
+selectSpilt :: Int -> [(RegID, RegID)] -> RegID
+selectSpilt maxID graph =
+    case listToMaybe $ sortByDegree maxID graph of
+        Just reg -> reg
+        Nothing -> error "No register to spill"
+
 registerAlloc :: Int -> Int -> LivenessGraph -> ([(RegID, RegID)], [(RegID, RegID)])
 registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
   where
@@ -62,24 +70,42 @@ registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
         sorted = sortByDegree maxID graph
 
 assignRegister :: (Monad m) => IntermediateCodeBlock LivenessLoc RegID -> BackendStateT m (IntermediateCodeBlock Loc RegID)
-assignRegister (IntermediateCodeBlock label localVars inst) = do
+assignRegister block = do
     iMaxID <- gets generatedIReg
     fMaxID <- gets generatedFReg
-    let (iMap, fMap) = registerAlloc iMaxID fMaxID $ retrieveGraph inst
+    let (LivenessGraph iGraph fGraph) = retrieveGraph inst
+    let (iMap, fMap) = registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph)
     let usedI = (+ 1) $ foldl max (-1) $ map snd iMap
     let usedF = (+ 1) $ foldl max (-1) $ map snd fMap
-    let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (TempReg a) (SavedReg b) i') i iMap) inst
-    let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (TempReg a) (SavedReg b) i') i fMap) inst'
-    modify $ \env ->
-        env
-            { usedIRegLen = max (usedIRegLen env) usedI
-            , usedFRegLen = max (usedFRegLen env) usedF
-            }
-    pure $
-        IntermediateCodeBlock
-            label
-            localVars
-            (map (substIState livenessLoc) inst'')
+    iLimit <- asks iRegLimit
+    fLimit <- asks fRegLimit
+    if usedI > iLimit
+        then do
+            -- Int register spill occurs.
+            let livenessRemoved = map (substIState livenessLoc) inst
+            block' <- spillI (selectSpilt iMaxID iGraph) block{getICBInst = livenessRemoved}
+            assignRegister block'{getICBInst = liveness $ getICBInst block'}
+        else
+            if usedF > fLimit
+                then do
+                    -- Float register spill occurs.
+                    let livenessRemoved = map (substIState livenessLoc) inst
+                    block' <- spillF (selectSpilt iMaxID iGraph) block{getICBInst = livenessRemoved}
+                    assignRegister block'{getICBInst = liveness $ getICBInst block'}
+                else do
+                    -- Accept the register allocation.
+                    let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (TempReg a) (SavedReg b) i') i iMap) inst
+                    let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (TempReg a) (SavedReg b) i') i fMap) inst'
+                    modify $ \env ->
+                        env
+                            { usedIRegLen = max (usedIRegLen env) usedI
+                            , usedFRegLen = max (usedFRegLen env) usedF
+                            }
+                    pure $
+                        block{getICBInst = map (substIState livenessLoc) inst''}
   where
     retrieveGraph :: [Inst LivenessLoc RegID AllowBranch] -> LivenessGraph
     retrieveGraph inst' = toGraph $ concatMap (map livenessState . getAllIState) inst'
+
+    inst :: [Inst LivenessLoc RegID AllowBranch]
+    inst = getICBInst block
