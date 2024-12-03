@@ -12,11 +12,12 @@ import Backend.Asm (
     replaceIReg,
     substIState,
  )
-import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg), BackendStateT, RegID)
-import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), toGraph)
+import Backend.BackendEnv (BackendStateT, RegID)
+import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
-import Data.List (sortOn)
+import Data.List (sortBy)
 import Data.Maybe (listToMaybe, mapMaybe)
+import Data.Ord (Down (Down), comparing)
 import Syntax (Loc)
 
 newtype RegAllocEnv = RegAllocEnv
@@ -38,43 +39,44 @@ assign reg1 reg2 = do
 getMin :: [RegID] -> RegID
 getMin l = until (`notElem` l) (+ 1) 0
 
-sortByDegree :: Int -> [(RegID, RegID)] -> [RegID]
-sortByDegree maxID graph =
-    map fst $ sortOn (negate . snd) $ map (\i -> (i, length $ lookup i graph)) [0 .. maxID - 1]
+sortByDegree :: RegGraph -> [RegID]
+sortByDegree (RegGraph vertices edges') =
+    map (negate . snd)
+        $ sortBy
+            (comparing Down)
+        $ map (\i -> (length $ lookup i edges', -i)) vertices
 
-selectSpilt :: Int -> [(RegID, RegID)] -> Maybe RegID
-selectSpilt maxID graph = listToMaybe $ sortByDegree maxID graph
+selectSpilt :: RegGraph -> Maybe RegID
+selectSpilt = listToMaybe . sortByDegree
 
-registerAlloc :: Int -> Int -> LivenessGraph -> ([(RegID, RegID)], [(RegID, RegID)])
-registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
+registerAlloc :: LivenessGraph -> ([(RegID, RegID)], [(RegID, RegID)])
+registerAlloc (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
   where
-    iGraph' = regMap $ execState (registerAlloc' iMaxID iGraph) (RegAllocEnv [])
-    fGraph' = regMap $ execState (registerAlloc' fMaxID fGraph) (RegAllocEnv [])
+    iGraph' = regMap $ execState (registerAlloc' iGraph) (RegAllocEnv [])
+    fGraph' = regMap $ execState (registerAlloc' fGraph) (RegAllocEnv [])
 
-    registerAlloc' :: Int -> [(RegID, RegID)] -> RegAllocState ()
-    registerAlloc' maxID graph =
+    registerAlloc' :: RegGraph -> RegAllocState ()
+    registerAlloc' graph =
         mapM_
             ( \reg -> do
-                let neighborhood = map snd $ filter ((== reg) . fst) graph
+                let neighborhood = map snd $ filter ((== reg) . fst) $ edges graph
                 mapped <- mapAll neighborhood
                 let minReg = getMin mapped
                 assign reg minReg
             )
             sorted
       where
-        sorted = sortByDegree maxID graph
+        sorted = sortByDegree graph
 
 assignRegister :: (Monad m) => IntermediateCodeBlock LivenessLoc RegID -> BackendStateT m (Int, Int, Maybe RegID, Maybe RegID, IntermediateCodeBlock Loc RegID)
 assignRegister block = do
-    iMaxID <- gets generatedIReg
-    fMaxID <- gets generatedFReg
     let (LivenessGraph iGraph fGraph) = retrieveGraph inst
-    let (iMap, fMap) = registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph)
+    let (iMap, fMap) = registerAlloc (LivenessGraph iGraph fGraph)
     let usedI = (+ 1) $ foldl max (-1) $ map snd iMap
     let usedF = (+ 1) $ foldl max (-1) $ map snd fMap
 
-    let iSpillTarget = selectSpilt iMaxID iGraph
-    let fSpillTarget = selectSpilt fMaxID fGraph
+    let iSpillTarget = selectSpilt iGraph
+    let fSpillTarget = selectSpilt fGraph
 
     -- Accept the register allocation.
     -- Replace SavedReg with TempReg.

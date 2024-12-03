@@ -2,6 +2,7 @@
 
 module Backend.Liveness (
     liveness,
+    RegGraph (..),
     LivenessLoc (LivenessLoc, livenessLoc, livenessState),
     LivenessState (LivenessState, iAlive, fAlive),
     LivenessGraph (LivenessGraph),
@@ -11,7 +12,7 @@ module Backend.Liveness (
 import Backend.Asm
 import Control.Monad (unless)
 import Control.Monad.State (MonadState (get, put), State, evalState, gets, modify)
-import Data.List (union)
+import Data.List (nub, sort, union)
 import Syntax (Loc)
 
 data LivenessState = LivenessState
@@ -28,15 +29,27 @@ data LivenessLoc = LivenessLoc
 
 type LivenessStateM = State LivenessState
 
+data RegGraph = RegGraph
+    { vertices :: [RegID]
+    , edges :: [(RegID, RegID)]
+    }
+    deriving (Show, Eq)
+
+unifyGraph :: RegGraph -> RegGraph -> RegGraph
+unifyGraph (RegGraph v1 e1) (RegGraph v2 e2) = RegGraph (v1 `union` v2) (e1 `union` e2)
+
+emptyGraph :: RegGraph
+emptyGraph = RegGraph [] []
+
 data LivenessGraph = LivenessGraph
-    { iGraph :: [(RegID, RegID)]
-    , fGraph :: [(RegID, RegID)]
+    { iGraph :: RegGraph
+    , fGraph :: RegGraph
     }
     deriving (Show, Eq)
 
 toGraph :: [LivenessState] -> LivenessGraph
-toGraph [] = LivenessGraph [] []
-toGraph (s : rest) = LivenessGraph (iGraph xGraph `union` iGraph xsGraph) (fGraph xGraph `union` fGraph xsGraph)
+toGraph [] = LivenessGraph emptyGraph emptyGraph
+toGraph (s : rest) = LivenessGraph (unifyGraph (iGraph xGraph) (iGraph xsGraph)) (unifyGraph (fGraph xGraph) (fGraph xsGraph))
   where
     xGraph = toGraph' s
     xsGraph = toGraph rest
@@ -44,8 +57,8 @@ toGraph (s : rest) = LivenessGraph (iGraph xGraph `union` iGraph xsGraph) (fGrap
     toGraph' :: LivenessState -> LivenessGraph
     toGraph' (LivenessState iAlive' fAlive') =
         LivenessGraph
-            { iGraph = [(x, y) | x <- iAlive', y <- iAlive', x /= y]
-            , fGraph = [(x, y) | x <- fAlive', y <- fAlive', x /= y]
+            { iGraph = RegGraph (sort (nub iAlive')) [(x, y) | x <- iAlive', y <- iAlive', x /= y]
+            , fGraph = RegGraph (sort (nub fAlive')) [(x, y) | x <- fAlive', y <- fAlive', x /= y]
             }
 
 markUsedI :: Register RegID Int -> LivenessStateM ()
