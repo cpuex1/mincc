@@ -12,10 +12,8 @@ import Backend.Asm (
     replaceIReg,
     substIState,
  )
-import Backend.BackendEnv (BackendConfig (fRegLimit, iRegLimit), BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), BackendStateT, RegID)
-import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), liveness, toGraph)
-import Backend.Spill (spillF, spillI)
-import Control.Monad.Reader (asks)
+import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg), BackendStateT, RegID)
+import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.List (sortOn)
 import Data.Maybe (listToMaybe, mapMaybe)
@@ -44,11 +42,8 @@ sortByDegree :: Int -> [(RegID, RegID)] -> [RegID]
 sortByDegree maxID graph =
     map fst $ sortOn (negate . snd) $ map (\i -> (i, length $ lookup i graph)) [0 .. maxID - 1]
 
-selectSpilt :: Int -> [(RegID, RegID)] -> RegID
-selectSpilt maxID graph =
-    case listToMaybe $ sortByDegree maxID graph of
-        Just reg -> reg
-        Nothing -> error "No register to spill"
+selectSpilt :: Int -> [(RegID, RegID)] -> Maybe RegID
+selectSpilt maxID graph = listToMaybe $ sortByDegree maxID graph
 
 registerAlloc :: Int -> Int -> LivenessGraph -> ([(RegID, RegID)], [(RegID, RegID)])
 registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
@@ -69,7 +64,7 @@ registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
       where
         sorted = sortByDegree maxID graph
 
-assignRegister :: (Monad m) => IntermediateCodeBlock LivenessLoc RegID -> BackendStateT m (IntermediateCodeBlock Loc RegID)
+assignRegister :: (Monad m) => IntermediateCodeBlock LivenessLoc RegID -> BackendStateT m (Int, Int, Maybe RegID, Maybe RegID, IntermediateCodeBlock Loc RegID)
 assignRegister block = do
     iMaxID <- gets generatedIReg
     fMaxID <- gets generatedFReg
@@ -77,6 +72,9 @@ assignRegister block = do
     let (iMap, fMap) = registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph)
     let usedI = (+ 1) $ foldl max (-1) $ map snd iMap
     let usedF = (+ 1) $ foldl max (-1) $ map snd fMap
+
+    let iSpillTarget = selectSpilt iMaxID iGraph
+    let fSpillTarget = selectSpilt fMaxID fGraph
 
     -- Accept the register allocation.
     -- Replace SavedReg with TempReg.
@@ -86,14 +84,9 @@ assignRegister block = do
     -- To avoid the replacement of SavedReg occurring more than once,
     -- we need to proceed replacements via TempReg.
     let inst''' = map (\i -> foldl (\i' a -> replaceIReg (TempReg a) (SavedReg a) i') i [0 .. usedI - 1]) inst''
-    let inst'''' = map (\i -> foldl (\i' a -> replaceIReg (TempReg a) (SavedReg a) i') i [0 .. usedI - 1]) inst'''
-    modify $ \env ->
-        env
-            { usedIRegLen = max (usedIRegLen env) usedI
-            , usedFRegLen = max (usedFRegLen env) usedF
-            }
-    pure $
-        block{getICBInst = map (substIState livenessLoc) inst''''}
+    let inst'''' = map (\i -> foldl (\i' a -> replaceIReg (TempReg a) (SavedReg a) i') i [0 .. usedF - 1]) inst'''
+
+    pure (usedI, usedF, iSpillTarget, fSpillTarget, block{getICBInst = map (substIState livenessLoc) inst''''})
   where
     retrieveGraph :: [Inst LivenessLoc RegID AllowBranch] -> LivenessGraph
     retrieveGraph inst' = toGraph $ concatMap (map livenessState . getAllIState) inst'

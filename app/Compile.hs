@@ -14,19 +14,23 @@ module Compile (
 ) where
 
 import Backend.Asm
-import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), liftB)
-import Backend.Liveness (LivenessLoc, liveness)
+import Backend.BackendEnv (BackendConfig (fRegLimit, iRegLimit), BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), liftB)
+import Backend.Liveness (LivenessLoc (livenessLoc), liveness)
 import Backend.Lowering
 import Backend.RegisterAlloc (assignRegister)
+import Backend.Spill (spillF, spillI)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import Control.Monad.State.Lazy (gets)
+import Control.Monad.Reader (asks)
+import Control.Monad.State.Lazy (gets, modify)
 import Control.Monad.Trans.Class
 import qualified Data.ByteString as B
+import Data.Text (pack)
 import Data.Text.Encoding (decodeUtf8)
+import Display (display)
 import Error
 import Flatten (flattenExpr)
 import IdentAnalysis (loadTypeEnv)
@@ -105,7 +109,7 @@ assignRegisterIO blocks = do
             ( \block -> do
                 liftB $ lift $ printTextLog Debug $ "Allocating registers for " <> getICBLabel block
 
-                block' <- assignRegister block
+                block' <- assignRegisterLoop block
 
                 liftB $ lift $ printTextLog Debug $ "Allocated registers for " <> getICBLabel block
                 pure block'
@@ -117,3 +121,50 @@ assignRegisterIO blocks = do
     usedFRegLen'' <- gets usedFRegLen
     liftB $ lift $ printLog Debug $ "After: int: " <> show usedIRegLen'' <> ", float: " <> show usedFRegLen''
     pure blocks'
+  where
+    assignRegisterLoop :: IntermediateCodeBlock LivenessLoc RegID -> BackendIdentStateIO (IntermediateCodeBlock Loc RegID)
+    assignRegisterLoop block = do
+        (usedI, usedF, iSpillTarget, fSpillTarget, block') <- assignRegister block
+
+        liftB $
+            lift $
+                printTextLog Debug $
+                    "Required registers: "
+                        <> pack (show usedI)
+                        <> ", "
+                        <> pack (show usedF)
+
+        iLimit <- asks iRegLimit
+        if iLimit < usedI
+            then do
+                case iSpillTarget of
+                    Just target -> do
+                        let livenessRemoved = map (substIState livenessLoc) $ getICBInst block
+                        spilt <- spillI target block{getICBInst = livenessRemoved}
+
+                        liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (SavedReg target :: Register RegID Int)
+
+                        assignRegisterLoop spilt{getICBInst = liveness $ getICBInst spilt}
+                    Nothing -> do
+                        throwError $ OtherError "Failed to find a spill target for int registers."
+            else do
+                fLimit <- asks fRegLimit
+                if fLimit < usedF
+                    then do
+                        case fSpillTarget of
+                            Just target -> do
+                                let livenessRemoved = map (substIState livenessLoc) $ getICBInst block
+                                spilt <- spillF target block{getICBInst = livenessRemoved}
+
+                                liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (SavedReg target :: Register RegID Float)
+
+                                assignRegisterLoop spilt{getICBInst = liveness $ getICBInst spilt}
+                            Nothing -> do
+                                throwError $ OtherError "Failed to find a spill target for float registers."
+                    else do
+                        modify $ \env ->
+                            env
+                                { usedIRegLen = max usedI (usedIRegLen env)
+                                , usedFRegLen = max usedF (usedFRegLen env)
+                                }
+                        pure block'
