@@ -77,32 +77,23 @@ assignRegister block = do
     let (iMap, fMap) = registerAlloc iMaxID fMaxID (LivenessGraph iGraph fGraph)
     let usedI = (+ 1) $ foldl max (-1) $ map snd iMap
     let usedF = (+ 1) $ foldl max (-1) $ map snd fMap
-    iLimit <- asks iRegLimit
-    fLimit <- asks fRegLimit
-    if usedI > iLimit
-        then do
-            -- Int register spill occurs.
-            let livenessRemoved = map (substIState livenessLoc) inst
-            block' <- spillI (selectSpilt iMaxID iGraph) block{getICBInst = livenessRemoved}
-            assignRegister block'{getICBInst = liveness $ getICBInst block'}
-        else
-            if usedF > fLimit
-                then do
-                    -- Float register spill occurs.
-                    let livenessRemoved = map (substIState livenessLoc) inst
-                    block' <- spillF (selectSpilt iMaxID iGraph) block{getICBInst = livenessRemoved}
-                    assignRegister block'{getICBInst = liveness $ getICBInst block'}
-                else do
-                    -- Accept the register allocation.
-                    let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (TempReg a) (SavedReg b) i') i iMap) inst
-                    let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (TempReg a) (SavedReg b) i') i fMap) inst'
-                    modify $ \env ->
-                        env
-                            { usedIRegLen = max (usedIRegLen env) usedI
-                            , usedFRegLen = max (usedFRegLen env) usedF
-                            }
-                    pure $
-                        block{getICBInst = map (substIState livenessLoc) inst''}
+
+    -- Accept the register allocation.
+    -- Replace SavedReg with TempReg.
+    let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (SavedReg a) (TempReg b) i') i iMap) inst
+    let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (SavedReg a) (TempReg b) i') i fMap) inst'
+
+    -- To avoid the replacement of SavedReg occurring more than once,
+    -- we need to proceed replacements via TempReg.
+    let inst''' = map (\i -> foldl (\i' a -> replaceIReg (TempReg a) (SavedReg a) i') i [0 .. usedI - 1]) inst''
+    let inst'''' = map (\i -> foldl (\i' a -> replaceIReg (TempReg a) (SavedReg a) i') i [0 .. usedI - 1]) inst'''
+    modify $ \env ->
+        env
+            { usedIRegLen = max (usedIRegLen env) usedI
+            , usedFRegLen = max (usedFRegLen env) usedF
+            }
+    pure $
+        block{getICBInst = map (substIState livenessLoc) inst''''}
   where
     retrieveGraph :: [Inst LivenessLoc RegID AllowBranch] -> LivenessGraph
     retrieveGraph inst' = toGraph $ concatMap (map livenessState . getAllIState) inst'

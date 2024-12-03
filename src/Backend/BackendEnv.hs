@@ -17,7 +17,7 @@ module Backend.BackendEnv (
     findF,
 ) where
 
-import Backend.Asm (RegID, Register (TempReg))
+import Backend.Asm (RegID, Register (SavedReg))
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
@@ -71,13 +71,13 @@ genTempIReg :: (Monad m) => BackendStateT m (Register RegID Int)
 genTempIReg = do
     env <- get
     modify $ \e -> e{generatedIReg = generatedIReg e + 1}
-    return $ TempReg $ generatedIReg env
+    return $ SavedReg $ generatedIReg env
 
 genTempFReg :: (Monad m) => BackendStateT m (Register RegID Float)
 genTempFReg = do
     env <- get
     modify $ \e -> e{generatedFReg = generatedFReg e + 1}
-    return $ TempReg $ generatedFReg env
+    return $ SavedReg $ generatedFReg env
 
 genIReg :: (Monad m) => Ident -> BackendStateT m (Register RegID Int)
 genIReg ident = do

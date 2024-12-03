@@ -2,13 +2,21 @@
 
 module Backend.Spill (spillI, spillF) where
 
-import Backend.Asm (AllowBranch, Inst (IBranch, IClosureCall, ICompOp, IFCompOp, IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMakeClosure, IMov, IRawInst, IRichCall, IStore), IntermediateCodeBlock (getICBInst, localVars), RawInstRetTy (RIRFloat, RIRInt), RegID, RegOrImm (Reg), Register (StackReg, TempReg))
+import Backend.Asm (
+    AllowBranch,
+    Inst (..),
+    IntermediateCodeBlock (getICBInst, localVars),
+    RawInstRetTy (RIRFloat, RIRInt),
+    RegID,
+    RegOrImm (Reg),
+    Register (SavedReg, StackReg),
+ )
 import Backend.BackendEnv (BackendStateT, genTempFReg, genTempIReg)
 import Syntax (Loc, dummyLoc)
 
 loadNewIReg :: (Monad m) => Int -> RegID -> Register RegID Int -> BackendStateT m (Register RegID Int, [Inst Loc RegID AllowBranch])
 loadNewIReg vars searching victim =
-    if TempReg searching == victim
+    if SavedReg searching == victim
         then do
             newReg <- genTempIReg
             pure (newReg, [ILoad dummyLoc newReg StackReg (vars * 4)])
@@ -16,7 +24,7 @@ loadNewIReg vars searching victim =
 
 loadNewIReg' :: (Monad m) => Int -> RegID -> RegOrImm RegID Int -> BackendStateT m (RegOrImm RegID Int, [Inst Loc RegID AllowBranch])
 loadNewIReg' vars searching victim =
-    if Reg (TempReg searching) == victim
+    if Reg (SavedReg searching) == victim
         then do
             newReg <- genTempIReg
             pure (Reg newReg, [ILoad dummyLoc newReg StackReg (vars * 4)])
@@ -24,7 +32,7 @@ loadNewIReg' vars searching victim =
 
 loadNewFReg :: (Monad m) => Int -> RegID -> Register RegID Float -> BackendStateT m (Register RegID Float, [Inst Loc RegID AllowBranch])
 loadNewFReg vars searching victim =
-    if TempReg searching == victim
+    if SavedReg searching == victim
         then do
             newReg <- genTempFReg
             pure (newReg, [IFLoad dummyLoc newReg StackReg (vars * 4)])
@@ -32,7 +40,7 @@ loadNewFReg vars searching victim =
 
 loadNewFReg' :: (Monad m) => Int -> RegID -> RegOrImm RegID Float -> BackendStateT m (RegOrImm RegID Float, [Inst Loc RegID AllowBranch])
 loadNewFReg' vars searching victim =
-    if Reg (TempReg searching) == victim
+    if Reg (SavedReg searching) == victim
         then do
             newReg <- genTempFReg
             pure (Reg newReg, [IFLoad dummyLoc newReg StackReg (vars * 4)])
@@ -40,7 +48,7 @@ loadNewFReg' vars searching victim =
 
 storeNewIReg :: (Monad m) => Int -> RegID -> Register RegID Int -> BackendStateT m (Register RegID Int, [Inst Loc RegID AllowBranch])
 storeNewIReg vars searching victim =
-    if TempReg searching == victim
+    if SavedReg searching == victim
         then do
             newReg <- genTempIReg
             pure (newReg, [IStore dummyLoc newReg StackReg (vars * 4)])
@@ -48,7 +56,7 @@ storeNewIReg vars searching victim =
 
 storeNewFReg :: (Monad m) => Int -> RegID -> Register RegID Float -> BackendStateT m (Register RegID Float, [Inst Loc RegID AllowBranch])
 storeNewFReg vars searching victim =
-    if TempReg searching == victim
+    if SavedReg searching == victim
         then do
             newReg <- genTempFReg
             pure (newReg, [IFStore dummyLoc newReg StackReg (vars * 4)])

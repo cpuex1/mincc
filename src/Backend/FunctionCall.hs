@@ -12,6 +12,7 @@ import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
 import Syntax (IntBinOp (Add), Loc, dummyLoc)
 
+-- | Saves arguments on the stack before a function call.
 saveArgs :: (Monad m) => IntermediateCodeBlock stateTy RegID -> BackendStateT m (IntermediateCodeBlock stateTy RegID)
 saveArgs block = do
     inst' <- saveArgs' $ getICBInst block
@@ -184,8 +185,9 @@ saveArgs block = do
                 isUsedAfterCallF reg rest
     isUsedAfterCallF reg (_ : rest) = isUsedAfterCallF reg rest
 
-registerBeyondCall :: Inst LivenessLoc RegID AllowBranch -> [Inst Loc RegID AllowBranch]
-registerBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) label iArgs fArgs) =
+-- | Saves registers on the stack before a function call and restores them after the call.
+saveRegBeyondCall :: Inst LivenessLoc RegID AllowBranch -> [Inst Loc RegID AllowBranch]
+saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) label iArgs fArgs) =
     prologue ++ [IRichCall loc label iArgs fArgs] ++ epilogue
   where
     iToBeSaved = iArgs'
@@ -199,12 +201,12 @@ registerBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) la
                 IIntOp dummyLoc Add StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
-            (\i arg -> IStore dummyLoc (TempReg arg) StackReg (i * 4))
+            (\i arg -> IStore dummyLoc (SavedReg arg) StackReg (i * 4))
             [0 ..]
             iToBeSaved
     fPrologue =
         zipWith
-            (\i arg -> IFStore dummyLoc (TempReg arg) StackReg (i * 4))
+            (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg (i * 4))
             [length iToBeSaved ..]
             fToBeSaved
 
@@ -216,15 +218,15 @@ registerBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) la
                 iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc Add StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
     iEpilogue =
         zipWith
-            (\i arg -> ILoad dummyLoc (TempReg arg) StackReg (i * 4))
+            (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg (i * 4))
             [0 ..]
             iToBeSaved
     fEpilogue =
         zipWith
-            (\i arg -> IFLoad dummyLoc (TempReg arg) StackReg (i * 4))
+            (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg (i * 4))
             [length iToBeSaved ..]
             fToBeSaved
-registerBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) cl iArgs fArgs) =
+saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) cl iArgs fArgs) =
     prologue ++ [IClosureCall loc cl iArgs fArgs] ++ epilogue
   where
     iToBeSaved = iArgs'
@@ -238,12 +240,12 @@ registerBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs'))
                 IIntOp dummyLoc Add StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
-            (\i arg -> IStore dummyLoc (TempReg arg) StackReg (i * 4))
+            (\i arg -> IStore dummyLoc (SavedReg arg) StackReg (i * 4))
             [0 ..]
             iToBeSaved
     fPrologue =
         zipWith
-            (\i arg -> IFStore dummyLoc (TempReg arg) StackReg (i * 4))
+            (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg (i * 4))
             [length iToBeSaved ..]
             fToBeSaved
 
@@ -255,25 +257,26 @@ registerBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs'))
                 iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc Add StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
     iEpilogue =
         zipWith
-            (\i arg -> ILoad dummyLoc (TempReg arg) StackReg (i * 4))
+            (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg (i * 4))
             [0 ..]
             iToBeSaved
     fEpilogue =
         zipWith
-            (\i arg -> IFLoad dummyLoc (TempReg arg) StackReg (i * 4))
+            (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg (i * 4))
             [length iToBeSaved ..]
             fToBeSaved
-registerBeyondCall (IBranch state op left right thenBlock elseBlock) =
+saveRegBeyondCall (IBranch state op left right thenBlock elseBlock) =
     [ IBranch
         (livenessLoc state)
         op
         left
         right
-        (concatMap registerBeyondCall thenBlock)
-        (concatMap registerBeyondCall elseBlock)
+        (concatMap saveRegBeyondCall thenBlock)
+        (concatMap saveRegBeyondCall elseBlock)
     ]
-registerBeyondCall i = [substIState livenessLoc i]
+saveRegBeyondCall i = [substIState livenessLoc i]
 
+-- | Saves registers on the stack before a function call and restores them after the call.
 saveRegisters :: IntermediateCodeBlock Loc RegID -> IntermediateCodeBlock Loc RegID
 saveRegisters block =
-    block{getICBInst = concatMap registerBeyondCall $ liveness $ getICBInst block}
+    block{getICBInst = concatMap saveRegBeyondCall $ liveness $ getICBInst block}

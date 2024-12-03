@@ -49,7 +49,7 @@ toGraph (s : rest) = LivenessGraph (iGraph xGraph `union` iGraph xsGraph) (fGrap
             }
 
 markUsedI :: Register RegID Int -> LivenessStateM ()
-markUsedI (TempReg regId) = do
+markUsedI (SavedReg regId) = do
     env <- get
     unless (regId `elem` iAlive env) $
         put env{iAlive = regId : iAlive env}
@@ -60,7 +60,7 @@ markUsedI' (Reg reg) = markUsedI reg
 markUsedI' (Imm _) = pure ()
 
 markUsedF :: Register RegID Float -> LivenessStateM ()
-markUsedF (TempReg regId) = do
+markUsedF (SavedReg regId) = do
     env <- get
     unless (regId `elem` fAlive env) $
         put env{fAlive = regId : fAlive env}
@@ -71,13 +71,13 @@ markUsedF' (Reg reg) = markUsedF reg
 markUsedF' (Imm _) = pure ()
 
 removeI :: Register RegID Int -> LivenessStateM ()
-removeI (TempReg regId) = do
+removeI (SavedReg regId) = do
     modify $ \env ->
         env{iAlive = filter (/= regId) $ iAlive env}
 removeI _ = pure ()
 
 removeF :: Register RegID Float -> LivenessStateM ()
-removeF (TempReg regId) = do
+removeF (SavedReg regId) = do
     modify $ \env ->
         env{fAlive = filter (/= regId) $ fAlive env}
 removeF _ = pure ()
@@ -86,6 +86,7 @@ getState :: Loc -> LivenessStateM LivenessLoc
 getState loc' =
     gets $ LivenessLoc loc'
 
+-- | Calculates liveness information for each instruction.
 liveness :: [Inst Loc RegID AllowBranch] -> [Inst LivenessLoc RegID AllowBranch]
 liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessState [] []
   where

@@ -2,7 +2,7 @@
 
 module Backend.SpillSpec (spec) where
 
-import Backend.Asm (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), RegOrImm (Imm, Reg), Register (StackReg, TempReg))
+import Backend.Asm (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), RegOrImm (Imm, Reg), Register (SavedReg, StackReg))
 import Backend.BackendEnv (BackendConfig (BackendConfig), BackendEnv (generatedFReg, generatedIReg), RegID, runBackendStateT)
 import Backend.Spill
 import Control.Monad.Identity (Identity (runIdentity))
@@ -44,25 +44,25 @@ spec = do
                 ( IntermediateCodeBlock
                     "test"
                     0
-                    [ IMov dummyLoc (TempReg 0) (Imm 0)
-                    , IMov dummyLoc (TempReg 1) (Imm 1)
-                    , IMov dummyLoc (TempReg 2) (Imm 2)
-                    , IIntOp dummyLoc Add (TempReg 1) (TempReg 1) (Reg (TempReg 2))
-                    , IIntOp dummyLoc Add (TempReg 0) (TempReg 0) (Reg (TempReg 1))
+                    [ IMov dummyLoc (SavedReg 0) (Imm 0)
+                    , IMov dummyLoc (SavedReg 1) (Imm 1)
+                    , IMov dummyLoc (SavedReg 2) (Imm 2)
+                    , IIntOp dummyLoc Add (SavedReg 1) (SavedReg 1) (Reg (SavedReg 2))
+                    , IIntOp dummyLoc Add (SavedReg 0) (SavedReg 0) (Reg (SavedReg 1))
                     ]
                 )
                 `shouldBe` Right
                     ( IntermediateCodeBlock
                         "test"
                         1
-                        [ IMov dummyLoc (TempReg 3) (Imm 0)
-                        , IStore dummyLoc (TempReg 3) StackReg 0
-                        , IMov dummyLoc (TempReg 1) (Imm 1)
-                        , IMov dummyLoc (TempReg 2) (Imm 2)
-                        , IIntOp dummyLoc Add (TempReg 1) (TempReg 1) (Reg (TempReg 2))
-                        , ILoad dummyLoc (TempReg 4) StackReg 0
-                        , IIntOp dummyLoc Add (TempReg 5) (TempReg 4) (Reg (TempReg 1))
-                        , IStore dummyLoc (TempReg 5) StackReg 0
+                        [ IMov dummyLoc (SavedReg 3) (Imm 0)
+                        , IStore dummyLoc (SavedReg 3) StackReg 0
+                        , IMov dummyLoc (SavedReg 1) (Imm 1)
+                        , IMov dummyLoc (SavedReg 2) (Imm 2)
+                        , IIntOp dummyLoc Add (SavedReg 1) (SavedReg 1) (Reg (SavedReg 2))
+                        , ILoad dummyLoc (SavedReg 4) StackReg 0
+                        , IIntOp dummyLoc Add (SavedReg 5) (SavedReg 4) (Reg (SavedReg 1))
+                        , IStore dummyLoc (SavedReg 5) StackReg 0
                         ]
                     )
         it "test2" $ do
@@ -73,24 +73,24 @@ spec = do
                 ( IntermediateCodeBlock
                     "test"
                     0
-                    [ IFMov dummyLoc (TempReg 0) (Imm 0)
-                    , IFMov dummyLoc (TempReg 1) (Imm 1)
-                    , IFMov dummyLoc (TempReg 2) (Imm 2)
-                    , IFOp dummyLoc FAdd (TempReg 1) (TempReg 1) (TempReg 2)
-                    , IFOp dummyLoc FAdd (TempReg 0) (TempReg 0) (TempReg 1)
+                    [ IFMov dummyLoc (SavedReg 0) (Imm 0)
+                    , IFMov dummyLoc (SavedReg 1) (Imm 1)
+                    , IFMov dummyLoc (SavedReg 2) (Imm 2)
+                    , IFOp dummyLoc FAdd (SavedReg 1) (SavedReg 1) (SavedReg 2)
+                    , IFOp dummyLoc FAdd (SavedReg 0) (SavedReg 0) (SavedReg 1)
                     ]
                 )
                 `shouldBe` Right
                     ( IntermediateCodeBlock
                         "test"
                         1
-                        [ IFMov dummyLoc (TempReg 3) (Imm 0)
-                        , IFStore dummyLoc (TempReg 3) StackReg 0
-                        , IFMov dummyLoc (TempReg 1) (Imm 1)
-                        , IFMov dummyLoc (TempReg 2) (Imm 2)
-                        , IFOp dummyLoc FAdd (TempReg 1) (TempReg 1) (TempReg 2)
-                        , IFLoad dummyLoc (TempReg 4) StackReg 0
-                        , IFOp dummyLoc FAdd (TempReg 5) (TempReg 4) (TempReg 1)
-                        , IFStore dummyLoc (TempReg 5) StackReg 0
+                        [ IFMov dummyLoc (SavedReg 3) (Imm 0)
+                        , IFStore dummyLoc (SavedReg 3) StackReg 0
+                        , IFMov dummyLoc (SavedReg 1) (Imm 1)
+                        , IFMov dummyLoc (SavedReg 2) (Imm 2)
+                        , IFOp dummyLoc FAdd (SavedReg 1) (SavedReg 1) (SavedReg 2)
+                        , IFLoad dummyLoc (SavedReg 4) StackReg 0
+                        , IFOp dummyLoc FAdd (SavedReg 5) (SavedReg 4) (SavedReg 1)
+                        , IFStore dummyLoc (SavedReg 5) StackReg 0
                         ]
                     )

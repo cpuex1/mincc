@@ -378,9 +378,9 @@ instance Display (InstTerm stateTy Int) where
 instance Display LivenessState where
     display state =
         " # ["
-            <> Data.Text.intercalate "," (Prelude.map (\i -> display (TempReg i :: Register RegID Int)) (iAlive state))
+            <> Data.Text.intercalate "," (Prelude.map (\i -> display (SavedReg i :: Register RegID Int)) (iAlive state))
             <> "], ["
-            <> Data.Text.intercalate "," (Prelude.map (\i -> display (TempReg i :: Register RegID Float)) (fAlive state))
+            <> Data.Text.intercalate "," (Prelude.map (\i -> display (SavedReg i :: Register RegID Float)) (fAlive state))
             <> "]"
 
 instance Display LivenessLoc where
