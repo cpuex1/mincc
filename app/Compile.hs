@@ -15,6 +15,7 @@ module Compile (
 
 import Backend.Asm
 import Backend.BackendEnv (BackendConfig (fRegLimit, iRegLimit), BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), liftB)
+import Backend.FunctionCall (saveRegisters)
 import Backend.Liveness (LivenessLoc (livenessLoc), liveness)
 import Backend.Lowering
 import Backend.RegisterAlloc (assignRegister)
@@ -120,7 +121,12 @@ assignRegisterIO blocks = do
     usedIRegLen'' <- gets usedIRegLen
     usedFRegLen'' <- gets usedFRegLen
     liftB $ lift $ printLog Debug $ "After: int: " <> show usedIRegLen'' <> ", float: " <> show usedFRegLen''
-    pure blocks'
+
+    -- Perform register saving.
+    let blocks'' = map saveRegisters blocks'
+    liftB $ lift $ printLog Debug "Refuge registers beyond function calls"
+
+    pure blocks''
   where
     assignRegisterLoop :: IntermediateCodeBlock LivenessLoc RegID -> BackendIdentStateIO (IntermediateCodeBlock Loc RegID)
     assignRegisterLoop block = do
