@@ -9,7 +9,8 @@ module Syntax (
     IntBinOp (Add, Sub, Mul, Div),
     FloatBinOp (FAdd, FSub, FMul, FDiv),
     BinaryOp (RelationOp, IntOp, FloatOp),
-    Ident (Entry, UserDefined, CompilerGenerated, ExternalIdent),
+    Ident (..),
+    Operand (..),
     Pattern (PUnit, PVar, PRec, PTuple),
     ParsedExpr (PGuard, pExp),
     ResolvedExpr (RGuard, rExp),
@@ -20,29 +21,14 @@ module Syntax (
     Loc (Loc, locFileName, locLine, locColumn),
     dummyLoc,
     KExpr,
+    CExpr,
     TypedExpr (TGuard, tExp),
     ClosureExpr,
-    Function (Function, funcName, isDirect, freeVars, boundedArgs, funcBody),
+    Function (..),
     AllowClosure (AllowClosure),
     DisallowClosure (DisallowClosure),
     AllowCompBranch (AllowCompBranch),
-    Expr (
-        Const,
-        Unary,
-        Binary,
-        If,
-        IfComp,
-        Let,
-        Var,
-        App,
-        Tuple,
-        ArrayCreate,
-        Get,
-        Put,
-        MakeClosure,
-        ClosureApp,
-        DirectApp
-    ),
+    Expr (..),
     getExprState,
     subst,
     visitExprM,
@@ -96,6 +82,10 @@ identLoc (UserDefined pos _) = pos
 identLoc (CompilerGenerated _) = Loc "generated" 0 0
 identLoc (ExternalIdent _) = Loc "external" 0 0
 
+-- | An operand in an expression.
+data Operand = OLiteral Literal | OIdent Ident
+    deriving (Show, Eq)
+
 data Pattern identTy
     = PUnit
     | PVar identTy
@@ -133,6 +123,9 @@ newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr DisallowClos
 
 -- | The type of an expression after K-normalization.
 type KExpr = Expr TypedState Ident Ident DisallowClosure ()
+
+-- | The type of an expression after constant folding.
+type CExpr = Expr TypedState Ident Operand DisallowClosure ()
 
 -- | The type of an expression after introducing closures.
 type ClosureExpr = Expr TypedState Ident Ident AllowClosure ()

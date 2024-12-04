@@ -1,5 +1,4 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Closure (getFunctions, ClosureEnv (ClosureEnv)) where
 
@@ -153,12 +152,12 @@ dummyExpr = Const dummyState LUnit
 
 genFunctions :: (Monad m) => KExpr -> ClosureT m ClosureExpr
 genFunctions (Let state (PRec func args) expr body) = do
-    funcState <- lift $ identState func
+    funcState' <- lift $ identState func
     reducedFreeVars <- reduceFree freeVars'
     if null reducedFreeVars && not isUsedAsClosure'
         then do
             -- No free variables and no usage as closure means we don't have to create a closure.
-            addFunction (Function funcState True func [] args dummyExpr)
+            addFunction (Function funcState' True func [] args dummyExpr)
             expr' <- genFunctions expr
             updateFunctionExpr func expr'
             genFunctions body
@@ -171,7 +170,7 @@ genFunctions (Let state (PRec func args) expr body) = do
                             genNewVar ty
                         )
                         reducedFreeVars
-            addFunction (Function funcState False func newFreeVars args dummyExpr)
+            addFunction (Function funcState' False func newFreeVars args dummyExpr)
             let replacedExpr =
                     foldl
                         ( \expr' (ident, newIdent) ->
@@ -199,7 +198,7 @@ genFunctions (Let state (PRec func args) expr body) = do
                                 newFunc
                                 expr'
                     updateFunctionExpr func $
-                        Let (getExprState expr) (PVar newFunc) (MakeClosure funcState func newFreeVars) replacedExpr'
+                        Let (getExprState expr) (PVar newFunc) (MakeClosure funcState' func newFreeVars) replacedExpr'
                 else
                     updateFunctionExpr func expr'
             body' <- genFunctions body
@@ -212,7 +211,7 @@ genFunctions (Let state (PRec func args) expr body) = do
                         func
                         newFunc
                         body'
-            pure $ Let state (PVar newFunc) (MakeClosure funcState func reducedFreeVars) replacedBody
+            pure $ Let state (PVar newFunc) (MakeClosure funcState' func reducedFreeVars) replacedBody
   where
     freeVars' = getFreeVars expr (func : args)
     isUsedAsClosure' = isUsedAsClosure func expr || isUsedAsClosure func body

@@ -36,6 +36,7 @@ library
       Backend.Transform
       Builtin
       Closure
+      CNorm
       Display
       Error
       Flatten
