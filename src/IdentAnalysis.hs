@@ -8,7 +8,6 @@ module IdentAnalysis (
     IdentEnv,
     registerProp,
     searchProp,
-    asOperand,
     getTyOf,
     identState,
     updateProp,
@@ -85,13 +84,6 @@ registerProp ident prop = do
 searchProp :: (Monad m) => Ident -> IdentEnvT m (Maybe IdentProp)
 searchProp ident =
     IdentEnvT $ \env -> return (lookup ident (identProps env), env)
-
-asOperand :: (Monad m) => Ident -> IdentEnvT m Operand
-asOperand ident = do
-    found <- searchProp ident
-    case found of
-        Just (IdentProp _ (Just c) _) -> pure $ OLiteral c
-        _ -> pure $ OIdent ident
 
 {- | Get the type of an identifier.
 If the identifier is not found, return `TUnit`.
