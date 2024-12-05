@@ -1,13 +1,15 @@
-# RINANA assembler "r72b"
-r72b
-config.json
-
-# Simulator files
-simulation/
+# Executables
+bin/
 
 # Intermediate files
 build/
+*.bin
+*.s
+
+# Configuration files
+config.json
+finv_table.txt
+fsqrt_table.txt
 
 # Output files
-out.*
-*.txt
+print_int.txt

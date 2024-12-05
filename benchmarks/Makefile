@@ -1,16 +1,28 @@
 .PHONY: run clean
+.PRECIOUS: %.s
 
-./build/%.s: %.ml
+ASSEMBLER = ./bin/r72b
+SIMULATOR = ./bin/r7sim
+OUTPUT = ./print_int.txt
+EXEC = fib
+OPTION =
+
+%.s: %.ml
 	mkdir -p ./build/
-	stack run -- -i $^ -o $@ --emit-all
+	stack run -- -i $^ -o ./build/$@ --emit-all --verbose $(OPTION)
+	cp ./build/$@ .
 
-run: ./build/$(EXEC).s
-	rm -rf ./*.txt
-	./r72b -input $^
-	./simulation/sim
+%.bin: %.s
+	mkdir -p ./build/
+	$(ASSEMBLER) -input $^ -output ./build/$(basename $@ .bin)
+	cp ./build/$@ .
+
+run: $(EXEC).bin
+	rm -f $(OUTPUT)
+	echo 2 | $(SIMULATOR) -i $^
 
 clean:
-	rm -f ./build/*.s
-	rm -rf ./build/*.ml
-	rm -f out.*
-	rm -rf ./print_int.txt
+	rm -rf ./build/
+	rm -f *.s
+	rm -f *.bin
+	rm -f $(OUTPUT)
