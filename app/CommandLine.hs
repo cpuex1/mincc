@@ -34,6 +34,7 @@ data CompilerConfig = CompilerConfig
     , cEmitTyped :: Bool
     , cEmitKNorm :: Bool
     , cEmitFlatten :: Bool
+    , cEmitOptim :: Bool
     , cEmitClosure :: Bool
     , cEmitIR :: Bool
     }
@@ -51,6 +52,7 @@ data CommandLineArg = CommandLineArg
     , emitTyped :: Bool
     , emitKNorm :: Bool
     , emitFlatten :: Bool
+    , emitOptim :: Bool
     , emitClosure :: Bool
     , emitIR :: Bool
     }
@@ -128,6 +130,10 @@ parseArg =
                 <> help "Emit expressions after let-flattening"
             )
         <*> switch
+            ( long "emit-optimized"
+                <> help "Emit optimized expressions"
+            )
+        <*> switch
             ( long "emit-closure"
                 <> help "Emit expressions after introducing closures"
             )
@@ -153,6 +159,7 @@ toCompilerConfig arg = do
             , cEmitTyped = emitAll arg || emitTyped arg
             , cEmitKNorm = emitAll arg || emitKNorm arg
             , cEmitFlatten = emitAll arg || emitFlatten arg
+            , cEmitOptim = emitAll arg || emitOptim arg
             , cEmitClosure = emitAll arg || emitClosure arg
             , cEmitIR = emitAll arg || emitIR arg
             }

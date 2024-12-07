@@ -1,5 +1,4 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Closure (getFunctions, ClosureEnv (ClosureEnv)) where
 

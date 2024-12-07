@@ -36,12 +36,14 @@ library
       Backend.Transform
       Builtin
       Closure
+      ConstantAnalysis
       Display
       Error
       Flatten
       IdentAnalysis
       KNorm
       NameRes
+      Optim.ConstExpansion
       Parser
       Syntax
       TypeInferrer

@@ -9,6 +9,7 @@ module IdentAnalysis (
     registerProp,
     searchProp,
     getTyOf,
+    asConstant,
     identState,
     updateProp,
     genNewVar,
@@ -95,6 +96,15 @@ getTyOf ident = do
         Just prop -> pure (typeOf prop)
         Nothing -> pure TUnit
 
+-- | Try to get the constant value of an identifier.
+asConstant :: (Monad m) => Ident -> IdentEnvT m (Maybe Literal)
+asConstant ident = do
+    found <- searchProp ident
+    case found of
+        Just prop -> pure (constant prop)
+        Nothing -> pure Nothing
+
+-- | Get the state of an identifier.
 identState :: (Monad m) => Ident -> IdentEnvT m TypedState
 identState ident = do
     ty <- getTyOf ident

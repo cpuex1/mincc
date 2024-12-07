@@ -6,6 +6,7 @@ module Compile (
     inferTypeIO,
     kNormalizeIO,
     flattenExprIO,
+    optimIO,
     getFunctionsIO,
     toInstructionsIO,
     transformCodeBlockIO,
@@ -38,6 +39,7 @@ import IdentAnalysis (loadTypeEnv)
 import KNorm
 import Log
 import NameRes (resolveNames)
+import Optim.ConstExpansion (expandConstants)
 import Parser
 import Syntax
 import Text.Megaparsec
@@ -76,6 +78,9 @@ kNormalizeIO = mapM kNormalize
 
 flattenExprIO :: [KExpr] -> IdentEnvIO [KExpr]
 flattenExprIO exprs = pure $ map flattenExpr exprs
+
+optimIO :: [KExpr] -> IdentEnvIO [KExpr]
+optimIO = mapM expandConstants
 
 getFunctionsIO :: [KExpr] -> IdentEnvIO [Function]
 getFunctionsIO [] = pure []
