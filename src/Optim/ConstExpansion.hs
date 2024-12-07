@@ -85,6 +85,7 @@ expandChildrenConstants (If state cond t f) = do
     pure $ If state cond t' f'
 expandChildrenConstants expr = pure expr
 
+-- | Expands all constants in the expression.
 expandConstants :: (Monad m) => KExpr -> IdentEnvT m KExpr
 expandConstants expr = do
     registerConstants expr
