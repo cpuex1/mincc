@@ -2,7 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Display (display) where
+module Display (display, Display) where
 
 import Backend.Asm
 import Backend.Liveness (LivenessLoc (livenessState), LivenessState (fAlive, iAlive))

@@ -7,6 +7,7 @@ module Compile (
     kNormalizeIO,
     flattenExprIO,
     optimIO,
+    extractGlobalsIO,
     getFunctionsIO,
     toInstructionsIO,
     transformCodeBlockIO,
@@ -27,7 +28,7 @@ import CommandLine
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Reader (asks)
-import Control.Monad.State.Lazy (gets, modify)
+import Control.Monad.State.Lazy (evalStateT, gets, modify)
 import Control.Monad.Trans.Class
 import qualified Data.ByteString as B
 import Data.Text (pack)
@@ -35,6 +36,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Display (display)
 import Error
 import Flatten (flattenExpr)
+import Globals (defaultGlobalTable, extractGlobals, reportGlobals)
 import IdentAnalysis (loadTypeEnv)
 import KNorm
 import Log
@@ -81,6 +83,21 @@ flattenExprIO exprs = pure $ map flattenExpr exprs
 
 optimIO :: [KExpr] -> IdentEnvIO [KExpr]
 optimIO = mapM expandConstants
+
+extractGlobalsIO :: [KExpr] -> IdentEnvIO [KExpr]
+extractGlobalsIO exprs = do
+    mapM
+        ( \expr ->
+            evalStateT
+                ( do
+                    expr' <- extractGlobals expr
+                    globalInfo <- reportGlobals
+                    mapM_ (lift . lift . printTextLog Debug) globalInfo
+                    pure expr'
+                )
+                defaultGlobalTable
+        )
+        exprs
 
 getFunctionsIO :: [KExpr] -> IdentEnvIO [Function]
 getFunctionsIO [] = pure []

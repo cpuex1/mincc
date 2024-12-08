@@ -114,14 +114,21 @@ execArgsWithIdent resolvedExprs = do
         liftIO $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map display flattenExprs
         lift $ printLog Debug "Flatten expressions are saved"
 
-    optimizedExprs <- optimIO kExprs
+    optimizedExprs <- optimIO flattenExprs
     lift $ printLog Done "Optimization succeeded"
     emitOptim <- lift $ asks cEmitOptim
     when emitOptim $ do
         liftIO $ TIO.writeFile (changeExt "optim.ml" outputFile) $ intercalate "\n" $ map display optimizedExprs
         lift $ printLog Debug "Optimized expressions are saved"
 
-    functions <- getFunctionsIO optimizedExprs
+    extracted <- extractGlobalsIO optimizedExprs
+    lift $ printLog Done "Global extraction succeeded"
+    -- TODO: replace emitOptim with emitGlobals
+    when emitOptim $ do
+        liftIO $ TIO.writeFile (changeExt "globals.ml" outputFile) $ intercalate "\n" $ map display extracted
+        lift $ printLog Debug "Expressions with globals are saved"
+
+    functions <- getFunctionsIO extracted
     lift $ printLog Done "Closure conversion succeeded"
     emitClosure <- lift $ asks cEmitClosure
     when emitClosure $ do

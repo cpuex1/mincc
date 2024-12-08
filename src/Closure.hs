@@ -44,7 +44,9 @@ data FreeArgsEnv = FreeArgsEnv
     }
 
 registerFreeVar :: Ident -> State FreeArgsEnv ()
-registerFreeVar (ExternalIdent _) = pure ()
+registerFreeVar (ExternalIdent _) =
+    -- External identifiers are not free variables.
+    pure ()
 registerFreeVar ident = do
     env <- get
     unless (ident `elem` eBoundedVars env) $
