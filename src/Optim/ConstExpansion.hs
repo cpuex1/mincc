@@ -6,7 +6,7 @@ import ConstantAnalysis (registerConstants)
 import Control.Monad (foldM)
 import Data.List (union)
 import Flatten (flattenExpr)
-import IdentAnalysis (IdentEnvT, IdentProp (IdentProp, constant), genNewVar, getTyOf, searchProp)
+import IdentAnalysis (IdentEnvT, IdentProp (constant), genNewVar, getTyOf, searchProp)
 import Syntax (Expr (..), Ident, KExpr, Literal, Pattern (PRec, PVar), TypedState (TypedState, getType), dummyLoc, getExprState, subst)
 
 -- | Picks a variable if and only if it is a constant.
@@ -63,18 +63,6 @@ expandChildrenConstants (Let state (PRec v pats) expr body) = do
     expr' <- expandConstants' expr
     body' <- expandChildrenConstants body
     pure $ Let state (PRec v pats) expr' body'
-expandChildrenConstants (Let state (PVar v) expr body) = do
-    prop <- searchProp v
-    case prop of
-        Just (IdentProp _ (Just _) _) ->
-            -- If the variable is constant, just ignores it.
-            -- Since the constant variable is going to be expanded,
-            -- this action should be safe.
-            expandChildrenConstants body
-        _ -> do
-            expr' <- expandChildrenConstants expr
-            body' <- expandChildrenConstants body
-            pure $ Let state (PVar v) expr' body'
 expandChildrenConstants (Let state pattern expr body) = do
     expr' <- expandChildrenConstants expr
     body' <- expandChildrenConstants body
@@ -89,7 +77,7 @@ expandChildrenConstants expr = pure expr
 expandConstants :: (Monad m) => KExpr -> IdentEnvT m KExpr
 expandConstants expr = do
     registerConstants expr
-    expr' <- expandConstants' expr
+    expr' <- expandChildrenConstants expr
     let expr'' = flattenExpr expr'
     registerConstants expr''
     pure expr''

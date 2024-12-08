@@ -25,6 +25,7 @@ import Backend.Spill (spillF, spillI)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
+import Control.Monad (when)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Reader (asks)
@@ -42,6 +43,7 @@ import KNorm
 import Log
 import NameRes (resolveNames)
 import Optim.ConstExpansion (expandConstants)
+import Optim.ConstFold (constFold)
 import Parser
 import Syntax
 import Text.Megaparsec
@@ -82,7 +84,28 @@ flattenExprIO :: [KExpr] -> IdentEnvIO [KExpr]
 flattenExprIO exprs = pure $ map flattenExpr exprs
 
 optimIO :: [KExpr] -> IdentEnvIO [KExpr]
-optimIO = mapM expandConstants
+optimIO exprs = do
+    exprs' <-
+        mapM
+            ( \expr -> do
+                expr' <- expandConstants expr
+                _ <- lift $ printLog Info "Constant expanding performed"
+                when (expr == expr') $ do
+                    lift $ printLog Info "Make no change"
+                expr'' <- constFold expr'
+                _ <- lift $ printLog Info "Constant folding performed"
+                when (expr' == expr'') $ do
+                    lift $ printLog Info "Make no change"
+                pure expr''
+            )
+            exprs
+    if exprs == exprs'
+        then do
+            _ <- lift $ printLog Info "No space for optimization"
+            pure exprs'
+        else do
+            _ <- lift $ printLog Info "Perform more optimization"
+            optimIO exprs'
 
 extractGlobalsIO :: [KExpr] -> IdentEnvIO [KExpr]
 extractGlobalsIO exprs = do

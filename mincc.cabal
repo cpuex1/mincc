@@ -45,6 +45,7 @@ library
       KNorm
       NameRes
       Optim.ConstExpansion
+      Optim.ConstFold
       Parser
       Syntax
       TypeInferrer
