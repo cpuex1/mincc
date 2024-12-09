@@ -38,14 +38,14 @@ constFold' (Unary state Neg ident) = do
         Just (LInt i) ->
             pure $ Const state (LInt (-i))
         _ ->
-            pure $ Unary state Not ident
+            pure $ Unary state Neg ident
 constFold' (Unary state FNeg ident) = do
     c <- asConstant ident
     case c of
         Just (LFloat i) ->
             pure $ Const state (LFloat (-i))
         _ ->
-            pure $ Unary state Not ident
+            pure $ Unary state FNeg ident
 constFold' (Binary state (RelationOp op) lhs rhs) = do
     lhs' <- asConstant lhs
     rhs' <- asConstant rhs

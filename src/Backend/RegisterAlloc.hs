@@ -86,7 +86,7 @@ assignRegister block = do
     -- To avoid the replacement of SavedReg occurring more than once,
     -- we need to proceed replacements via TempReg.
     let inst''' = map (\i -> foldl (\i' a -> replaceIReg (TempReg a) (SavedReg a) i') i [0 .. usedI - 1]) inst''
-    let inst'''' = map (\i -> foldl (\i' a -> replaceIReg (TempReg a) (SavedReg a) i') i [0 .. usedF - 1]) inst'''
+    let inst'''' = map (\i -> foldl (\i' a -> replaceFReg (TempReg a) (SavedReg a) i') i [0 .. usedF - 1]) inst'''
 
     pure (usedI, usedF, iSpillTarget, fSpillTarget, block{getICBInst = map (substIState livenessLoc) inst''''})
   where
