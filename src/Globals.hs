@@ -40,8 +40,12 @@ data GlobalTable = GlobalTable
 
 type GlobalState m = StateT GlobalTable (IdentEnvT m)
 
+-- | The address of starting the global table.
+startGlobalTableAddr :: Int
+startGlobalTableAddr = 0x100
+
 defaultGlobalTable :: GlobalTable
-defaultGlobalTable = GlobalTable [] 0
+defaultGlobalTable = GlobalTable [] startGlobalTableAddr
 
 addGlobalTable :: (Monad m) => Text -> Ty -> GlobalKind -> GlobalState m ()
 addGlobalTable name ty kind = do
@@ -54,9 +58,9 @@ addGlobalTable name ty kind = do
             , totalSize = totalSize table + size
             }
 
-asGlobal :: (Monad m) => Ident -> IdentEnvT m (Maybe GlobalConstant)
-asGlobal (ExternalIdent ext) = pure $ Just $ GExternal ext
-asGlobal ident = do
+asGlobalConstant :: (Monad m) => Ident -> IdentEnvT m (Maybe GlobalConstant)
+asGlobalConstant (ExternalIdent ext) = pure $ Just $ GExternal ext
+asGlobalConstant ident = do
     prop <- searchProp ident
     case prop of
         Just (IdentProp _ (Just lit) _) ->
@@ -65,7 +69,7 @@ asGlobal ident = do
 
 extractGlobals :: (Monad m) => KExpr -> GlobalState m KExpr
 extractGlobals (Let state1 (PVar v) (Tuple state2 values) body) = do
-    globals <- sequence <$> (lift . mapM asGlobal) values
+    globals <- sequence <$> (lift . mapM asGlobalConstant) values
     case globals of
         Just globals' -> do
             -- Register it to the global table.
@@ -82,8 +86,8 @@ extractGlobals (Let state1 (PVar v) (Tuple state2 values) body) = do
             body' <- extractGlobals body
             pure $ Let state1 (PVar v) (Tuple state2 values) body'
 extractGlobals (Let state1 (PVar v) (ArrayCreate state2 idx val) body) = do
-    idxGlobal <- lift $ asGlobal idx
-    valGlobal <- lift $ asGlobal val
+    idxGlobal <- lift $ asGlobalConstant idx
+    valGlobal <- lift $ asGlobalConstant val
     case (idxGlobal, valGlobal) of
         (Just (GLiteral (LInt idxV)), Just valGlobal') -> do
             -- Register it to the global table.
