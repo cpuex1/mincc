@@ -8,6 +8,7 @@ import Backend.Spill
 import Control.Monad.Identity (Identity (runIdentity))
 import Control.Monad.State (modify)
 import Error (CompilerError)
+import Globals (defaultGlobalTable)
 import Syntax (FloatBinOp (FAdd), IntBinOp (Add), Loc, dummyLoc)
 import Test.Hspec
 
@@ -20,6 +21,7 @@ doSpillI generatedI generatedF var block =
                 spillI var block
             )
             (BackendConfig 10 10)
+            defaultGlobalTable
         )
 
 doSpillF :: Int -> Int -> Int -> IntermediateCodeBlock Loc RegID -> Either CompilerError (IntermediateCodeBlock Loc RegID)
@@ -31,6 +33,7 @@ doSpillF generatedI generatedF var block =
                 spillF var block
             )
             (BackendConfig 10 10)
+            defaultGlobalTable
         )
 
 spec :: Spec
