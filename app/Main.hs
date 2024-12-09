@@ -121,7 +121,7 @@ execArgsWithIdent resolvedExprs = do
         liftIO $ TIO.writeFile (changeExt "optim.ml" outputFile) $ intercalate "\n" $ map display optimizedExprs
         lift $ printLog Debug "Optimized expressions are saved"
 
-    extracted <- extractGlobalsIO optimizedExprs
+    (extracted, globals) <- extractGlobalsIO optimizedExprs
     lift $ printLog Done "Global extraction succeeded"
     -- TODO: replace emitOptim with emitGlobals
     when emitOptim $ do
@@ -137,7 +137,7 @@ execArgsWithIdent resolvedExprs = do
 
     iLimit' <- lift $ asks cILimit
     fLimit' <- lift $ asks cFLimit
-    blocks <- runBackendStateT (execArgsWithBackend functions) $ BackendConfig iLimit' fLimit'
+    blocks <- runBackendStateT (execArgsWithBackend functions) (BackendConfig iLimit' fLimit') globals
     case blocks of
         Left err -> lift $ throwError err
         Right _ -> pure ()

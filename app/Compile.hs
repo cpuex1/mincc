@@ -29,7 +29,7 @@ import Control.Monad (when)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Reader (asks)
-import Control.Monad.State.Lazy (evalStateT, gets, modify)
+import Control.Monad.State.Lazy (StateT (runStateT), gets, modify)
 import Control.Monad.Trans.Class
 import qualified Data.ByteString as B
 import Data.Text (pack)
@@ -37,7 +37,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Display (display)
 import Error
 import Flatten (flattenExpr)
-import Globals (defaultGlobalTable, extractGlobals, reportGlobals)
+import Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
 import IdentAnalysis (loadTypeEnv)
 import KNorm
 import Log
@@ -107,20 +107,20 @@ optimIO exprs = do
             _ <- lift $ printLog Info "Perform more optimization"
             optimIO exprs'
 
-extractGlobalsIO :: [KExpr] -> IdentEnvIO [KExpr]
-extractGlobalsIO exprs = do
-    mapM
-        ( \expr ->
-            evalStateT
-                ( do
+extractGlobalsIO :: [KExpr] -> IdentEnvIO ([KExpr], GlobalTable)
+extractGlobalsIO exprs =
+    runStateT
+        ( do
+            mapM
+                ( \expr -> do
                     expr' <- extractGlobals expr
                     globalInfo <- reportGlobals
                     mapM_ (lift . lift . printTextLog Debug) globalInfo
                     pure expr'
                 )
-                defaultGlobalTable
+                exprs
         )
-        exprs
+        defaultGlobalTable
 
 getFunctionsIO :: [KExpr] -> IdentEnvIO [Function]
 getFunctionsIO [] = pure []

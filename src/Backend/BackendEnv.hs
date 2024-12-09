@@ -24,6 +24,7 @@ import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
 import Display (display)
 import Error (CompilerError (OtherError))
+import Globals (GlobalTable)
 import Syntax (Ident)
 
 data BackendConfig = BackendConfig
@@ -33,7 +34,8 @@ data BackendConfig = BackendConfig
     deriving (Show, Eq)
 
 data BackendEnv = BackendEnv
-    { generatedIReg :: Int
+    { globals :: GlobalTable
+    , generatedIReg :: Int
     , generatedFReg :: Int
     , iArgsLen :: Int
     , fArgsLen :: Int
@@ -44,10 +46,11 @@ data BackendEnv = BackendEnv
     }
     deriving (Show, Eq)
 
-defaultBackendEnv :: BackendEnv
-defaultBackendEnv =
+defaultBackendEnv :: GlobalTable -> BackendEnv
+defaultBackendEnv globalTable =
     BackendEnv
-        { generatedIReg = 0
+        { globals = globalTable
+        , generatedIReg = 0
         , generatedFReg = 0
         , iArgsLen = 0
         , fArgsLen = 0
@@ -60,9 +63,9 @@ defaultBackendEnv =
 type BackendStateT m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv m))
 type BackendState = BackendStateT Identity
 
-runBackendStateT :: (Monad m) => BackendStateT m a -> BackendConfig -> m (Either CompilerError a)
-runBackendStateT s config =
-    evalStateT (runExceptT $ runReaderT s config) defaultBackendEnv
+runBackendStateT :: (Monad m) => BackendStateT m a -> BackendConfig -> GlobalTable -> m (Either CompilerError a)
+runBackendStateT s config table =
+    evalStateT (runExceptT $ runReaderT s config) $ defaultBackendEnv table
 
 liftB :: (Monad m) => m a -> BackendStateT m a
 liftB = lift . lift . lift

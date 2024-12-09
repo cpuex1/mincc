@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Globals (defaultGlobalTable, extractGlobals, reportGlobals) where
+module Globals (defaultGlobalTable, extractGlobals, reportGlobals, GlobalTable (..)) where
 
 import Control.Monad.State (MonadTrans (lift), StateT, gets, modify)
 import Data.Text (Text, pack)
@@ -34,6 +34,7 @@ globalSize (GArray size _) = size
 
 data GlobalTable = GlobalTable
     { globalTable :: [(Text, GlobalProp)]
+    , startAddr :: Int
     , totalSize :: Int
     }
     deriving (Show, Eq)
@@ -45,7 +46,7 @@ startGlobalTableAddr :: Int
 startGlobalTableAddr = 0x100
 
 defaultGlobalTable :: GlobalTable
-defaultGlobalTable = GlobalTable [] startGlobalTableAddr
+defaultGlobalTable = GlobalTable [] startGlobalTableAddr startGlobalTableAddr
 
 addGlobalTable :: (Monad m) => Text -> Ty -> GlobalKind -> GlobalState m ()
 addGlobalTable name ty kind = do
