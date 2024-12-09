@@ -15,6 +15,7 @@ module Backend.BackendEnv (
     genFReg,
     findI,
     findF,
+    findGlobal,
 ) where
 
 import Backend.Asm (RegID, Register (SavedReg))
@@ -22,9 +23,10 @@ import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
+import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
-import Globals (GlobalTable)
+import Globals (GlobalProp, GlobalTable (globalTable))
 import Syntax (Ident)
 
 data BackendConfig = BackendConfig
@@ -47,9 +49,9 @@ data BackendEnv = BackendEnv
     deriving (Show, Eq)
 
 defaultBackendEnv :: GlobalTable -> BackendEnv
-defaultBackendEnv globalTable =
+defaultBackendEnv table =
     BackendEnv
-        { globals = globalTable
+        { globals = table
         , generatedIReg = 0
         , generatedFReg = 0
         , iArgsLen = 0
@@ -115,3 +117,12 @@ findF ident = do
         Just actual -> pure actual
         Nothing -> do
             throwError $ OtherError $ "Detected an unknown float identifier named " <> display ident <> "."
+
+-- | Finds a global variable by its name.
+findGlobal :: (Monad m) => Text -> BackendStateT m GlobalProp
+findGlobal name = do
+    table <- gets globals
+    case lookup name $ globalTable table of
+        Just prop -> pure prop
+        Nothing -> do
+            throwError $ OtherError $ "Detected an unknown global variable named " <> name <> "."

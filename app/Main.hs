@@ -20,6 +20,7 @@ import Options.Applicative (
  )
 
 import Backend.BackendEnv (BackendConfig (BackendConfig), liftB, runBackendStateT)
+import ConstantAnalysis (registerConstants)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Class
@@ -97,9 +98,6 @@ execArgsWithIdent resolvedExprs = do
         liftIO $ TIO.writeFile (changeExt "typed.ml" outputFile) $ intercalate "\n" $ map display typedExprs
         lift $ printLog Debug "Typed expressions are saved"
 
-    reported <- reportEnv
-    lift $ mapM_ (printTextLog Debug) reported
-
     kExprs <- kNormalizeIO typedExprs
     lift $ printLog Done "K-normalization succeeded"
     emitKNorm <- lift $ asks cEmitKNorm
@@ -114,7 +112,12 @@ execArgsWithIdent resolvedExprs = do
         liftIO $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map display flattenExprs
         lift $ printLog Debug "Flatten expressions are saved"
 
-    optimizedExprs <- optimIO flattenExprs
+    mapM_ registerConstants flattenExprs
+    reported <- reportEnv
+    lift $ mapM_ (printTextLog Debug) reported
+
+    optimLevel <- lift $ asks cOptimize
+    optimizedExprs <- optimIO flattenExprs optimLevel
     lift $ printLog Done "Optimization succeeded"
     emitOptim <- lift $ asks cEmitOptim
     when emitOptim $ do

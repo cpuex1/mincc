@@ -83,29 +83,33 @@ kNormalizeIO = mapM kNormalize
 flattenExprIO :: [KExpr] -> IdentEnvIO [KExpr]
 flattenExprIO exprs = pure $ map flattenExpr exprs
 
-optimIO :: [KExpr] -> IdentEnvIO [KExpr]
-optimIO exprs = do
-    exprs' <-
-        mapM
-            ( \expr -> do
-                expr' <- expandConstants expr
-                _ <- lift $ printLog Info "Constant expanding performed"
-                when (expr == expr') $ do
-                    lift $ printLog Info "Make no change"
-                expr'' <- constFold expr'
-                _ <- lift $ printLog Info "Constant folding performed"
-                when (expr' == expr'') $ do
-                    lift $ printLog Info "Make no change"
-                pure expr''
-            )
-            exprs
-    if exprs == exprs'
-        then do
-            _ <- lift $ printLog Info "No space for optimization"
-            pure exprs'
+optimIO :: [KExpr] -> Int -> IdentEnvIO [KExpr]
+optimIO exprs limit = do
+    if limit == 0
+        then
+            pure exprs
         else do
-            _ <- lift $ printLog Info "Perform more optimization"
-            optimIO exprs'
+            exprs' <-
+                mapM
+                    ( \expr -> do
+                        -- expr' <- expandConstants expr
+                        -- _ <- lift $ printLog Info "Constant expanding performed"
+                        -- when (expr == expr') $ do
+                        --     lift $ printLog Info "Make no change"
+                        expr'' <- constFold expr
+                        _ <- lift $ printLog Info "Constant folding performed"
+                        when (expr == expr'') $ do
+                            lift $ printLog Info "Make no change"
+                        pure expr''
+                    )
+                    exprs
+            if exprs == exprs'
+                then do
+                    _ <- lift $ printLog Info "No space for optimization"
+                    pure exprs'
+                else do
+                    _ <- lift $ printLog Info "Perform more optimization"
+                    optimIO exprs' (limit - 1)
 
 extractGlobalsIO :: [KExpr] -> IdentEnvIO ([KExpr], GlobalTable)
 extractGlobalsIO exprs =

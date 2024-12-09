@@ -16,6 +16,7 @@ import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (modify)
 import Display (display)
 import Error (CompilerError (OtherError))
+import Globals (GlobalProp (globalOffset))
 import IdentAnalysis (IdentEnvT, getTyOf)
 import Syntax
 import Typing (TypeKind (TFloat, TUnit))
@@ -38,108 +39,165 @@ resolveArgs args = do
                 pure $ ty == TFloat
             )
             args
+    -- TODO: Supports global variables.
     iArgs' <- mapM findI iArgs
     fArgs' <- mapM findF fArgs
     pure (iArgs', fArgs')
 
-toInstU :: (Monad m) => ClosureExpr -> BackendIdentState m [Inst Loc RegID AllowBranch]
-toInstU (Let{}) =
-    throwError $ OtherError "Let itself cannot be regarded as an instruction."
-toInstU (If{}) =
-    throwError $ OtherError "If itself cannot be regarded as an instruction."
-toInstU (Const _ LUnit) = pure []
-toInstU (Put state dest idx src) = do
-    dest' <- findI dest
-    idx' <- findI idx
-    srcTy <- liftB $ getTyOf src
-    case srcTy of
-        TFloat -> do
-            src' <- findF src
-            offset <- genTempIReg
-            pure
-                [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
-                , IIntOp (getLoc state) Add offset dest' (Reg offset)
-                , IFStore (getLoc state) src' offset 0
-                ]
-        _ -> do
-            src' <- findI src
-            offset <- genTempIReg
-            pure
-                [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
-                , IIntOp (getLoc state) Add offset dest' (Reg offset)
-                , IStore (getLoc state) src' offset 0
-                ]
-toInstU (ClosureApp state func args) = do
-    func' <- findI func
-    (iArgs', fArgs') <- resolveArgs args
-    pure [IClosureCall (getLoc state) func' iArgs' fArgs']
-toInstU (DirectApp state func args) = do
-    (iArgs', fArgs') <- resolveArgs args
-    case findBuiltin func of
-        Just builtin -> do
-            pure [IRawInst (getLoc state) (builtinInst builtin) RIRUnit iArgs' fArgs']
-        Nothing -> do
-            pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
-toInstU _ =
-    throwError $ OtherError "The expression cannot have type unit."
-
-toInstI :: (Monad m) => Register RegID Int -> ClosureExpr -> BackendIdentState m [Inst Loc RegID AllowBranch]
-toInstI _ (Let{}) =
-    throwError $ OtherError "Let itself cannot be regarded as an instruction."
-toInstI _ (If{}) =
-    throwError $ OtherError "If itself cannot be regarded as an instruction."
-toInstI reg (Const state (LInt i)) =
-    pure [IMov (getLoc state) reg (Imm i)]
-toInstI reg (Const state (LBool b)) =
-    pure [IMov (getLoc state) reg (Imm $ if b then 1 else 0)]
-toInstI reg (Unary state Not operand) = do
+expandExprToInst ::
+    (Monad m) =>
+    Register RegID Int ->
+    Register RegID Float ->
+    ClosureExpr ->
+    BackendIdentState m [Inst Loc RegID AllowBranch]
+expandExprToInst _ _ (Const _ LUnit) = do
+    pure []
+expandExprToInst iReg _ (Const state (LInt i)) = do
+    pure [IMov (getLoc state) iReg (Imm i)]
+expandExprToInst iReg _ (Const state (LBool b)) = do
+    pure [IMov (getLoc state) iReg (Imm $ if b then 1 else 0)]
+expandExprToInst _ fReg (Const state (LFloat f)) = do
+    pure [IFMov (getLoc state) fReg (Imm f)]
+expandExprToInst iReg _ (Unary state Not operand) = do
     operand' <- findI operand
-    pure [ICompOp (getLoc state) Eq reg ZeroReg (Reg operand')]
-toInstI reg (Unary state Neg operand) = do
+    pure [ICompOp (getLoc state) Eq iReg ZeroReg (Reg operand')]
+expandExprToInst iReg _ (Unary state Neg operand) = do
     operand' <- findI operand
-    pure [IIntOp (getLoc state) Sub reg ZeroReg (Reg operand')]
-toInstI reg (Binary state (RelationOp op) operand1 operand2) = do
-    t <- liftB $ getTyOf operand1
-    case t of
+    pure [IIntOp (getLoc state) Sub iReg ZeroReg (Reg operand')]
+expandExprToInst _ fReg (Unary state FNeg operand) = do
+    operand' <- findF operand
+    pure [IFOp (getLoc state) FSub fReg ZeroReg operand']
+expandExprToInst iReg _ (Binary state (RelationOp op) operand1 operand2) = do
+    ty <- liftB $ getTyOf operand1
+    case ty of
         TFloat -> do
             operand1' <- findF operand1
             operand2' <- findF operand2
-            pure [IFCompOp (getLoc state) op reg operand1' operand2']
+            pure [IFCompOp (getLoc state) op iReg operand1' operand2']
         _ -> do
             operand1' <- findI operand1
             operand2' <- findI operand2
-            pure [ICompOp (getLoc state) op reg operand1' (Reg operand2')]
-toInstI reg (Binary state (IntOp op) operand1 operand2) = do
+            pure [ICompOp (getLoc state) op iReg operand1' (Reg operand2')]
+expandExprToInst iReg _ (Binary state (IntOp op) operand1 operand2) = do
+    -- TODO: Expand constants.
     operand1' <- findI operand1
     operand2' <- findI operand2
-    pure [IIntOp (getLoc state) op reg operand1' (Reg operand2')]
-toInstI reg (Var state ident) = do
-    regID <- findI ident
-    if Reg reg /= Reg regID
-        then
-            pure [IMov (getLoc state) reg (Reg regID)]
-        else
-            pure []
-toInstI reg (Tuple state vars) = do
-    inst <-
+    pure [IIntOp (getLoc state) op iReg operand1' (Reg operand2')]
+expandExprToInst _ fReg (Binary state (FloatOp op) operand1 operand2) = do
+    -- TODO: Expand constants.
+    operand1' <- findF operand1
+    operand2' <- findF operand2
+    pure [IFOp (getLoc state) op fReg operand1' operand2']
+expandExprToInst iReg fReg (If state cond thenExpr elseExpr) = do
+    cond' <- findI cond
+
+    thenExpr' <- expandExprToInst iReg fReg thenExpr
+    elseExpr' <- expandExprToInst iReg fReg elseExpr
+
+    pure [IBranch (getLoc state) Ne cond' ZeroReg thenExpr' elseExpr']
+expandExprToInst _ _ (Let _ (PRec _ _) _ _) =
+    throwError $ OtherError "The function should be removed during closure conversion."
+expandExprToInst iReg fReg (Let _ PUnit expr body) = do
+    expr' <- expandExprToInst iReg fReg expr
+    body' <- expandExprToInst iReg fReg body
+    pure $ expr' ++ body'
+expandExprToInst iReg fReg (Let _ (PVar v) expr body) = do
+    vTy <- liftB $ getTyOf v
+    case vTy of
+        TFloat -> do
+            v' <- genFReg v
+            expr' <- expandExprToInst iReg v' expr
+            body' <- expandExprToInst iReg fReg body
+            pure $ expr' ++ body'
+        _ -> do
+            v' <- genIReg v
+            expr' <- expandExprToInst v' fReg expr
+            body' <- expandExprToInst iReg fReg body
+            pure $ expr' ++ body'
+expandExprToInst iReg fReg (Let state (PTuple vals) expr body) = do
+    tuple <- genTempIReg
+    expr' <- expandExprToInst tuple fReg expr
+    store <-
         mapM
-            ( \(index, var) -> do
-                varTy <- liftB $ getTyOf var
-                case varTy of
+            ( \(idx, val) -> do
+                ty <- liftB $ getTyOf val
+                case ty of
                     TFloat -> do
-                        var' <- findF var
-                        pure $ IFStore (getLoc state) var' HeapReg (index * 4)
+                        val' <- genFReg val
+                        pure $ IFLoad (getLoc state) val' tuple (idx * 4)
                     _ -> do
-                        var' <- findI var
-                        pure $ IStore (getLoc state) var' HeapReg (index * 4)
+                        val' <- genIReg val
+                        pure $ ILoad (getLoc state) val' tuple (idx * 4)
             )
-            $ zip [0 ..] vars
+            $ zip [0 ..] vals
+    body' <- expandExprToInst iReg fReg body
+    pure $ expr' ++ store ++ body'
+expandExprToInst iReg _ (Var state (ExternalIdent ext)) = do
+    -- Possibly a global variable.
+    prop <- findGlobal ext
+    let offset = globalOffset prop
+    pure [IMov (getLoc state) iReg (Imm offset)]
+expandExprToInst iReg fReg (Var state ident) = do
+    ty <- liftB $ getTyOf ident
+    case ty of
+        TUnit -> do
+            pure []
+        TFloat -> do
+            regID <- findF ident
+            if fReg /= regID
+                then pure [IFMov (getLoc state) fReg (Reg regID)]
+                else pure []
+        _ -> do
+            regID <- findI ident
+            if iReg /= regID
+                then pure [IMov (getLoc state) iReg (Reg regID)]
+                else pure []
+expandExprToInst iReg _ (Tuple state vars) = do
+    inst <-
+        concat
+            <$> mapM
+                ( \(index, var) -> do
+                    case var of
+                        ExternalIdent ext -> do
+                            -- An element of the tuple can be a global variable.
+                            temp <- genTempIReg
+                            prop <- findGlobal ext
+                            let offset = globalOffset prop
+                            pure
+                                [ IMov (getLoc state) temp (Imm offset)
+                                , IStore (getLoc state) temp HeapReg (index * 4)
+                                ]
+                        _ -> do
+                            varTy <- liftB $ getTyOf var
+                            case varTy of
+                                TFloat -> do
+                                    var' <- findF var
+                                    pure [IFStore (getLoc state) var' HeapReg (index * 4)]
+                                _ -> do
+                                    var' <- findI var
+                                    pure [IStore (getLoc state) var' HeapReg (index * 4)]
+                )
+                (zip [0 ..] vars)
     pure $
         inst
-            ++ [ IMov (getLoc state) reg (Reg HeapReg)
+            ++ [ IMov (getLoc state) iReg (Reg HeapReg)
                , IIntOp (getLoc state) Add HeapReg HeapReg (Imm $ length vars * 4)
                ]
-toInstI reg (ArrayCreate state size initVal) = do
+expandExprToInst iReg _ (ArrayCreate state size (ExternalIdent initVal)) = do
+    -- An element of the array can be a global variable.
+    size' <- findI size
+    offset <- genTempIReg
+    prop <- findGlobal initVal
+    let initVal' = globalOffset prop
+    temp <- genTempIReg
+    pure
+        [ IMov (getLoc state) temp (Imm initVal')
+        , IStore (getLoc state) temp HeapReg 0
+        , IIntOp (getLoc state) Mul offset size' (Imm 4)
+        , IMov (getLoc state) iReg (Reg HeapReg)
+        , IIntOp (getLoc state) Add HeapReg HeapReg (Reg offset)
+        ]
+expandExprToInst iReg _ (ArrayCreate state size initVal) = do
     initValTy <- liftB $ getTyOf initVal
     size' <- findI size
     offset <- genTempIReg
@@ -149,7 +207,7 @@ toInstI reg (ArrayCreate state size initVal) = do
             pure
                 [ IFStore (getLoc state) initVal' HeapReg 0
                 , IIntOp (getLoc state) Mul offset size' (Imm 4)
-                , IMov (getLoc state) reg (Reg HeapReg)
+                , IMov (getLoc state) iReg (Reg HeapReg)
                 , IIntOp (getLoc state) Add HeapReg HeapReg (Reg offset)
                 ]
         _ -> do
@@ -157,20 +215,69 @@ toInstI reg (ArrayCreate state size initVal) = do
             pure
                 [ IStore (getLoc state) initVal' HeapReg 0
                 , IIntOp (getLoc state) Mul offset size' (Imm 4)
-                , IMov (getLoc state) reg (Reg HeapReg)
+                , IMov (getLoc state) iReg (Reg HeapReg)
                 , IIntOp (getLoc state) Add HeapReg HeapReg (Reg offset)
                 ]
-toInstI reg (Get state array index) = do
-    array' <- findI array
+expandExprToInst iReg fReg (Get state array index) = do
+    array' <- case array of
+        ExternalIdent arrayName ->
+            Imm . globalOffset <$> findGlobal arrayName
+        _ -> Reg <$> findI array
     index' <- findI index
     offset <- genTempIReg
     addr <- genTempIReg
-    pure
-        [ IIntOp (getLoc state) Mul offset index' (Imm 4)
-        , IIntOp (getLoc state) Add addr array' (Reg offset)
-        , ILoad (getLoc state) reg addr 0
-        ]
-toInstI reg (MakeClosure state func freeV) = do
+    let ty = getType state
+    case ty of
+        TFloat ->
+            pure
+                [ IIntOp (getLoc state) Mul offset index' (Imm 4)
+                , IIntOp (getLoc state) Add addr offset array'
+                , IFLoad (getLoc state) fReg addr 0
+                ]
+        _ ->
+            pure
+                [ IIntOp (getLoc state) Mul offset index' (Imm 4)
+                , IIntOp (getLoc state) Add addr offset array'
+                , ILoad (getLoc state) iReg addr 0
+                ]
+expandExprToInst _ _ (Put state dest idx src) = do
+    dest' <- case dest of
+        ExternalIdent destName ->
+            Imm . globalOffset <$> findGlobal destName
+        _ -> Reg <$> findI dest
+    idx' <- findI idx
+    srcTy <- liftB $ getTyOf src
+    case src of
+        ExternalIdent src' -> do
+            -- It can be a global variable.
+            src'' <- globalOffset <$> findGlobal src'
+            temp <- genTempIReg
+            offset <- genTempIReg
+            pure
+                [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
+                , IIntOp (getLoc state) Add offset offset dest'
+                , IMov (getLoc state) temp (Imm src'')
+                , IStore (getLoc state) temp offset 0
+                ]
+        _ ->
+            case srcTy of
+                TFloat -> do
+                    src' <- findF src
+                    offset <- genTempIReg
+                    pure
+                        [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
+                        , IIntOp (getLoc state) Add offset offset dest'
+                        , IFStore (getLoc state) src' offset 0
+                        ]
+                _ -> do
+                    src' <- findI src
+                    offset <- genTempIReg
+                    pure
+                        [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
+                        , IIntOp (getLoc state) Add offset offset dest'
+                        , IStore (getLoc state) src' offset 0
+                        ]
+expandExprToInst iReg _ (MakeClosure state func freeV) = do
     iFreeV <-
         filterM
             ( \arg -> do
@@ -185,142 +292,53 @@ toInstI reg (MakeClosure state func freeV) = do
                 pure $ ty == TFloat
             )
             freeV
+    -- Need to proof iFreeV and fFreeV don't contain any global variables.
     iFreeV' <- mapM findI iFreeV
     fFreeV' <- mapM findF fFreeV
-    pure [IMakeClosure (getLoc state) reg (display func) iFreeV' fFreeV']
-toInstI reg (DirectApp state func args) = do
+    pure [IMakeClosure (getLoc state) iReg (display func) iFreeV' fFreeV']
+expandExprToInst iReg fReg (DirectApp state func args) = do
     (iArgs', fArgs') <- resolveArgs args
-    case findBuiltin func of
-        Just builtin ->
-            pure [IRawInst (getLoc state) (builtinInst builtin) (RIRInt reg) iArgs' fArgs']
-        Nothing ->
-            let called = [IRichCall (getLoc state) (display func) iArgs' fArgs']
-             in if reg /= RetReg
-                    then
-                        pure $ called ++ [IMov (getLoc state) reg (Reg RetReg)]
-                    else
-                        pure called
-toInstI reg (ClosureApp state func args) = do
-    called <- toInstU (ClosureApp state func args)
-    if reg /= RetReg
-        then
-            pure $ called ++ [IMov (getLoc state) reg (Reg RetReg)]
-        else
-            pure called
-toInstI _ _ =
-    throwError $ OtherError "The expression cannot be represented as int."
-
-toInstF :: (Monad m) => Register RegID Float -> ClosureExpr -> BackendIdentState m [Inst Loc RegID AllowBranch]
-toInstF _ (Let{}) =
-    throwError $ OtherError "Let itself cannot be regarded as an instruction."
-toInstF _ (If{}) =
-    throwError $ OtherError "If itself cannot be regarded as an instruction."
-toInstF reg (Const state (LFloat f)) =
-    pure [IFMov (getLoc state) reg (Imm f)]
-toInstF reg (Unary state FNeg operand) = do
-    operand' <- findF operand
-    pure [IFOp (getLoc state) FSub reg ZeroReg operand']
-toInstF reg (Binary state (FloatOp op) operand1 operand2) = do
-    operand1' <- findF operand1
-    operand2' <- findF operand2
-    pure [IFOp (getLoc state) op reg operand1' operand2']
-toInstF reg (Var state ident) = do
-    regID <- findF ident
-    if reg /= regID
-        then
-            pure [IFMov (getLoc state) reg (Reg regID)]
-        else
-            pure []
-toInstF reg (Get state array index) = do
-    array' <- findI array
-    index' <- findI index
-    offset <- genTempIReg
-    addr <- genTempIReg
-    pure
-        [ IIntOp (getLoc state) Mul offset index' (Imm 4)
-        , IIntOp (getLoc state) Add addr array' (Reg offset)
-        , IFLoad (getLoc state) reg addr 0
-        ]
-toInstF reg (DirectApp state func args) = do
-    (iArgs', fArgs') <- resolveArgs args
-    case findBuiltin func of
-        Just builtin ->
-            pure [IRawInst (getLoc state) (builtinInst builtin) (RIRFloat reg) iArgs' fArgs']
-        Nothing ->
-            let called = [IRichCall (getLoc state) (display func) iArgs' fArgs']
-             in if reg /= RetReg
-                    then
-                        pure $ called ++ [IFMov (getLoc state) reg (Reg RetReg)]
-                    else
-                        pure called
-toInstF reg (ClosureApp state func args) = do
-    called <- toInstU (ClosureApp state func args)
-    if reg /= RetReg
-        then
-            pure $ called ++ [IFMov (getLoc state) reg (Reg RetReg)]
-        else
-            pure called
-toInstF _ _ =
-    throwError $ OtherError "The expression cannot have type float."
-
-toInst ::
-    (Monad m) =>
-    Register RegID Int ->
-    Register RegID Float ->
-    ClosureExpr ->
-    BackendIdentState m [Inst Loc RegID AllowBranch]
-toInst iReg fReg (If state cond thenExpr elseExpr) = do
-    cond' <- findI cond
-
-    thenExpr' <- toInst iReg fReg thenExpr
-    elseExpr' <- toInst iReg fReg elseExpr
-
-    pure [IBranch (getLoc state) Ne cond' ZeroReg thenExpr' elseExpr']
-toInst _ _ (Let _ (PRec _ _) _ _) =
-    throwError $ OtherError "The function should be removed during closure conversion."
-toInst iReg fReg (Let _ PUnit expr body) = do
-    expr' <- toInst iReg fReg expr
-    body' <- toInst iReg fReg body
-    pure $ expr' ++ body'
-toInst iReg fReg (Let _ (PVar v) expr body) = do
-    vTy <- liftB $ getTyOf v
-    case vTy of
-        TFloat -> do
-            v' <- genFReg v
-            expr' <- toInst iReg v' expr
-            body' <- toInst iReg fReg body
-            pure $ expr' ++ body'
-        _ -> do
-            v' <- genIReg v
-            expr' <- toInst v' fReg expr
-            body' <- toInst iReg fReg body
-            pure $ expr' ++ body'
-toInst iReg fReg (Let state (PTuple vals) expr body) = do
-    tuple <- genTempIReg
-    expr' <- toInst tuple fReg expr
-    store <-
-        mapM
-            ( \(idx, val) -> do
-                ty <- liftB $ getTyOf val
-                case ty of
-                    TFloat -> do
-                        val' <- genFReg val
-                        pure $ IFLoad (getLoc state) val' tuple (idx * 4)
-                    _ -> do
-                        val' <- genIReg val
-                        pure $ ILoad (getLoc state) val' tuple (idx * 4)
-            )
-            $ zip [0 ..] vals
-    body' <- toInst iReg fReg body
-    pure $ expr' ++ store ++ body'
-toInst iReg fReg expr = do
-    case getType (getExprState expr) of
+    case getType state of
         TUnit -> do
-            toInstU expr
+            case findBuiltin func of
+                Just builtin -> do
+                    pure [IRawInst (getLoc state) (builtinInst builtin) RIRUnit iArgs' fArgs']
+                Nothing -> do
+                    pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
         TFloat -> do
-            toInstF fReg expr
+            case findBuiltin func of
+                Just builtin -> do
+                    pure [IRawInst (getLoc state) (builtinInst builtin) (RIRFloat fReg) iArgs' fArgs']
+                Nothing -> do
+                    pure
+                        [ IRichCall (getLoc state) (display func) iArgs' fArgs'
+                        , IFMov (getLoc state) fReg (Reg RetReg)
+                        ]
         _ -> do
-            toInstI iReg expr
+            case findBuiltin func of
+                Just builtin -> do
+                    pure [IRawInst (getLoc state) (builtinInst builtin) (RIRInt iReg) iArgs' fArgs']
+                Nothing -> do
+                    pure
+                        [ IRichCall (getLoc state) (display func) iArgs' fArgs'
+                        , IMov (getLoc state) iReg (Reg RetReg)
+                        ]
+expandExprToInst iReg fReg (ClosureApp state func args) = do
+    func' <- findI func
+    (iArgs', fArgs') <- resolveArgs args
+    case getType state of
+        TUnit -> do
+            pure [IClosureCall (getLoc state) func' iArgs' fArgs']
+        TFloat -> do
+            pure
+                [ IClosureCall (getLoc state) func' iArgs' fArgs'
+                , IFMov (getLoc state) fReg (Reg RetReg)
+                ]
+        _ -> do
+            pure
+                [ IClosureCall (getLoc state) func' iArgs' fArgs'
+                , IMov (getLoc state) iReg (Reg RetReg)
+                ]
 
 toInstructions :: (Monad m) => Function -> BackendIdentState m (IntermediateCodeBlock Loc RegID)
 toInstructions function = do
@@ -391,5 +409,5 @@ toInstructions function = do
                 , iMap = iBoundedReg ++ map snd iFreeVarsReg
                 , fMap = fBoundedReg ++ map snd fFreeVarsReg
                 }
-        inst <- toInst RetReg RetReg body
+        inst <- expandExprToInst RetReg RetReg body
         pure $ map fst iFreeVarsReg ++ map fst fFreeVarsReg ++ inst

@@ -85,7 +85,7 @@ parseArg =
             ( long "optimize"
                 <> help "Optimization level"
                 <> showDefault
-                <> value 1000
+                <> value 100
                 <> metavar "INT"
             )
         <*> option

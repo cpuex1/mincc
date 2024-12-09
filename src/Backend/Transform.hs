@@ -6,7 +6,7 @@ module Backend.Transform (transformCodeBlock, CodeBlockGenState, insertBuf) wher
 import Backend.Asm
 import Backend.Shuffle (shuffleRegs)
 import Control.Monad.State (State, execState, gets, modify)
-import Data.Text (Text, pack)
+import Data.Text (Text, isPrefixOf, pack)
 import Syntax (IntBinOp (Add), Loc, dummyLoc)
 import Prelude hiding (lookup)
 
@@ -176,38 +176,44 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         -- Check whether tail recursion optimization can be applied.
         mainLabel' <- gets mainLabel
         term <- gets currentTerm
-        if term == Return
+        if "__ext_" `isPrefixOf` label'
             then do
-                if mainLabel' == label'
-                    then do
-                        -- Found a tail rec call!
-                        -- Shuffle arguments.
-                        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
-                        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
-                        -- Jump to the rec label of the function instead.
-                        -- The prologue should be skipped.
-                        modify $ \env ->
-                            env
-                                { currentTerm = Jmp $ tailRecCallLabel $ mainLabel env
-                                }
-                        flushBuf
-                    else do
-                        -- Found a tail call!
-                        -- Shuffle arguments.
-                        insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
-                        insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
-                        -- Jump to the start label of the function instead.
-                        -- The prologue should be skipped.
-                        insertBuf $ IIntOp state Add StackReg StackReg (Imm (4 * localVars'))
-                        modify $ \env ->
-                            env
-                                { currentTerm = Jmp $ tailCallLabel $ mainLabel env
-                                }
-                        flushBuf
-            else do
-                -- If not, just call a function.
+                -- External functions should be called directly.
                 transformInst $ IRichCall state label' iArgs fArgs
                 flushBuf
+            else
+                if term == Return
+                    then do
+                        if mainLabel' == label'
+                            then do
+                                -- Found a tail rec call!
+                                -- Shuffle arguments.
+                                insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
+                                insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
+                                -- Jump to the rec label of the function instead.
+                                -- The prologue should be skipped.
+                                modify $ \env ->
+                                    env
+                                        { currentTerm = Jmp $ tailRecCallLabel $ mainLabel env
+                                        }
+                                flushBuf
+                            else do
+                                -- Found a tail call!
+                                -- Shuffle arguments.
+                                insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
+                                insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
+                                -- Jump to the start label of the function instead.
+                                -- The prologue should be skipped.
+                                insertBuf $ IIntOp state Add StackReg StackReg (Imm (4 * localVars'))
+                                modify $ \env ->
+                                    env
+                                        { currentTerm = Jmp $ tailCallLabel label'
+                                        }
+                                flushBuf
+                    else do
+                        -- If not, just call a function.
+                        transformInst $ IRichCall state label' iArgs fArgs
+                        flushBuf
     traverseInst [inst'] = do
         transformInst inst'
         flushBuf

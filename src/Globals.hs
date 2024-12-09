@@ -1,7 +1,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Globals (defaultGlobalTable, extractGlobals, reportGlobals, GlobalTable (..)) where
+module Globals (
+    defaultGlobalTable,
+    extractGlobals,
+    reportGlobals,
+    GlobalTable (..),
+    GlobalProp (..),
+) where
 
 import Control.Monad.State (MonadTrans (lift), StateT, gets, modify)
 import Data.Text (Text, pack)
