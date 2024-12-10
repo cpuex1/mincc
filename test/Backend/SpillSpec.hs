@@ -2,14 +2,14 @@
 
 module Backend.SpillSpec (spec) where
 
-import Backend.Asm (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), RegOrImm (Imm, Reg), Register (SavedReg, StackReg))
+import Backend.Asm (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), PrimitiveIntOp (PAdd), RegOrImm (Imm, Reg), Register (SavedReg, StackReg))
 import Backend.BackendEnv (BackendConfig (BackendConfig), BackendEnv (generatedFReg, generatedIReg), RegID, runBackendStateT)
 import Backend.Spill
 import Control.Monad.Identity (Identity (runIdentity))
 import Control.Monad.State (modify)
 import Error (CompilerError)
 import Globals (defaultGlobalTable)
-import Syntax (FloatBinOp (FAdd), IntBinOp (Add), Loc, dummyLoc)
+import Syntax (FloatBinOp (FAdd), Loc, dummyLoc)
 import Test.Hspec
 
 doSpillI :: Int -> Int -> Int -> IntermediateCodeBlock Loc RegID -> Either CompilerError (IntermediateCodeBlock Loc RegID)
@@ -50,8 +50,8 @@ spec = do
                     [ IMov dummyLoc (SavedReg 0) (Imm 0)
                     , IMov dummyLoc (SavedReg 1) (Imm 1)
                     , IMov dummyLoc (SavedReg 2) (Imm 2)
-                    , IIntOp dummyLoc Add (SavedReg 1) (SavedReg 1) (Reg (SavedReg 2))
-                    , IIntOp dummyLoc Add (SavedReg 0) (SavedReg 0) (Reg (SavedReg 1))
+                    , IIntOp dummyLoc PAdd (SavedReg 1) (SavedReg 1) (Reg (SavedReg 2))
+                    , IIntOp dummyLoc PAdd (SavedReg 0) (SavedReg 0) (Reg (SavedReg 1))
                     ]
                 )
                 `shouldBe` Right
@@ -62,9 +62,9 @@ spec = do
                         , IStore dummyLoc (SavedReg 3) StackReg 0
                         , IMov dummyLoc (SavedReg 1) (Imm 1)
                         , IMov dummyLoc (SavedReg 2) (Imm 2)
-                        , IIntOp dummyLoc Add (SavedReg 1) (SavedReg 1) (Reg (SavedReg 2))
+                        , IIntOp dummyLoc PAdd (SavedReg 1) (SavedReg 1) (Reg (SavedReg 2))
                         , ILoad dummyLoc (SavedReg 4) StackReg 0
-                        , IIntOp dummyLoc Add (SavedReg 5) (SavedReg 4) (Reg (SavedReg 1))
+                        , IIntOp dummyLoc PAdd (SavedReg 5) (SavedReg 4) (Reg (SavedReg 1))
                         , IStore dummyLoc (SavedReg 5) StackReg 0
                         ]
                     )
