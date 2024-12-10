@@ -5,19 +5,10 @@
 module Backend.Asm (
     RegID,
     InstLabel,
-    Register (
-        ZeroReg,
-        ReturnReg,
-        RetReg,
-        HeapReg,
-        StackReg,
-        ArgsReg,
-        TempReg,
-        SavedReg,
-        GeneralReg,
-        DummyReg
-    ),
+    Register (..),
     RegOrImm (Reg, Imm),
+    PrimitiveIntOp (..),
+    fromIntBinOp,
     IntermediateCodeBlock (..),
     CodeBlock (CodeBlock),
     exitBlock,
@@ -25,26 +16,7 @@ module Backend.Asm (
     AllowBranch,
     DisallowBranch,
     RawInstRetTy (..),
-    Inst (
-        ICompOp,
-        IFCompOp,
-        IIntOp,
-        IFOp,
-        IMov,
-        IFMov,
-        ILMov,
-        IRichCall,
-        IClosureCall,
-        IMakeClosure,
-        ICall,
-        ICallReg,
-        ILoad,
-        IStore,
-        IFLoad,
-        IFStore,
-        IRawInst,
-        IBranch
-    ),
+    Inst (..),
     getIState,
     getAllIState,
     substIState,
@@ -53,7 +25,7 @@ module Backend.Asm (
 ) where
 
 import Data.Text (Text)
-import Syntax (FloatBinOp, IntBinOp, Loc, RelationBinOp)
+import Syntax (FloatBinOp, IntBinOp (..), Loc, RelationBinOp)
 
 type RegID = Int
 type InstLabel = Text
@@ -79,6 +51,24 @@ data RegOrImm idTy ty where
 
 deriving instance (Show idTy, Show ty) => Show (RegOrImm idTy ty)
 deriving instance (Eq idTy, Eq ty) => Eq (RegOrImm idTy ty)
+
+data PrimitiveIntOp
+    = PAdd
+    | PSub
+    | PMul
+    | PDiv
+    | PShiftL
+    | PShiftR
+    | PAnd
+    | POr
+    | PXor
+    deriving (Show, Eq)
+
+fromIntBinOp :: IntBinOp -> PrimitiveIntOp
+fromIntBinOp Add = PAdd
+fromIntBinOp Sub = PSub
+fromIntBinOp Mul = PMul
+fromIntBinOp Div = PDiv
 
 data IntermediateCodeBlock stateTy idTy
     = IntermediateCodeBlock
@@ -135,7 +125,7 @@ data Inst stateTy idTy branchTy where
         Inst stateTy idTy branchTy
     IIntOp ::
         stateTy ->
-        IntBinOp ->
+        PrimitiveIntOp ->
         Register idTy Int ->
         Register idTy Int ->
         RegOrImm idTy Int ->

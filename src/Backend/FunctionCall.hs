@@ -10,7 +10,7 @@ import Backend.BackendEnv (BackendEnv (fArgsLen), BackendStateT, genTempFReg, ge
 import Backend.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
-import Syntax (IntBinOp (Add), Loc, dummyLoc)
+import Syntax (Loc, dummyLoc)
 
 -- | Saves arguments on the stack before a function call.
 saveArgs :: (Monad m) => IntermediateCodeBlock stateTy RegID -> BackendStateT m (IntermediateCodeBlock stateTy RegID)
@@ -198,7 +198,7 @@ saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) lab
             then
                 []
             else
-                IIntOp dummyLoc Add StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
+                IIntOp dummyLoc PAdd StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
             (\i arg -> IStore dummyLoc (SavedReg arg) StackReg (i * 4))
@@ -215,7 +215,7 @@ saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) lab
             then
                 []
             else
-                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc Add StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
+                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
     iEpilogue =
         zipWith
             (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg (i * 4))
@@ -237,7 +237,7 @@ saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) 
             then
                 []
             else
-                IIntOp dummyLoc Add StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
+                IIntOp dummyLoc PAdd StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
             (\i arg -> IStore dummyLoc (SavedReg arg) StackReg (i * 4))
@@ -254,7 +254,7 @@ saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) 
             then
                 []
             else
-                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc Add StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
+                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
     iEpilogue =
         zipWith
             (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg (i * 4))

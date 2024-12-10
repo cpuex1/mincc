@@ -7,7 +7,7 @@ import Backend.Asm
 import Backend.Shuffle (shuffleRegs)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Text (Text, isPrefixOf, pack)
-import Syntax (IntBinOp (Add), Loc, dummyLoc)
+import Syntax (Loc, dummyLoc)
 import Prelude hiding (lookup)
 
 data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
@@ -35,7 +35,7 @@ epilogue = do
     localVars' <- gets getLocalVars
     pure
         [ ILoad dummyLoc ReturnReg StackReg (4 * localVars')
-        , IIntOp dummyLoc Add StackReg StackReg (Imm (4 * (localVars' + 1)))
+        , IIntOp dummyLoc PAdd StackReg StackReg (Imm (4 * (localVars' + 1)))
         ]
 
 flushBuf :: CodeBlockGenState Loc RegID ()
@@ -101,7 +101,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         modify $ \env ->
             env
                 { instBuf =
-                    [ IIntOp dummyLoc Add StackReg StackReg (Imm (-4))
+                    [ IIntOp dummyLoc PAdd StackReg StackReg (Imm (-4))
                     , IStore dummyLoc ReturnReg StackReg 0
                     ]
                 , currentTerm = Nop
@@ -111,7 +111,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
             env
                 { currentLabel = tailCallLabel $ mainLabel env
                 , instBuf =
-                    [IIntOp dummyLoc Add StackReg StackReg (Imm (-(4 * localVars'))) | localVars' /= 0]
+                    [IIntOp dummyLoc PAdd StackReg StackReg (Imm (-(4 * localVars'))) | localVars' /= 0]
                 , currentTerm = Nop
                 }
         flushBuf
@@ -204,7 +204,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
                                 insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
                                 -- Jump to the start label of the function instead.
                                 -- The prologue should be skipped.
-                                insertBuf $ IIntOp state Add StackReg StackReg (Imm (4 * localVars'))
+                                insertBuf $ IIntOp state PAdd StackReg StackReg (Imm (4 * localVars'))
                                 modify $ \env ->
                                     env
                                         { currentTerm = Jmp $ tailCallLabel label'
@@ -250,7 +250,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         -- Shuffle arguments
         insertIShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] iArgs
         insertFShuffle state $ zipWith (\i a -> (ArgsReg i, a)) [0 ..] fArgs
-        insertBuf $ IIntOp state Add (ArgsReg (length iArgs)) cl' (Imm 4)
+        insertBuf $ IIntOp state PAdd (ArgsReg (length iArgs)) cl' (Imm 4)
         insertBuf $ ILoad state (TempReg 2) cl' 0
         insertBuf $ ICallReg state (TempReg 2)
     transformInst (IMakeClosure state dest label' iFreeV fFreeV) = do
@@ -267,7 +267,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
             )
             $ zip fFreeV [1 + length iFreeV ..]
         insertBuf $ IMov state dest (Reg HeapReg)
-        insertBuf $ IIntOp state Add HeapReg HeapReg (Imm $ 4 * (1 + length iFreeV + length fFreeV))
+        insertBuf $ IIntOp state PAdd HeapReg HeapReg (Imm $ 4 * (1 + length iFreeV + length fFreeV))
     transformInst (ILoad state dest src offset) =
         insertBuf $ ILoad state dest src offset
     transformInst (IStore state dest src offset) =

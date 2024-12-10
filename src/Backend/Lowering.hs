@@ -63,7 +63,7 @@ expandExprToInst iReg _ (Unary state Not operand) = do
     pure [ICompOp (getLoc state) Eq iReg ZeroReg (Reg operand')]
 expandExprToInst iReg _ (Unary state Neg operand) = do
     operand' <- findI operand
-    pure [IIntOp (getLoc state) Sub iReg ZeroReg (Reg operand')]
+    pure [IIntOp (getLoc state) PSub iReg ZeroReg (Reg operand')]
 expandExprToInst _ fReg (Unary state FNeg operand) = do
     operand' <- findF operand
     pure [IFOp (getLoc state) FSub fReg ZeroReg operand']
@@ -82,7 +82,7 @@ expandExprToInst iReg _ (Binary state (IntOp op) operand1 operand2) = do
     -- TODO: Expand constants.
     operand1' <- findI operand1
     operand2' <- findI operand2
-    pure [IIntOp (getLoc state) op iReg operand1' (Reg operand2')]
+    pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Reg operand2')]
 expandExprToInst _ fReg (Binary state (FloatOp op) operand1 operand2) = do
     -- TODO: Expand constants.
     operand1' <- findF operand1
@@ -181,7 +181,7 @@ expandExprToInst iReg _ (Tuple state vars) = do
     pure $
         inst
             ++ [ IMov (getLoc state) iReg (Reg HeapReg)
-               , IIntOp (getLoc state) Add HeapReg HeapReg (Imm $ length vars * 4)
+               , IIntOp (getLoc state) PAdd HeapReg HeapReg (Imm $ length vars * 4)
                ]
 expandExprToInst iReg _ (ArrayCreate state size (ExternalIdent initVal)) = do
     -- An element of the array can be a global variable.
@@ -193,9 +193,9 @@ expandExprToInst iReg _ (ArrayCreate state size (ExternalIdent initVal)) = do
     pure
         [ IMov (getLoc state) temp (Imm initVal')
         , IStore (getLoc state) temp HeapReg 0
-        , IIntOp (getLoc state) Mul offset size' (Imm 4)
+        , IIntOp (getLoc state) PShiftL offset size' (Imm 2)
         , IMov (getLoc state) iReg (Reg HeapReg)
-        , IIntOp (getLoc state) Add HeapReg HeapReg (Reg offset)
+        , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg offset)
         ]
 expandExprToInst iReg _ (ArrayCreate state size initVal) = do
     initValTy <- liftB $ getTyOf initVal
@@ -206,17 +206,17 @@ expandExprToInst iReg _ (ArrayCreate state size initVal) = do
             initVal' <- findF initVal
             pure
                 [ IFStore (getLoc state) initVal' HeapReg 0
-                , IIntOp (getLoc state) Mul offset size' (Imm 4)
+                , IIntOp (getLoc state) PShiftL offset size' (Imm 2)
                 , IMov (getLoc state) iReg (Reg HeapReg)
-                , IIntOp (getLoc state) Add HeapReg HeapReg (Reg offset)
+                , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg offset)
                 ]
         _ -> do
             initVal' <- findI initVal
             pure
                 [ IStore (getLoc state) initVal' HeapReg 0
-                , IIntOp (getLoc state) Mul offset size' (Imm 4)
+                , IIntOp (getLoc state) PShiftL offset size' (Imm 2)
                 , IMov (getLoc state) iReg (Reg HeapReg)
-                , IIntOp (getLoc state) Add HeapReg HeapReg (Reg offset)
+                , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg offset)
                 ]
 expandExprToInst iReg fReg (Get state array index) = do
     array' <- case array of
@@ -230,14 +230,14 @@ expandExprToInst iReg fReg (Get state array index) = do
     case ty of
         TFloat ->
             pure
-                [ IIntOp (getLoc state) Mul offset index' (Imm 4)
-                , IIntOp (getLoc state) Add addr offset array'
+                [ IIntOp (getLoc state) PShiftL offset index' (Imm 2)
+                , IIntOp (getLoc state) PAdd addr offset array'
                 , IFLoad (getLoc state) fReg addr 0
                 ]
         _ ->
             pure
-                [ IIntOp (getLoc state) Mul offset index' (Imm 4)
-                , IIntOp (getLoc state) Add addr offset array'
+                [ IIntOp (getLoc state) PShiftL offset index' (Imm 2)
+                , IIntOp (getLoc state) PAdd addr offset array'
                 , ILoad (getLoc state) iReg addr 0
                 ]
 expandExprToInst _ _ (Put state dest idx src) = do
@@ -254,8 +254,8 @@ expandExprToInst _ _ (Put state dest idx src) = do
             temp <- genTempIReg
             offset <- genTempIReg
             pure
-                [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
-                , IIntOp (getLoc state) Add offset offset dest'
+                [ IIntOp (getLoc state) PShiftL offset idx' (Imm 2)
+                , IIntOp (getLoc state) PAdd offset offset dest'
                 , IMov (getLoc state) temp (Imm src'')
                 , IStore (getLoc state) temp offset 0
                 ]
@@ -265,16 +265,16 @@ expandExprToInst _ _ (Put state dest idx src) = do
                     src' <- findF src
                     offset <- genTempIReg
                     pure
-                        [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
-                        , IIntOp (getLoc state) Add offset offset dest'
+                        [ IIntOp (getLoc state) PShiftL offset idx' (Imm 2)
+                        , IIntOp (getLoc state) PAdd offset offset dest'
                         , IFStore (getLoc state) src' offset 0
                         ]
                 _ -> do
                     src' <- findI src
                     offset <- genTempIReg
                     pure
-                        [ IIntOp (getLoc state) Mul offset idx' (Imm 4)
-                        , IIntOp (getLoc state) Add offset offset dest'
+                        [ IIntOp (getLoc state) PShiftL offset idx' (Imm 2)
+                        , IIntOp (getLoc state) PAdd offset offset dest'
                         , IStore (getLoc state) src' offset 0
                         ]
 expandExprToInst iReg _ (MakeClosure state func freeV) = do

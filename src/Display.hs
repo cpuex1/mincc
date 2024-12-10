@@ -261,11 +261,16 @@ instance (Display stateTy) => DisplayI (Inst stateTy Int branchTy) where
             (Imm rhs2') ->
                 toOp op <> "i " <> display lhs <> ", " <> display rhs1 <> ", " <> pack (show rhs2') <> display state
       where
-        toOp :: IntBinOp -> Text
-        toOp Add = "add"
-        toOp Sub = "sub"
-        toOp Mul = "mul"
-        toOp Div = "div"
+        toOp :: PrimitiveIntOp -> Text
+        toOp PAdd = "add"
+        toOp PSub = "sub"
+        toOp PMul = "mul"
+        toOp PDiv = "div"
+        toOp PAnd = "and"
+        toOp POr = "or"
+        toOp PXor = "xor"
+        toOp PShiftL = "sll"
+        toOp PShiftR = "srl"
     displayI (IFOp state op lhs rhs1 rhs2) _ =
         toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2 <> display state
       where
