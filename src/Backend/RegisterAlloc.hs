@@ -12,7 +12,7 @@ import Backend.Asm (
     replaceIReg,
     substIState,
  )
-import Backend.BackendEnv (BackendStateT, RegID)
+import Backend.BackendEnv (BackendEnv (generatedFReg, generatedIReg), BackendStateT, RegID)
 import Backend.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.List (sortBy)
@@ -74,21 +74,26 @@ assignRegister block = do
     let (iMap, fMap) = registerAlloc (LivenessGraph iGraph fGraph)
     let usedI = (+ 1) $ foldl max (-1) $ map snd iMap
     let usedF = (+ 1) $ foldl max (-1) $ map snd fMap
+    genI <- gets generatedIReg
+    genF <- gets generatedFReg
 
     let iSpillTarget = selectSpilt iGraph
     let fSpillTarget = selectSpilt fGraph
 
     -- Accept the register allocation.
     -- Replace SavedReg with TempReg.
-    let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (SavedReg a) (TempReg b) i') i iMap) inst
-    let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (SavedReg a) (TempReg b) i') i fMap) inst'
+    let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (SavedReg a) (SavedReg (-b - 1)) i') i iMap) inst
+    let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (SavedReg a) (SavedReg (-b - 1)) i') i fMap) inst'
+
+    let inst''' = map (\i -> foldl (\i' a -> replaceIReg (SavedReg a) (TempReg 0) i') i [0 .. genI - 1]) inst''
+    let inst'''' = map (\i -> foldl (\i' a -> replaceFReg (SavedReg a) (TempReg 0) i') i [0 .. genF - 1]) inst'''
 
     -- To avoid the replacement of SavedReg occurring more than once,
     -- we need to proceed replacements via TempReg.
-    let inst''' = map (\i -> foldl (\i' a -> replaceIReg (TempReg a) (SavedReg a) i') i [0 .. usedI - 1]) inst''
-    let inst'''' = map (\i -> foldl (\i' a -> replaceFReg (TempReg a) (SavedReg a) i') i [0 .. usedF - 1]) inst'''
+    let inst''''' = map (\i -> foldl (\i' a -> replaceIReg (SavedReg (-a - 1)) (SavedReg a) i') i [0 .. usedI - 1]) inst''''
+    let inst'''''' = map (\i -> foldl (\i' a -> replaceFReg (SavedReg (-a - 1)) (SavedReg a) i') i [0 .. usedF - 1]) inst'''''
 
-    pure (usedI, usedF, iSpillTarget, fSpillTarget, block{getICBInst = map (substIState livenessLoc) inst''''})
+    pure (usedI, usedF, iSpillTarget, fSpillTarget, block{getICBInst = map (substIState livenessLoc) inst''''''})
   where
     retrieveGraph :: [Inst LivenessLoc RegID AllowBranch] -> LivenessGraph
     retrieveGraph inst' = toGraph $ concatMap (map livenessState . getAllIState) inst'
