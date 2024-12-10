@@ -93,7 +93,7 @@ parseArg =
             ( long "i-limit"
                 <> help "The maximum number of int registers"
                 <> showDefault
-                <> value 13
+                <> value 17
                 <> metavar "INT"
             )
         <*> option
@@ -101,7 +101,7 @@ parseArg =
             ( long "f-limit"
                 <> help "The maximum number of float registers"
                 <> showDefault
-                <> value 19
+                <> value 20
                 <> metavar "INT"
             )
         <*> switch
