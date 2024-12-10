@@ -334,16 +334,16 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         insertBuf $ ILoad state (TempReg 2) cl' 0
         insertBuf $ ICallReg state (TempReg 2)
     transformInst (IMakeClosure state dest label' iFreeV fFreeV) = do
-        insertBuf $ ILMov state dest label'
-        insertBuf $ IStore state dest HeapReg 0
+        insertBuf $ ILMov state (TempReg 0) label'
+        insertBuf $ IStore state (TempReg 0) HeapReg 0
         mapM_
             ( \(arg, i) -> do
                 case arg of
                     Reg reg -> do
                         insertBuf $ IStore state reg HeapReg (i * 4)
                     Imm imm -> do
-                        insertBuf $ IMov state (TempReg 0) (Imm imm)
-                        insertBuf $ IStore state (TempReg 0) HeapReg (i * 4)
+                        insertBuf $ IMov state (TempReg 1) (Imm imm)
+                        insertBuf $ IStore state (TempReg 1) HeapReg (i * 4)
             )
             $ zip iFreeV [1 ..]
         mapM_
