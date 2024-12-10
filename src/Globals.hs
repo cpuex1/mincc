@@ -2,9 +2,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Globals (
+    searchGlobalTable,
     defaultGlobalTable,
     extractGlobals,
     reportGlobals,
+    GlobalConstant (..),
+    GlobalKind (..),
     GlobalTable (..),
     GlobalProp (..),
 ) where
@@ -41,7 +44,7 @@ globalSize (GArray size _) = size
 data GlobalTable = GlobalTable
     { globalTable :: [(Text, GlobalProp)]
     , startAddr :: Int
-    , totalSize :: Int
+    , endAddr :: Int
     }
     deriving (Show, Eq)
 
@@ -56,14 +59,18 @@ defaultGlobalTable = GlobalTable [] startGlobalTableAddr startGlobalTableAddr
 
 addGlobalTable :: (Monad m) => Text -> Ty -> GlobalKind -> GlobalState m ()
 addGlobalTable name ty kind = do
-    offset <- gets totalSize
+    offset <- gets endAddr
     let prop = GlobalProp name ty kind offset
     let size = globalSize $ globalValue prop
     modify $ \table ->
         table
             { globalTable = globalTable table ++ [(name, prop)]
-            , totalSize = totalSize table + size
+            , endAddr = endAddr table + size * 4
             }
+
+searchGlobalTable :: GlobalTable -> Text -> Maybe GlobalProp
+searchGlobalTable table name =
+    lookup name $ globalTable table
 
 asGlobalConstant :: (Monad m) => Ident -> IdentEnvT m (Maybe GlobalConstant)
 asGlobalConstant (ExternalIdent ext) = pure $ Just $ GExternal ext

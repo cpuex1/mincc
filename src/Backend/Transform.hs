@@ -1,13 +1,32 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Backend.Transform (transformCodeBlock, CodeBlockGenState, insertBuf) where
+module Backend.Transform (transformCodeBlock, CodeBlockGenStateT) where
 
-import Backend.Asm
+import Backend.Asm (
+    AllowBranch,
+    CodeBlock (..),
+    DisallowBranch,
+    Inst (..),
+    InstLabel,
+    InstTerm (..),
+    IntermediateCodeBlock (IntermediateCodeBlock),
+    PrimitiveIntOp (PAdd),
+    RegID,
+    RegOrImm (..),
+    Register (ArgsReg, HeapReg, ReturnReg, StackReg, TempReg, ZeroReg),
+ )
+import Backend.BackendEnv (BackendEnv (globals), BackendStateT, findGlobal)
 import Backend.Shuffle (shuffleRegOrImm, shuffleRegs)
-import Control.Monad.State (State, execState, gets, modify)
+import Control.Monad.State (MonadTrans (lift), StateT, execStateT, gets, modify)
 import Data.Text (Text, isPrefixOf, pack)
-import Syntax (Loc, dummyLoc)
+import Globals (
+    GlobalConstant (GExternal, GLiteral),
+    GlobalKind (GArray, GTuple),
+    GlobalProp (globalOffset, globalValue),
+    GlobalTable (endAddr, globalTable),
+ )
+import Syntax (Literal (LBool, LFloat, LInt, LUnit), Loc, dummyLoc)
 import Prelude hiding (lookup)
 
 data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
@@ -21,16 +40,16 @@ data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
     }
     deriving (Show, Eq)
 
-type CodeBlockGenState stateTy idTy a = State (CodeBlockGenEnv stateTy idTy) a
+type CodeBlockGenStateT m stateTy idTy = StateT (CodeBlockGenEnv stateTy idTy) (BackendStateT m)
 
-insertBuf :: Inst stateTy idTy DisallowBranch -> CodeBlockGenState stateTy idTy ()
+insertBuf :: (Monad m) => Inst stateTy idTy DisallowBranch -> CodeBlockGenStateT m stateTy idTy ()
 insertBuf i =
     modify $ \e ->
         e
             { instBuf = instBuf e ++ [i]
             }
 
-epilogue :: CodeBlockGenState Loc RegID [Inst Loc RegID DisallowBranch]
+epilogue :: (Monad m) => CodeBlockGenStateT m Loc RegID [Inst Loc RegID DisallowBranch]
 epilogue = do
     localVars' <- gets getLocalVars
     pure
@@ -38,7 +57,7 @@ epilogue = do
         , IIntOp dummyLoc PAdd StackReg StackReg (Imm (4 * (localVars' + 1)))
         ]
 
-flushBuf :: CodeBlockGenState Loc RegID ()
+flushBuf :: (Monad m) => CodeBlockGenStateT m Loc RegID ()
 flushBuf = do
     ep <- epilogue
     modify $ \e ->
@@ -53,7 +72,7 @@ flushBuf = do
             , instBuf = []
             }
 
-genLabel :: Text -> CodeBlockGenState stateTy idTy InstLabel
+genLabel :: (Monad m) => Text -> CodeBlockGenStateT m stateTy idTy InstLabel
 genLabel tag = do
     label <- gets generatedLabel
     mainLabel' <- gets mainLabel
@@ -69,33 +88,94 @@ tailCallLabel label = label <> "_start"
 tailRecCallLabel :: InstLabel -> InstLabel
 tailRecCallLabel label = label <> "_rec"
 
-insertIShuffle :: Loc -> [(Register RegID Int, RegOrImm RegID Int)] -> CodeBlockGenState Loc RegID ()
+insertIShuffle :: (Monad m) => Loc -> [(Register RegID Int, RegOrImm RegID Int)] -> CodeBlockGenStateT m Loc RegID ()
 insertIShuffle state assign =
     mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 r2) $ shuffleRegOrImm assign
 
-insertFShuffle :: Loc -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenState Loc RegID ()
+insertFShuffle :: (Monad m) => Loc -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenStateT m Loc RegID ()
 insertFShuffle state assign =
     mapM_ (\(r1, r2) -> insertBuf $ IFMov state r1 (Reg r2)) $ shuffleRegs assign
 
-transformCodeBlock :: IntermediateCodeBlock Loc RegID -> [CodeBlock Loc RegID]
+initializeGlobal :: (Monad m) => CodeBlockGenStateT m Loc RegID ()
+initializeGlobal = do
+    global <- lift (gets globals)
+    let properties = map snd $ globalTable global
+    let endAddr' = endAddr global
+    mapM_
+        ( \prop -> do
+            let offset = globalOffset prop
+            case globalValue prop of
+                GArray num (GLiteral (LFloat f)) -> do
+                    insertBuf $ IFMov dummyLoc (TempReg 0) (Imm f)
+                    mapM_
+                        ( \idx -> insertBuf $ IFStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
+                        )
+                        [0 .. (num - 1)]
+                GArray num (GLiteral (LInt i)) -> do
+                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm i)
+                    mapM_
+                        ( \idx -> insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
+                        )
+                        [0 .. (num - 1)]
+                GArray num (GLiteral (LBool i)) -> do
+                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm $ if i then 1 else 0)
+                    mapM_
+                        ( \idx -> insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
+                        )
+                        [0 .. (num - 1)]
+                GArray _ (GLiteral LUnit) -> pure ()
+                GArray num (GExternal ext) -> do
+                    ext' <- globalOffset <$> lift (findGlobal ext)
+                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm ext')
+                    mapM_
+                        ( \idx -> insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
+                        )
+                        [0 .. (num - 1)]
+                GTuple vals -> do
+                    mapM_
+                        ( \(idx, v) -> do
+                            case v of
+                                GLiteral (LFloat f) -> do
+                                    insertBuf $ IFMov dummyLoc (TempReg 0) (Imm f)
+                                    insertBuf $ IFStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
+                                GLiteral (LInt i) -> do
+                                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm i)
+                                    insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
+                                GLiteral (LBool i) -> do
+                                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm $ if i then 1 else 0)
+                                    insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
+                                GLiteral LUnit -> pure ()
+                                GExternal ext -> do
+                                    ext' <- globalOffset <$> lift (findGlobal ext)
+                                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm ext')
+                                    insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
+                        )
+                        $ zip [0 ..] vals
+        )
+        properties
+    insertBuf $ IMov dummyLoc HeapReg (Imm endAddr')
+
+transformCodeBlock :: (Monad m) => IntermediateCodeBlock Loc RegID -> BackendStateT m [CodeBlock Loc RegID]
 transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
     if label == "__entry"
-        then
+        then do
             -- If the block is the entry block, we can skip the prologue and the epilogue.
             -- Also, we need to add a jump to the exit block.
-            blocks $
-                execState (traverseInst inst) $
-                    CodeBlockGenEnv [] label label 0 [] (Jmp "__exit") localVars'
-        else
             blocks
-                $ execState
+                <$> execStateT
+                    (initializeGlobal >> traverseInst inst)
+                    ( CodeBlockGenEnv [] label label 0 [] (Jmp "__exit") localVars'
+                    )
+        else do
+            blocks
+                <$> execStateT
                     ( do
                         insertPrologue
                         traverseInst inst
                     )
-                $ CodeBlockGenEnv [] label label 0 [] Return localVars'
+                    (CodeBlockGenEnv [] label label 0 [] Return localVars')
   where
-    insertPrologue :: CodeBlockGenState Loc RegID ()
+    insertPrologue :: (Monad m) => CodeBlockGenStateT m Loc RegID ()
     insertPrologue = do
         term <- gets currentTerm
         modify $ \env ->
@@ -121,7 +201,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
                 , currentTerm = term
                 }
 
-    traverseInst :: [Inst Loc RegID AllowBranch] -> CodeBlockGenState Loc RegID ()
+    traverseInst :: (Monad m) => [Inst Loc RegID AllowBranch] -> CodeBlockGenStateT m Loc RegID ()
     traverseInst [] = flushBuf
     traverseInst [IBranch state op left right thenInst elseInst] = do
         term <- gets currentTerm
@@ -221,7 +301,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         transformInst inst'
         traverseInst rest
 
-    transformInst :: Inst Loc RegID AllowBranch -> CodeBlockGenState Loc RegID ()
+    transformInst :: (Monad m) => Inst Loc RegID AllowBranch -> CodeBlockGenStateT m Loc RegID ()
     transformInst (ICompOp state op dest src1 src2) =
         insertBuf $ ICompOp state op dest src1 src2
     transformInst (IFCompOp state op dest src1 src2) =

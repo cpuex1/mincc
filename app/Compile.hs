@@ -137,7 +137,7 @@ toInstructionsIO :: [Function] -> BackendIdentStateIO [IntermediateCodeBlock Loc
 toInstructionsIO = mapM toInstructions
 
 transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [CodeBlock Loc Int]
-transformCodeBlockIO = pure . (\blocks -> blocks ++ [exitBlock]) . concatMap transformCodeBlock
+transformCodeBlockIO blocks = (\blocks' -> blocks' ++ [exitBlock]) . concat <$> mapM transformCodeBlock blocks
 
 livenessIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [IntermediateCodeBlock LivenessLoc Int]
 livenessIO = mapM livenessIO'
