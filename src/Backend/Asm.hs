@@ -155,20 +155,20 @@ data Inst stateTy idTy branchTy where
     IRichCall ::
         stateTy ->
         InstLabel ->
-        [Register idTy Int] ->
+        [RegOrImm idTy Int] ->
         [Register idTy Float] ->
         Inst stateTy idTy AllowBranch
     IClosureCall ::
         stateTy ->
         Register idTy Int ->
-        [Register idTy Int] ->
+        [RegOrImm idTy Int] ->
         [Register idTy Float] ->
         Inst stateTy idTy AllowBranch
     IMakeClosure ::
         stateTy ->
         Register idTy Int ->
         InstLabel ->
-        [Register idTy Int] ->
+        [RegOrImm idTy Int] ->
         [Register idTy Float] ->
         Inst stateTy idTy AllowBranch
     ICall ::
@@ -207,7 +207,7 @@ data Inst stateTy idTy branchTy where
         stateTy ->
         Text ->
         RawInstRetTy idTy ->
-        [Register idTy Int] ->
+        [RegOrImm idTy Int] ->
         [Register idTy Float] ->
         Inst stateTy idTy branchTy
     IBranch ::
@@ -318,17 +318,19 @@ replaceIReg beforeReg afterReg (ILMov state dest src) =
   where
     substReg' = substReg beforeReg afterReg
 replaceIReg beforeReg afterReg (IRichCall state label iArgs fArgs) =
-    IRichCall state label (map substReg' iArgs) fArgs
+    IRichCall state label (map substImmReg' iArgs) fArgs
   where
-    substReg' = substReg beforeReg afterReg
+    substImmReg' = substImmReg beforeReg afterReg
 replaceIReg beforeReg afterReg (IClosureCall state dest iArgs fArgs) =
-    IClosureCall state (substReg' dest) (map substReg' iArgs) fArgs
+    IClosureCall state (substReg' dest) (map substImmReg' iArgs) fArgs
   where
     substReg' = substReg beforeReg afterReg
+    substImmReg' = substImmReg beforeReg afterReg
 replaceIReg beforeReg afterReg (IMakeClosure state dest label iArgs fArgs) =
-    IMakeClosure state (substReg' dest) label (map substReg' iArgs) fArgs
+    IMakeClosure state (substReg' dest) label (map substImmReg' iArgs) fArgs
   where
     substReg' = substReg beforeReg afterReg
+    substImmReg' = substImmReg beforeReg afterReg
 replaceIReg beforeReg afterReg (ICallReg state reg) =
     ICallReg state (substReg' reg)
   where
@@ -351,11 +353,12 @@ replaceIReg beforeReg afterReg (IFStore state dest src offset) =
     substReg' = substReg beforeReg afterReg
 replaceIReg beforeReg afterReg (IRawInst state inst retTy iArgs fArgs) =
     case retTy of
-        RIRUnit -> IRawInst state inst retTy (map substReg' iArgs) fArgs
-        RIRInt reg -> IRawInst state inst (RIRInt (substReg' reg)) (map substReg' iArgs) fArgs
-        RIRFloat reg -> IRawInst state inst (RIRFloat reg) (map substReg' iArgs) fArgs
+        RIRUnit -> IRawInst state inst retTy (map substImmReg' iArgs) fArgs
+        RIRInt reg -> IRawInst state inst (RIRInt (substReg' reg)) (map substImmReg' iArgs) fArgs
+        RIRFloat reg -> IRawInst state inst (RIRFloat reg) (map substImmReg' iArgs) fArgs
   where
     substReg' = substReg beforeReg afterReg
+    substImmReg' = substImmReg beforeReg afterReg
 replaceIReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =
     IBranch
         state

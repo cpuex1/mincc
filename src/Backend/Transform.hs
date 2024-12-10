@@ -4,7 +4,7 @@
 module Backend.Transform (transformCodeBlock, CodeBlockGenState, insertBuf) where
 
 import Backend.Asm
-import Backend.Shuffle (shuffleRegs)
+import Backend.Shuffle (shuffleRegOrImm, shuffleRegs)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Text (Text, isPrefixOf, pack)
 import Syntax (Loc, dummyLoc)
@@ -69,9 +69,9 @@ tailCallLabel label = label <> "_start"
 tailRecCallLabel :: InstLabel -> InstLabel
 tailRecCallLabel label = label <> "_rec"
 
-insertIShuffle :: Loc -> [(Register RegID Int, Register RegID Int)] -> CodeBlockGenState Loc RegID ()
+insertIShuffle :: Loc -> [(Register RegID Int, RegOrImm RegID Int)] -> CodeBlockGenState Loc RegID ()
 insertIShuffle state assign =
-    mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 (Reg r2)) $ shuffleRegs assign
+    mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 r2) $ shuffleRegOrImm assign
 
 insertFShuffle :: Loc -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenState Loc RegID ()
 insertFShuffle state assign =
@@ -257,8 +257,13 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         insertBuf $ ILMov state dest label'
         insertBuf $ IStore state dest HeapReg 0
         mapM_
-            ( \(arg, i) ->
-                insertBuf $ IStore state arg HeapReg (i * 4)
+            ( \(arg, i) -> do
+                case arg of
+                    Reg reg -> do
+                        insertBuf $ IStore state reg HeapReg (i * 4)
+                    Imm imm -> do
+                        insertBuf $ IMov state (TempReg 0) (Imm imm)
+                        insertBuf $ IStore state (TempReg 0) HeapReg (i * 4)
             )
             $ zip iFreeV [1 ..]
         mapM_

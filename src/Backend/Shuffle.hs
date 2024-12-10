@@ -4,9 +4,10 @@ module Backend.Shuffle (
     genCirc,
     shuffle,
     shuffleRegs,
+    shuffleRegOrImm,
 ) where
 
-import Backend.Asm (RegID, Register (ArgsReg, TempReg))
+import Backend.Asm (RegID, RegOrImm (Reg), Register (ArgsReg, TempReg))
 import Control.Monad (when)
 import Control.Monad.State (State, evalState, gets, modify)
 import Data.List ((\\))
@@ -105,6 +106,36 @@ shuffleRegs assign =
             ( \(r1, r2) ->
                 case (r1, r2) of
                     (ArgsReg _, ArgsReg _) -> False
+                    _ -> True
+            )
+            assign
+
+shuffleRegOrImm :: [(Register RegID a, RegOrImm RegID a)] -> [(Register RegID a, RegOrImm RegID a)]
+shuffleRegOrImm assign =
+    map
+        ( \(r1, r2) ->
+            let r1' = if r1 == tempRegID then TempReg 0 else ArgsReg r1
+             in let r2' = if r2 == tempRegID then TempReg 0 else ArgsReg r2
+                 in (r1', Reg r2')
+        )
+        (shuffle tempRegID assignArgs)
+        ++ overwrittenAssign
+  where
+    tempRegID = -1
+
+    assignArgs =
+        mapMaybe
+            ( \(r1, r2) ->
+                case (r1, r2) of
+                    (ArgsReg i1, Reg (ArgsReg i2)) -> Just (i1, i2)
+                    _ -> Nothing
+            )
+            assign
+    overwrittenAssign =
+        filter
+            ( \(r1, r2) ->
+                case (r1, r2) of
+                    (ArgsReg _, Reg (ArgsReg _)) -> False
                     _ -> True
             )
             assign

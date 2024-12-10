@@ -23,7 +23,7 @@ import Typing (TypeKind (TFloat, TUnit))
 
 type BackendIdentState m = BackendStateT (IdentEnvT m)
 
-resolveArgs :: (Monad m) => [Ident] -> BackendIdentState m ([Register RegID Int], [Register RegID Float])
+resolveArgs :: (Monad m) => [Ident] -> BackendIdentState m ([RegOrImm RegID Int], [Register RegID Float])
 resolveArgs args = do
     iArgs <-
         filterM
@@ -40,7 +40,7 @@ resolveArgs args = do
             )
             args
     -- TODO: Supports global variables.
-    iArgs' <- mapM findI iArgs
+    iArgs' <- mapM findI' iArgs
     fArgs' <- mapM findF fArgs
     pure (iArgs', fArgs')
 
@@ -293,7 +293,7 @@ expandExprToInst iReg _ (MakeClosure state func freeV) = do
             )
             freeV
     -- Need to proof iFreeV and fFreeV don't contain any global variables.
-    iFreeV' <- mapM findI iFreeV
+    iFreeV' <- mapM findI' iFreeV
     fFreeV' <- mapM findF fFreeV
     pure [IMakeClosure (getLoc state) iReg (display func) iFreeV' fFreeV']
 expandExprToInst iReg fReg (DirectApp state func args) = do

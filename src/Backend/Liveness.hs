@@ -140,19 +140,19 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessSt
         pure $ IFMov state' dest src
     liveness' (IRichCall state label iArgs fArgs) = do
         state' <- getState state
-        mapM_ markUsedI iArgs
+        mapM_ markUsedI' iArgs
         mapM_ markUsedF fArgs
         pure $ IRichCall state' label iArgs fArgs
     liveness' (IClosureCall state cl iArgs fArgs) = do
         state' <- getState state
         markUsedI cl
-        mapM_ markUsedI iArgs
+        mapM_ markUsedI' iArgs
         mapM_ markUsedF fArgs
         pure $ IClosureCall state' cl iArgs fArgs
     liveness' (IMakeClosure state dest label iArgs fArgs) = do
         state' <- getState state
         removeI dest
-        mapM_ markUsedI iArgs
+        mapM_ markUsedI' iArgs
         mapM_ markUsedF fArgs
         pure $ IMakeClosure state' dest label iArgs fArgs
     liveness' (ILoad state dest src offset) = do
@@ -178,7 +178,7 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessSt
     liveness' (IRawInst state name retTy iArgs fArgs) = do
         state' <- getState state
         remove retTy
-        mapM_ markUsedI iArgs
+        mapM_ markUsedI' iArgs
         mapM_ markUsedF fArgs
         pure $ IRawInst state' name retTy iArgs fArgs
       where

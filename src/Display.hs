@@ -225,6 +225,10 @@ instance Display (Register Int Int) where
     display (SavedReg idTy) = "s" <> pack (show idTy)
     display (GeneralReg idTy) = "r" <> pack (show idTy)
 
+instance Display (RegOrImm RegID Int) where
+    display (Reg reg) = display reg
+    display (Imm imm) = pack (show imm)
+
 instance Display (Register Int Float) where
     display ZeroReg = "fzero"
     display RetReg = "fa0"
@@ -232,6 +236,10 @@ instance Display (Register Int Float) where
     display (TempReg idTy) = "ft" <> pack (show idTy)
     display (SavedReg idTy) = "fs" <> pack (show idTy)
     display (GeneralReg idTy) = "fr" <> pack (show idTy)
+
+instance Display (RegOrImm RegID Float) where
+    display (Reg reg) = display reg
+    display (Imm imm) = pack (show imm)
 
 instance (Display stateTy) => DisplayI (Inst stateTy Int branchTy) where
     displayI (ICompOp state op lhs rhs1 rhs2) _ =

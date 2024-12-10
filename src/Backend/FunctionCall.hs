@@ -71,7 +71,7 @@ saveArgs block = do
         pure $ (called && (ArgsReg reg == reg')) || rest'
     isUsedAfterCallI reg (IRichCall _ _ args _ : rest) = do
         called <- get
-        if called && elem (ArgsReg reg) args
+        if called && elem (Reg $ ArgsReg reg) args
             then
                 pure True
             else do
@@ -79,7 +79,7 @@ saveArgs block = do
                 isUsedAfterCallI reg rest
     isUsedAfterCallI reg (IClosureCall _ _ args _ : rest) = do
         called <- get
-        if called && elem (ArgsReg reg) args
+        if called && elem (Reg $ ArgsReg reg) args
             then
                 pure True
             else do
@@ -88,7 +88,7 @@ saveArgs block = do
     isUsedAfterCallI reg (IMakeClosure _ _ _ args _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && elem (ArgsReg reg) args) || rest'
+        pure $ (called && elem (Reg $ ArgsReg reg) args) || rest'
     isUsedAfterCallI reg (ILoad _ _ reg' _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
@@ -108,7 +108,7 @@ saveArgs block = do
     isUsedAfterCallI reg (IRawInst _ _ _ iArgs _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (ArgsReg reg `elem` iArgs)) || rest'
+        pure $ (called && (Reg (ArgsReg reg) `elem` iArgs)) || rest'
     isUsedAfterCallI reg (IBranch _ _ left right thenBlock elseBlock : rest) = do
         called <- get
         if called && (ArgsReg reg == left || ArgsReg reg == right)

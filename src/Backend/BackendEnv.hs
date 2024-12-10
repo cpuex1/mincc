@@ -14,11 +14,12 @@ module Backend.BackendEnv (
     genIReg,
     genFReg,
     findI,
+    findI',
     findF,
     findGlobal,
 ) where
 
-import Backend.Asm (RegID, Register (SavedReg))
+import Backend.Asm (RegID, RegOrImm (Imm, Reg), Register (SavedReg))
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
@@ -26,8 +27,8 @@ import Data.Functor.Identity (Identity)
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
-import Globals (GlobalProp, GlobalTable (globalTable))
-import Syntax (Ident)
+import Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
+import Syntax (Ident (ExternalIdent))
 
 data BackendConfig = BackendConfig
     { iRegLimit :: Int
@@ -109,6 +110,11 @@ findI ident = do
         Just actual -> pure actual
         Nothing -> do
             throwError $ OtherError $ "Detected an unknown non-float identifier named " <> display ident <> "."
+
+findI' :: (Monad m) => Ident -> BackendStateT m (RegOrImm RegID Int)
+findI' (ExternalIdent ident) = do
+    Imm . globalOffset <$> findGlobal ident
+findI' ident = Reg <$> findI ident
 
 findF :: (Monad m) => Ident -> BackendStateT m (Register RegID Float)
 findF ident = do
