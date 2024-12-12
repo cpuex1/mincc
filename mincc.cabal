@@ -30,6 +30,7 @@ library
       Backend.FunctionCall
       Backend.Liveness
       Backend.Lowering
+      Backend.Optim.MulElim
       Backend.RegisterAlloc
       Backend.Shuffle
       Backend.Spill

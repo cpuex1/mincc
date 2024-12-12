@@ -156,7 +156,14 @@ execArgsWithBackend functions = do
         liftIO $ TIO.writeFile (changeExt "ir.s" outputFile) $ intercalate "\n" $ map display blocks
         liftB' $ printLog Debug "Intermediate representation code was saved"
 
-    liveness <- livenessIO blocks
+    optimBlocks <- optimInstIO blocks
+    liftB' $ printLog Done "Backend optimization succeeded"
+    emitOptim <- liftB' $ asks cEmitOptim
+    when emitOptim $ do
+        liftIO $ TIO.writeFile (changeExt "optim.s" outputFile) $ intercalate "\n" $ map display optimBlocks
+        liftB' $ printLog Debug "Optimized IR was saved"
+
+    liveness <- livenessIO optimBlocks
     liftB' $ printLog Done "Liveness analysis succeeded"
     when emitIR $ do
         liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display liveness

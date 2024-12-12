@@ -10,16 +10,22 @@ module Compile (
     extractGlobalsIO,
     getFunctionsIO,
     toInstructionsIO,
+    optimInstIO,
     transformCodeBlockIO,
     livenessIO,
     assignRegisterIO,
 ) where
 
 import Backend.Asm
-import Backend.BackendEnv (BackendConfig (fRegLimit, iRegLimit), BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen), liftB)
+import Backend.BackendEnv (
+    BackendConfig (fRegLimit, iRegLimit),
+    BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen),
+    liftB,
+ )
 import Backend.FunctionCall (saveRegisters)
 import Backend.Liveness (LivenessLoc (livenessLoc), liveness)
 import Backend.Lowering
+import Backend.Optim.MulElim (elimMul)
 import Backend.RegisterAlloc (assignRegister)
 import Backend.Spill (spillF, spillI)
 import Backend.Transform (transformCodeBlock)
@@ -42,7 +48,6 @@ import IdentAnalysis (loadTypeEnv)
 import KNorm
 import Log
 import NameRes (resolveNames)
-import Optim.ConstExpansion (expandConstants)
 import Optim.ConstFold (constFold)
 import Parser
 import Syntax
@@ -135,6 +140,9 @@ getFunctionsIO (expr : exprs) = do
 
 toInstructionsIO :: [Function] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
 toInstructionsIO = mapM toInstructions
+
+optimInstIO :: [IntermediateCodeBlock Loc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc RegID]
+optimInstIO inst = pure $ map elimMul inst
 
 transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [CodeBlock Loc Int]
 transformCodeBlockIO blocks = (\blocks' -> blocks' ++ [exitBlock]) . concat <$> mapM transformCodeBlock blocks
