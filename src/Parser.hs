@@ -1,6 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (lexeme, parseLiteral, parseIdent, parsePattern, parseSimpleExpr, parseExpr) where
+module Parser (
+    lexeme,
+    parseLiteral,
+    parseIdent,
+    parsePattern,
+    parseSimpleExpr,
+    parseExpr,
+    parsePartialExpr,
+) where
 
 import Control.Monad (void)
 import Control.Monad.Combinators.Expr
@@ -326,15 +334,21 @@ parseThenExpr =
             <?> "an \"if\" expression or \"<-\" expression"
         )
 
--- | Parses a let expression
-parseLetExpr :: Parser ParsedExpr
-parseLetExpr = do
+-- | Parses a let expression partially
+parseLetHeader :: Parser (Loc, Pattern RawIdent, ParsedExpr)
+parseLetHeader = do
     pos <- getSourceLoc
     parseKeyword "let"
     pat <- parsePattern
     cSymbol '='
     value <- parseExpr
     parseKeyword "in"
+    pure (pos, pat, value)
+
+-- | Parses a let expression
+parseLetExpr :: Parser ParsedExpr
+parseLetExpr = do
+    (pos, pat, value) <- parseLetHeader
     PGuard . Let pos pat (pExp value) . pExp <$> parseExpr
 
 -- | Parses a general expression without ";" at the top.
@@ -363,4 +377,19 @@ parseExpr =
                             pure expr
                     )
                 <?> "an expression"
+            )
+
+-- | Parses a partial let expression
+parsePartialExpr :: ParsedExpr -> Parser ParsedExpr
+parsePartialExpr body =
+    do
+        spaced
+        lexeme
+            ( do
+                -- Let
+                (pos, pat, value) <- parseLetHeader
+                body' <-
+                    parsePartialExpr body
+                        <|> pure body
+                pure $ PGuard (Let pos pat (pExp value) (pExp body'))
             )

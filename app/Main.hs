@@ -63,22 +63,22 @@ execArgs = do
                 throwError $
                     OtherError "An output file must have a .s extension"
 
-            parsedExprs <- parseAllIO inputFiles
+            parsedExpr <- parseAllIO inputFiles
             printLog Done "Parsing succeeded"
             emitParsed <- asks cEmitParsed
             when emitParsed $ do
-                lift $ lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ intercalate "\n" $ map display parsedExprs
+                lift $ lift $ TIO.writeFile (changeExt "parsed.ml" outputFile) $ display parsedExpr
                 printLog Debug "Parsed expressions are saved"
 
-            resolvedExprs <- resolveAllIO parsedExprs
+            resolvedExpr <- resolveAllIO parsedExpr
             printLog Done "Name resolution succeeded"
             emitResolved <- asks cEmitResolved
             when emitResolved $ do
-                lift $ lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ intercalate "\n" $ map display resolvedExprs
+                lift $ lift $ TIO.writeFile (changeExt "resolved.ml" outputFile) $ display resolvedExpr
                 printLog Debug "Resolved expressions are saved"
 
             -- Run with a monad that holds identifier information.
-            _ <- runIdentEnvT (execArgsWithIdent resolvedExprs) defaultIdentE
+            _ <- runIdentEnvT (execArgsWithIdent resolvedExpr) defaultIdentE
 
             printLog Done "Compilation succeeded"
         )
@@ -87,48 +87,48 @@ execArgs = do
             printLog Error "Compilation failed"
             liftIO $ exitWith $ ExitFailure 1
 
-execArgsWithIdent :: [ResolvedExpr] -> IdentEnvIO ()
-execArgsWithIdent resolvedExprs = do
+execArgsWithIdent :: ResolvedExpr -> IdentEnvIO ()
+execArgsWithIdent resolvedExpr = do
     outputFile <- lift $ asks cOutput
 
-    typedExprs <- inferTypeIO resolvedExprs
+    typedExpr <- inferTypeIO resolvedExpr
     lift $ printLog Done "Type inference succeeded"
     emitTyped <- lift $ asks cEmitTyped
     when emitTyped $ do
-        liftIO $ TIO.writeFile (changeExt "typed.ml" outputFile) $ intercalate "\n" $ map display typedExprs
+        liftIO $ TIO.writeFile (changeExt "typed.ml" outputFile) $ display typedExpr
         lift $ printLog Debug "Typed expressions are saved"
 
-    kExprs <- kNormalizeIO typedExprs
+    kExpr <- kNormalizeIO typedExpr
     lift $ printLog Done "K-normalization succeeded"
     emitKNorm <- lift $ asks cEmitKNorm
     when emitKNorm $ do
-        liftIO $ TIO.writeFile (changeExt "norm.ml" outputFile) $ intercalate "\n" $ map display kExprs
+        liftIO $ TIO.writeFile (changeExt "norm.ml" outputFile) $ display kExpr
         lift $ printLog Debug "K-normalized expressions are saved"
 
-    flattenExprs <- flattenExprIO kExprs
+    flattenExpr <- flattenExprIO kExpr
     lift $ printLog Done "Flatten succeeded"
     emitFlatten <- lift $ asks cEmitFlatten
     when emitFlatten $ do
-        liftIO $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ intercalate "\n" $ map display flattenExprs
+        liftIO $ TIO.writeFile (changeExt "flatten.ml" outputFile) $ display flattenExpr
         lift $ printLog Debug "Flatten expressions are saved"
 
-    mapM_ registerConstants flattenExprs
+    registerConstants flattenExpr
     reported <- reportEnv
     lift $ mapM_ (printTextLog Debug) reported
 
     optimLevel <- lift $ asks cOptimize
-    optimizedExprs <- optimIO flattenExprs optimLevel
+    optimizedExpr <- optimIO flattenExpr optimLevel
     lift $ printLog Done "Optimization succeeded"
     emitOptim <- lift $ asks cEmitOptim
     when emitOptim $ do
-        liftIO $ TIO.writeFile (changeExt "optim.ml" outputFile) $ intercalate "\n" $ map display optimizedExprs
+        liftIO $ TIO.writeFile (changeExt "optim.ml" outputFile) $ display optimizedExpr
         lift $ printLog Debug "Optimized expressions are saved"
 
-    (extracted, globals) <- extractGlobalsIO optimizedExprs
+    (extracted, globals) <- extractGlobalsIO optimizedExpr
     lift $ printLog Done "Global extraction succeeded"
     -- TODO: replace emitOptim with emitGlobals
     when emitOptim $ do
-        liftIO $ TIO.writeFile (changeExt "globals.ml" outputFile) $ intercalate "\n" $ map display extracted
+        liftIO $ TIO.writeFile (changeExt "globals.ml" outputFile) $ display extracted
         lift $ printLog Debug "Expressions with globals are saved"
 
     functions <- getFunctionsIO extracted

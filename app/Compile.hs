@@ -54,8 +54,9 @@ import Syntax
 import Text.Megaparsec
 import TypeInferrer (inferType)
 
-parseIO :: FilePath -> ConfigIO ParsedExpr
-parseIO path = do
+parseAllIO :: [FilePath] -> ConfigIO ParsedExpr
+parseAllIO [] = throwError $ OtherError "No input files"
+parseAllIO [path] = do
     content <- liftIO $ B.readFile path
     case parse (parseExpr <* eof) path $ decodeUtf8 content of
         Left err ->
@@ -63,80 +64,67 @@ parseIO path = do
         Right expr -> do
             printLog Info $ "Parsed " ++ path
             return expr
+parseAllIO (path : paths) = do
+    content <- liftIO $ B.readFile path
+    parsed <- parseAllIO paths
+    case parse (parsePartialExpr parsed <* eof) path $ decodeUtf8 content of
+        Left err ->
+            throwError $ ParserError err
+        Right expr -> do
+            printLog Info $ "Parsed " ++ path
+            return expr
 
-parseAllIO :: [FilePath] -> ConfigIO [ParsedExpr]
-parseAllIO = mapM parseIO
+resolveAllIO :: ParsedExpr -> ConfigIO ResolvedExpr
+resolveAllIO = pure . resolveNames
 
-resolveAllIO :: [ParsedExpr] -> ConfigIO [ResolvedExpr]
-resolveAllIO exprs = pure $ map resolveNames exprs
-
-inferTypeIO :: [ResolvedExpr] -> IdentEnvIO [TypedExpr]
-inferTypeIO [] = pure []
-inferTypeIO (expr : rest) = do
+inferTypeIO :: ResolvedExpr -> IdentEnvIO TypedExpr
+inferTypeIO expr = do
     case result of
         Left err -> lift $ throwError err
         Right typedExpr -> do
-            rest' <- inferTypeIO rest
             loadTypeEnv env
-            return (typedExpr : rest')
+            return typedExpr
   where
     (result, env) = inferType expr
 
-kNormalizeIO :: [TypedExpr] -> IdentEnvIO [KExpr]
-kNormalizeIO = mapM kNormalize
+kNormalizeIO :: TypedExpr -> IdentEnvIO KExpr
+kNormalizeIO = kNormalize
 
-flattenExprIO :: [KExpr] -> IdentEnvIO [KExpr]
-flattenExprIO exprs = pure $ map flattenExpr exprs
+flattenExprIO :: KExpr -> IdentEnvIO KExpr
+flattenExprIO = pure . flattenExpr
 
-optimIO :: [KExpr] -> Int -> IdentEnvIO [KExpr]
-optimIO exprs limit = do
+optimIO :: KExpr -> Int -> IdentEnvIO KExpr
+optimIO expr limit = do
     if limit == 0
         then
-            pure exprs
+            pure expr
         else do
-            exprs' <-
-                mapM
-                    ( \expr -> do
-                        -- expr' <- expandConstants expr
-                        -- _ <- lift $ printLog Info "Constant expanding performed"
-                        -- when (expr == expr') $ do
-                        --     lift $ printLog Info "Make no change"
-                        expr'' <- constFold expr
-                        _ <- lift $ printLog Info "Constant folding performed"
-                        when (expr == expr'') $ do
-                            lift $ printLog Info "Make no change"
-                        pure expr''
-                    )
-                    exprs
-            if exprs == exprs'
+            -- Constant folding
+            expr' <- constFold expr
+            _ <- lift $ printLog Info "Constant folding performed"
+            when (expr == expr') $ do
+                lift $ printLog Info "Make no change"
+            if expr == expr'
                 then do
                     _ <- lift $ printLog Info "No space for optimization"
-                    pure exprs'
+                    pure expr'
                 else do
                     _ <- lift $ printLog Info "Perform more optimization"
-                    optimIO exprs' (limit - 1)
+                    optimIO expr' (limit - 1)
 
-extractGlobalsIO :: [KExpr] -> IdentEnvIO ([KExpr], GlobalTable)
-extractGlobalsIO exprs =
+extractGlobalsIO :: KExpr -> IdentEnvIO (KExpr, GlobalTable)
+extractGlobalsIO expr =
     runStateT
         ( do
-            mapM
-                ( \expr -> do
-                    expr' <- extractGlobals expr
-                    globalInfo <- reportGlobals
-                    mapM_ (lift . lift . printTextLog Debug) globalInfo
-                    pure expr'
-                )
-                exprs
+            expr' <- extractGlobals expr
+            globalInfo <- reportGlobals
+            mapM_ (lift . lift . printTextLog Debug) globalInfo
+            pure expr'
         )
         defaultGlobalTable
 
-getFunctionsIO :: [KExpr] -> IdentEnvIO [Function]
-getFunctionsIO [] = pure []
-getFunctionsIO (expr : exprs) = do
-    func <- getFunctions expr
-    functions <- getFunctionsIO exprs
-    pure (func ++ functions)
+getFunctionsIO :: KExpr -> IdentEnvIO [Function]
+getFunctionsIO = getFunctions
 
 toInstructionsIO :: [Function] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
 toInstructionsIO = mapM toInstructions
