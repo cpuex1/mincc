@@ -22,6 +22,8 @@ builtinFunctions :: [BuiltinFunction]
 builtinFunctions =
     [ BuiltinFunction (ExternalIdent "float_of_int") (TFun [TInt] TFloat) "fitf"
     , BuiltinFunction (ExternalIdent "int_of_float") (TFun [TFloat] TInt) "ffti"
+    , BuiltinFunction (ExternalIdent "sqrt") (TFun [TFloat] TFloat) "fsqrt"
+    , BuiltinFunction (ExternalIdent "inv") (TFun [TFloat] TFloat) "finv"
     ]
 
 findBuiltin :: Ident -> Maybe BuiltinFunction
