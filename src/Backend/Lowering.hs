@@ -80,8 +80,11 @@ expandExprToInst iReg _ (Binary state (RelationOp op) operand1 operand2) = do
             pure [ICompOp (getLoc state) op iReg operand1' (Reg operand2')]
 expandExprToInst iReg _ (Binary state (IntOp op) operand1 operand2) = do
     const2 <- liftB $ asConstant operand2
-    case const2 of
-        Just (LInt i) -> do
+    case (const2, op) of
+        (Just (LInt i), Sub) -> do
+            operand1' <- findI operand1
+            pure [IIntOp (getLoc state) PAdd iReg operand1' (Imm $ -i)]
+        (Just (LInt i), _) -> do
             operand1' <- findI operand1
             pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Imm i)]
         _ -> do
