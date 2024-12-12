@@ -17,7 +17,7 @@ import Control.Monad.State (modify)
 import Display (display)
 import Error (CompilerError (OtherError))
 import Globals (GlobalProp (globalOffset))
-import IdentAnalysis (IdentEnvT, getTyOf)
+import IdentAnalysis (IdentEnvT, asConstant, getTyOf)
 import Syntax
 import Typing (TypeKind (TFloat, TUnit))
 
@@ -79,12 +79,16 @@ expandExprToInst iReg _ (Binary state (RelationOp op) operand1 operand2) = do
             operand2' <- findI operand2
             pure [ICompOp (getLoc state) op iReg operand1' (Reg operand2')]
 expandExprToInst iReg _ (Binary state (IntOp op) operand1 operand2) = do
-    -- TODO: Expand constants.
-    operand1' <- findI operand1
-    operand2' <- findI operand2
-    pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Reg operand2')]
+    const2 <- liftB $ asConstant operand2
+    case const2 of
+        Just (LInt i) -> do
+            operand1' <- findI operand1
+            pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Imm i)]
+        _ -> do
+            operand1' <- findI operand1
+            operand2' <- findI operand2
+            pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Reg operand2')]
 expandExprToInst _ fReg (Binary state (FloatOp op) operand1 operand2) = do
-    -- TODO: Expand constants.
     operand1' <- findF operand1
     operand2' <- findF operand2
     pure [IFOp (getLoc state) op fReg operand1' operand2']
