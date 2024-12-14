@@ -13,7 +13,9 @@ registerConstants (Let _ (PVar v) (Const _ lit) body) = do
 registerConstants (Let _ (PRec _ _) expr body) = do
     registerConstants expr
     registerConstants body
-registerConstants (Let _ _ _ body) = registerConstants body
+registerConstants (Let _ _ expr body) = do
+    registerConstants expr
+    registerConstants body
 registerConstants (If _ _ t f) = do
     registerConstants t
     registerConstants f

@@ -1,8 +1,10 @@
+{-# LANGUAGE GADTs #-}
+
 module Backend.Optim.MulElim (elimMul) where
 
 import Backend.Asm (
     AllowBranch,
-    Inst (IIntOp),
+    Inst (IBranch, IIntOp),
     IntermediateCodeBlock (getICBInst),
     PrimitiveIntOp (PDiv, PMul, PShiftL, PShiftR),
     RegOrImm (Imm),
@@ -28,4 +30,6 @@ elimMul block =
         case log2 i of
             Just e -> IIntOp state PShiftR dest src (Imm e)
             Nothing -> IIntOp state PDiv dest src (Imm i)
+    elimMul' (IBranch state op operand1 operand2 left right) =
+        IBranch state op operand1 operand2 (map elimMul' left) (map elimMul' right)
     elimMul' inst = inst
