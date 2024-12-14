@@ -13,6 +13,9 @@ let rec fisneg x = x < 0.0 in
 (* Compare two float values *)
 let rec fless x y = x < y in
 
+(* Negative *)
+let rec fneg x = -. x in
+
 (* Calculate the squared value *)
 let rec fsqr x = x *. x in
 
