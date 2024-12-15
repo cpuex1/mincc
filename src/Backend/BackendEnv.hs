@@ -24,6 +24,7 @@ import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
+import Data.Map as M
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
@@ -105,7 +106,7 @@ genFReg ident = do
 
 findI :: (Monad m) => Ident -> BackendStateT m (Register RegID Int)
 findI ident = do
-    regID <- gets (lookup ident . iMap)
+    regID <- gets (Prelude.lookup ident . iMap)
     case regID of
         Just actual -> pure actual
         Nothing -> do
@@ -118,7 +119,7 @@ findI' ident = Reg <$> findI ident
 
 findF :: (Monad m) => Ident -> BackendStateT m (Register RegID Float)
 findF ident = do
-    regID <- gets (lookup ident . fMap)
+    regID <- gets (Prelude.lookup ident . fMap)
     case regID of
         Just actual -> pure actual
         Nothing -> do
@@ -128,7 +129,7 @@ findF ident = do
 findGlobal :: (Monad m) => Text -> BackendStateT m GlobalProp
 findGlobal name = do
     table <- gets globals
-    case lookup name $ globalTable table of
+    case M.lookup name $ globalTable table of
         Just prop -> pure prop
         Nothing -> do
             throwError $ OtherError $ "Detected an unknown global variable named " <> name <> "."

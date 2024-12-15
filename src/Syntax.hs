@@ -4,6 +4,7 @@
 
 module Syntax (
     Literal (LUnit, LBool, LInt, LFloat),
+    getLiteralType,
     UnaryOp (Not, Neg, FNeg),
     RelationBinOp (Eq, Ne, Lt, Ge),
     IntBinOp (Add, Sub, Mul, Div),
@@ -51,7 +52,7 @@ module Syntax (
 import Control.Monad.Identity (Identity (runIdentity))
 import Data.Text (Text, pack)
 import Text.Megaparsec.Pos (SourcePos, sourceColumn, sourceLine, sourceName, unPos)
-import Typing (Ty)
+import Typing (Ty, TypeKind (TBool, TFloat, TInt, TUnit))
 
 data Literal
     = LUnit
@@ -59,6 +60,12 @@ data Literal
     | LInt Int
     | LFloat Float
     deriving (Show, Eq)
+
+getLiteralType :: Literal -> Ty
+getLiteralType LUnit = TUnit
+getLiteralType (LBool _) = TBool
+getLiteralType (LInt _) = TInt
+getLiteralType (LFloat _) = TFloat
 
 data UnaryOp
     = Not

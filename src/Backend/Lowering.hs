@@ -190,39 +190,21 @@ expandExprToInst iReg _ (Tuple state vars) = do
             ++ [ IMov (getLoc state) iReg (Reg HeapReg)
                , IIntOp (getLoc state) PAdd HeapReg HeapReg (Imm $ length vars * 4)
                ]
-expandExprToInst iReg _ (ArrayCreate state size (ExternalIdent initVal)) = do
-    -- An element of the array can be a global variable.
-    size' <- findI size
-    offset <- genTempIReg
-    prop <- findGlobal initVal
-    let initVal' = globalOffset prop
-    temp <- genTempIReg
-    pure
-        [ IMov (getLoc state) temp (Imm initVal')
-        , IStore (getLoc state) temp HeapReg 0
-        , IIntOp (getLoc state) PShiftL offset size' (Imm 2)
-        , IMov (getLoc state) iReg (Reg HeapReg)
-        , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg offset)
-        ]
 expandExprToInst iReg _ (ArrayCreate state size initVal) = do
     initValTy <- liftB $ getTyOf initVal
     size' <- findI size
     offset <- genTempIReg
     case initValTy of
         TFloat -> do
-            initVal' <- findF initVal
             pure
-                [ IFStore (getLoc state) initVal' HeapReg 0
+                [ IMov (getLoc state) iReg (Reg HeapReg)
                 , IIntOp (getLoc state) PShiftL offset size' (Imm 2)
-                , IMov (getLoc state) iReg (Reg HeapReg)
                 , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg offset)
                 ]
         _ -> do
-            initVal' <- findI initVal
             pure
-                [ IStore (getLoc state) initVal' HeapReg 0
+                [ IMov (getLoc state) iReg (Reg HeapReg)
                 , IIntOp (getLoc state) PShiftL offset size' (Imm 2)
-                , IMov (getLoc state) iReg (Reg HeapReg)
                 , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg offset)
                 ]
 expandExprToInst iReg fReg (Get state array index) = do

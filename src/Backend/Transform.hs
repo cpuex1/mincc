@@ -14,19 +14,16 @@ import Backend.Asm (
     PrimitiveIntOp (PAdd),
     RegID,
     RegOrImm (..),
-    Register (ArgsReg, HeapReg, ReturnReg, StackReg, TempReg, ZeroReg),
+    Register (..),
  )
-import Backend.BackendEnv (BackendEnv (globals), BackendStateT, findGlobal)
+import Backend.BackendEnv (BackendEnv (globals), BackendStateT)
 import Backend.Shuffle (shuffleRegOrImm, shuffleRegs)
 import Control.Monad.State (MonadTrans (lift), StateT, execStateT, gets, modify)
 import Data.Text (Text, isPrefixOf, pack)
 import Globals (
-    GlobalConstant (GExternal, GLiteral),
-    GlobalKind (GArray, GTuple),
-    GlobalProp (globalOffset, globalValue),
-    GlobalTable (endAddr, globalTable),
+    GlobalTable (endAddr),
  )
-import Syntax (Literal (LBool, LFloat, LInt, LUnit), Loc, dummyLoc)
+import Syntax (Loc, dummyLoc)
 import Prelude hiding (lookup)
 
 data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
@@ -99,61 +96,7 @@ insertFShuffle state assign =
 initializeGlobal :: (Monad m) => CodeBlockGenStateT m Loc RegID ()
 initializeGlobal = do
     global <- lift (gets globals)
-    let properties = map snd $ globalTable global
-    let endAddr' = endAddr global
-    mapM_
-        ( \prop -> do
-            let offset = globalOffset prop
-            case globalValue prop of
-                GArray num (GLiteral (LFloat f)) -> do
-                    insertBuf $ IFMov dummyLoc (TempReg 0) (Imm f)
-                    mapM_
-                        ( \idx -> insertBuf $ IFStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
-                        )
-                        [0 .. (num - 1)]
-                GArray num (GLiteral (LInt i)) -> do
-                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm i)
-                    mapM_
-                        ( \idx -> insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
-                        )
-                        [0 .. (num - 1)]
-                GArray num (GLiteral (LBool i)) -> do
-                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm $ if i then 1 else 0)
-                    mapM_
-                        ( \idx -> insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
-                        )
-                        [0 .. (num - 1)]
-                GArray _ (GLiteral LUnit) -> pure ()
-                GArray num (GExternal ext) -> do
-                    ext' <- globalOffset <$> lift (findGlobal ext)
-                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm ext')
-                    mapM_
-                        ( \idx -> insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
-                        )
-                        [0 .. (num - 1)]
-                GTuple vals -> do
-                    mapM_
-                        ( \(idx, v) -> do
-                            case v of
-                                GLiteral (LFloat f) -> do
-                                    insertBuf $ IFMov dummyLoc (TempReg 0) (Imm f)
-                                    insertBuf $ IFStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
-                                GLiteral (LInt i) -> do
-                                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm i)
-                                    insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
-                                GLiteral (LBool i) -> do
-                                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm $ if i then 1 else 0)
-                                    insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
-                                GLiteral LUnit -> pure ()
-                                GExternal ext -> do
-                                    ext' <- globalOffset <$> lift (findGlobal ext)
-                                    insertBuf $ IMov dummyLoc (TempReg 0) (Imm ext')
-                                    insertBuf $ IStore dummyLoc (TempReg 0) ZeroReg (offset + idx * 4)
-                        )
-                        $ zip [0 ..] vals
-        )
-        properties
-    insertBuf $ IMov dummyLoc HeapReg (Imm endAddr')
+    insertBuf $ IMov dummyLoc HeapReg (Imm $ endAddr global)
 
 transformCodeBlock :: (Monad m) => IntermediateCodeBlock Loc RegID -> BackendStateT m [CodeBlock Loc RegID]
 transformCodeBlock (IntermediateCodeBlock label localVars' inst) =

@@ -6,43 +6,29 @@ module Globals (
     defaultGlobalTable,
     extractGlobals,
     reportGlobals,
-    GlobalConstant (..),
-    GlobalKind (..),
     GlobalTable (..),
     GlobalProp (..),
 ) where
 
 import Control.Monad.State (MonadTrans (lift), StateT, gets, modify)
+import Data.Map (Map, elems, empty, insert, lookup)
 import Data.Text (Text, pack)
 import Display (Display, display)
-import IdentAnalysis (IdentEnvT, IdentProp (IdentProp), getTyOf, registerProp, searchProp)
-import Syntax (Expr (ArrayCreate, If, Let, Tuple), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PVar), subst)
+import IdentAnalysis (IdentEnvT, IdentProp (IdentProp), asConstant, getTyOf, registerProp)
+import Syntax (Expr (ArrayCreate, If, Let), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PVar), subst)
 import Typing (Ty)
-
-data GlobalConstant
-    = GLiteral Literal
-    | GExternal Text
-    deriving (Show, Eq)
-
-data GlobalKind
-    = GTuple [GlobalConstant]
-    | GArray Int GlobalConstant
-    deriving (Show, Eq)
+import Prelude hiding (lookup)
 
 data GlobalProp = GlobalProp
     { globalName :: Text
     , globalType :: Ty
-    , globalValue :: GlobalKind
+    , globalSize :: Int
     , globalOffset :: Int
     }
     deriving (Show, Eq)
 
-globalSize :: GlobalKind -> Int
-globalSize (GTuple globals) = length globals
-globalSize (GArray size _) = size
-
 data GlobalTable = GlobalTable
-    { globalTable :: [(Text, GlobalProp)]
+    { globalTable :: Map Text GlobalProp
     , startAddr :: Int
     , endAddr :: Int
     }
@@ -55,16 +41,15 @@ startGlobalTableAddr :: Int
 startGlobalTableAddr = 0x100
 
 defaultGlobalTable :: GlobalTable
-defaultGlobalTable = GlobalTable [] startGlobalTableAddr startGlobalTableAddr
+defaultGlobalTable = GlobalTable empty startGlobalTableAddr startGlobalTableAddr
 
-addGlobalTable :: (Monad m) => Text -> Ty -> GlobalKind -> GlobalState m ()
-addGlobalTable name ty kind = do
+addGlobalTable :: (Monad m) => Text -> Ty -> Int -> GlobalState m ()
+addGlobalTable name ty size = do
     offset <- gets endAddr
-    let prop = GlobalProp name ty kind offset
-    let size = globalSize $ globalValue prop
+    let prop = GlobalProp name ty size offset
     modify $ \table ->
         table
-            { globalTable = globalTable table ++ [(name, prop)]
+            { globalTable = insert name prop $ globalTable table
             , endAddr = endAddr table + size * 4
             }
 
@@ -72,42 +57,15 @@ searchGlobalTable :: GlobalTable -> Text -> Maybe GlobalProp
 searchGlobalTable table name =
     lookup name $ globalTable table
 
-asGlobalConstant :: (Monad m) => Ident -> IdentEnvT m (Maybe GlobalConstant)
-asGlobalConstant (ExternalIdent ext) = pure $ Just $ GExternal ext
-asGlobalConstant ident = do
-    prop <- searchProp ident
-    case prop of
-        Just (IdentProp _ (Just lit) _) ->
-            pure $ Just $ GLiteral lit
-        _ -> pure Nothing
-
 extractGlobals :: (Monad m) => KExpr -> GlobalState m KExpr
-extractGlobals (Let state1 (PVar v) (Tuple state2 values) body) = do
-    globals <- sequence <$> (lift . mapM asGlobalConstant) values
-    case globals of
-        Just globals' -> do
+extractGlobals (Let state1 (PVar v) (ArrayCreate state2 idx initVal) body) = do
+    constIdx <- lift $ asConstant idx
+    case constIdx of
+        Just (LInt constIdx') -> do
             -- Register it to the global table.
             let name = display v
             ty <- lift $ getTyOf v
-            addGlobalTable name ty $ GTuple globals'
-
-            -- Replace it with an external identifier.
-            let newV = ExternalIdent name
-            lift $ registerProp newV $ IdentProp ty Nothing False
-            let body' = subst v newV v newV body
-            extractGlobals body'
-        Nothing -> do
-            body' <- extractGlobals body
-            pure $ Let state1 (PVar v) (Tuple state2 values) body'
-extractGlobals (Let state1 (PVar v) (ArrayCreate state2 idx val) body) = do
-    idxGlobal <- lift $ asGlobalConstant idx
-    valGlobal <- lift $ asGlobalConstant val
-    case (idxGlobal, valGlobal) of
-        (Just (GLiteral (LInt idxV)), Just valGlobal') -> do
-            -- Register it to the global table.
-            let name = display v
-            ty <- lift $ getTyOf v
-            addGlobalTable name ty $ GArray idxV valGlobal'
+            addGlobalTable name ty constIdx'
 
             -- Replace it with an external identifier.
             let newV = ExternalIdent name
@@ -116,7 +74,7 @@ extractGlobals (Let state1 (PVar v) (ArrayCreate state2 idx val) body) = do
             extractGlobals body'
         _ -> do
             body' <- extractGlobals body
-            pure $ Let state1 (PVar v) (ArrayCreate state2 idx val) body'
+            pure $ Let state1 (PVar v) (ArrayCreate state2 idx initVal) body'
 extractGlobals (Let state pattern expr body) = do
     -- Do not search for globals in the expression.
     body' <- extractGlobals body
@@ -130,7 +88,7 @@ extractGlobals expr = pure expr
 -- | Report all globals with pretty printing.
 reportGlobals :: (Monad m) => GlobalState m [Text]
 reportGlobals = do
-    table <- gets (map snd . globalTable)
+    table <- gets (elems . globalTable)
     pure $ map display table
 
 instance Display GlobalProp where
@@ -141,5 +99,5 @@ instance Display GlobalProp where
             <> " (offset: "
             <> pack (show (globalOffset prop))
             <> ", size: "
-            <> pack (show (globalSize $ globalValue prop))
+            <> pack (show (globalSize prop))
             <> ")"

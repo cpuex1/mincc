@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      ArrayCreate
       Backend.Asm
       Backend.BackendEnv
       Backend.FunctionCall

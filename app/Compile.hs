@@ -16,6 +16,7 @@ module Compile (
     assignRegisterIO,
 ) where
 
+import ArrayCreate (expandArrayCreate)
 import Backend.Asm
 import Backend.BackendEnv (
     BackendConfig (fRegLimit, iRegLimit),
@@ -42,7 +43,6 @@ import Data.Text (pack)
 import Data.Text.Encoding (decodeUtf8)
 import Display (display)
 import Error
-import Flatten (flattenExpr)
 import Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
 import IdentAnalysis (loadTypeEnv)
 import KNorm
@@ -91,7 +91,7 @@ kNormalizeIO :: TypedExpr -> IdentEnvIO KExpr
 kNormalizeIO = kNormalize
 
 flattenExprIO :: KExpr -> IdentEnvIO KExpr
-flattenExprIO = pure . flattenExpr
+flattenExprIO = expandArrayCreate
 
 optimIO :: KExpr -> Int -> IdentEnvIO KExpr
 optimIO expr limit = do
