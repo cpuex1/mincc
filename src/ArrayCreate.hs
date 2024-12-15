@@ -79,6 +79,7 @@ expandArrayCreate expr = flattenExpr <$> expandArrayCreate' expr
   where
     expandArrayCreate' :: (Monad m) => KExpr -> IdentEnvT m KExpr
     expandArrayCreate' (Let state1 (PVar v) (ArrayCreate (TypedState (TArray valTy) loc) size val) body) = do
+        body' <- expandArrayCreate' body
         generateInitArrayFunc
             (display v)
             valTy
@@ -97,7 +98,7 @@ expandArrayCreate expr = flattenExpr <$> expandArrayCreate' expr
                                 state1
                                 PUnit
                                 (App state1 func [v, zero, size, val])
-                                body
+                                body'
                             )
                         )
             )
