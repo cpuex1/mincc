@@ -10,6 +10,7 @@ import Backend.BackendEnv (BackendEnv (fArgsLen), BackendStateT, genTempFReg, ge
 import Backend.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
+import Data.Set (toAscList)
 import Syntax (Loc, dummyLoc)
 
 -- | Saves arguments on the stack before a function call.
@@ -203,12 +204,12 @@ saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) lab
         zipWith
             (\i arg -> IStore dummyLoc (SavedReg arg) StackReg (i * 4))
             [0 ..]
-            iToBeSaved
+            $ toAscList iToBeSaved
     fPrologue =
         zipWith
             (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg (i * 4))
             [length iToBeSaved ..]
-            fToBeSaved
+            $ toAscList fToBeSaved
 
     epilogue =
         if null iToBeSaved && null fToBeSaved
@@ -220,12 +221,12 @@ saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) lab
         zipWith
             (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg (i * 4))
             [0 ..]
-            iToBeSaved
+            $ toAscList iToBeSaved
     fEpilogue =
         zipWith
             (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg (i * 4))
             [length iToBeSaved ..]
-            fToBeSaved
+            $ toAscList fToBeSaved
 saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) cl iArgs fArgs) =
     prologue ++ [IClosureCall loc cl iArgs fArgs] ++ epilogue
   where
@@ -242,12 +243,12 @@ saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) 
         zipWith
             (\i arg -> IStore dummyLoc (SavedReg arg) StackReg (i * 4))
             [0 ..]
-            iToBeSaved
+            $ toAscList iToBeSaved
     fPrologue =
         zipWith
             (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg (i * 4))
             [length iToBeSaved ..]
-            fToBeSaved
+            $ toAscList fToBeSaved
 
     epilogue =
         if null iToBeSaved && null fToBeSaved
@@ -259,12 +260,12 @@ saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) 
         zipWith
             (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg (i * 4))
             [0 ..]
-            iToBeSaved
+            $ toAscList iToBeSaved
     fEpilogue =
         zipWith
             (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg (i * 4))
             [length iToBeSaved ..]
-            fToBeSaved
+            $ toAscList fToBeSaved
 saveRegBeyondCall (IBranch state op left right thenBlock elseBlock) =
     [ IBranch
         (livenessLoc state)

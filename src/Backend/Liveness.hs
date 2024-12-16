@@ -10,14 +10,14 @@ module Backend.Liveness (
 ) where
 
 import Backend.Asm
-import Control.Monad (unless)
 import Control.Monad.State (MonadState (get, put), State, evalState, gets, modify)
-import Data.List (nub, sort, union)
+import Data.Map (Map, fromList)
+import Data.Set (Set, delete, empty, insert, toAscList, union, unions)
 import Syntax (Loc)
 
 data LivenessState = LivenessState
-    { iAlive :: [RegID]
-    , fAlive :: [RegID]
+    { iAlive :: Set RegID
+    , fAlive :: Set RegID
     }
     deriving (Show, Eq)
 
@@ -30,16 +30,10 @@ data LivenessLoc = LivenessLoc
 type LivenessStateM = State LivenessState
 
 data RegGraph = RegGraph
-    { vertices :: [RegID]
-    , edges :: [(RegID, RegID)]
+    { vertices :: Set RegID
+    , edges :: Map RegID (Set RegID)
     }
     deriving (Show, Eq)
-
-unifyGraph :: RegGraph -> RegGraph -> RegGraph
-unifyGraph (RegGraph v1 e1) (RegGraph v2 e2) = RegGraph (v1 `union` v2) (e1 `union` e2)
-
-emptyGraph :: RegGraph
-emptyGraph = RegGraph [] []
 
 data LivenessGraph = LivenessGraph
     { iGraph :: RegGraph
@@ -48,24 +42,21 @@ data LivenessGraph = LivenessGraph
     deriving (Show, Eq)
 
 toGraph :: [LivenessState] -> LivenessGraph
-toGraph [] = LivenessGraph emptyGraph emptyGraph
-toGraph (s : rest) = LivenessGraph (unifyGraph (iGraph xGraph) (iGraph xsGraph)) (unifyGraph (fGraph xGraph) (fGraph xsGraph))
+toGraph states = LivenessGraph (RegGraph iV iE) (RegGraph fV fE)
   where
-    xGraph = toGraph' s
-    xsGraph = toGraph rest
+    iState = map iAlive states
+    fState = map fAlive states
 
-    toGraph' :: LivenessState -> LivenessGraph
-    toGraph' (LivenessState iAlive' fAlive') =
-        LivenessGraph
-            { iGraph = RegGraph (sort (nub iAlive')) [(x, y) | x <- iAlive', y <- iAlive', x /= y]
-            , fGraph = RegGraph (sort (nub fAlive')) [(x, y) | x <- fAlive', y <- fAlive', x /= y]
-            }
+    iV = unions iState
+    fV = unions fState
+
+    iE = fromList $ map (\v -> (v, unions (filter (elem v) iState))) (toAscList iV)
+    fE = fromList $ map (\v -> (v, unions (filter (elem v) fState))) (toAscList fV)
 
 markUsedI :: Register RegID Int -> LivenessStateM ()
 markUsedI (SavedReg regId) = do
     env <- get
-    unless (regId `elem` iAlive env) $
-        put env{iAlive = regId : iAlive env}
+    put env{iAlive = insert regId $ iAlive env}
 markUsedI _ = pure ()
 
 markUsedI' :: RegOrImm RegID Int -> LivenessStateM ()
@@ -75,8 +66,7 @@ markUsedI' (Imm _) = pure ()
 markUsedF :: Register RegID Float -> LivenessStateM ()
 markUsedF (SavedReg regId) = do
     env <- get
-    unless (regId `elem` fAlive env) $
-        put env{fAlive = regId : fAlive env}
+    put env{fAlive = insert regId $ fAlive env}
 markUsedF _ = pure ()
 
 markUsedF' :: RegOrImm RegID Float -> LivenessStateM ()
@@ -86,13 +76,13 @@ markUsedF' (Imm _) = pure ()
 removeI :: Register RegID Int -> LivenessStateM ()
 removeI (SavedReg regId) = do
     modify $ \env ->
-        env{iAlive = filter (/= regId) $ iAlive env}
+        env{iAlive = delete regId $ iAlive env}
 removeI _ = pure ()
 
 removeF :: Register RegID Float -> LivenessStateM ()
 removeF (SavedReg regId) = do
     modify $ \env ->
-        env{fAlive = filter (/= regId) $ fAlive env}
+        env{fAlive = delete regId $ fAlive env}
 removeF _ = pure ()
 
 getState :: Loc -> LivenessStateM LivenessLoc
@@ -101,7 +91,7 @@ getState loc' =
 
 -- | Calculates liveness information for each instruction.
 liveness :: [Inst Loc RegID AllowBranch] -> [Inst LivenessLoc RegID AllowBranch]
-liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessState [] []
+liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessState empty empty
   where
     liveness' :: Inst Loc RegID AllowBranch -> LivenessStateM (Inst LivenessLoc RegID AllowBranch)
     liveness' (ICompOp state op dest src1 src2) = do
