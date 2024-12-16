@@ -36,8 +36,8 @@ let rec reduction_2pi a =
       if a < c_PI *. 2.0 then
         a
       else
-        if a >= p then half_loop (a -. p) (p /. 2.0)
-        else half_loop a (p /. 2.0) in
+        if a >= p then half_loop (a -. p) (fhalf p)
+        else half_loop a (fhalf p) in
       half_loop a (double_loop a (c_PI *. 2.0)) in
 let rec kernel_sin x =
   let x2 = x *. x in
@@ -53,29 +53,48 @@ let rec kernel_cos x =
 
 (* Calculate sine *)
 let rec sin x =
-  let flag = x > 0.0 in
-    let a = fabs x in
-      let a = reduction_2pi a in
-        if a >= c_PI then
-          let a = a -. c_PI in
-            let a = if a >= c_PI /. 2.0 then c_PI -. a else a in
-              let a = if a <= c_PI /. 4.0 then kernel_sin a else kernel_cos (c_PI /. 2.0 -. a) in
-                if flag then -. a else a
-        else
-          let a = if a >= c_PI /. 2.0 then c_PI -. a else a in
-              let a = if a <= c_PI /. 4.0 then kernel_sin a else kernel_cos (c_PI /. 2.0 -. a) in
-                if flag then a else -. a in
+  (* The king of constant: PI *)
+  let c_PI = 3.14159265358979323846 in
+    let flag = x > 0.0 in
+      let a = fabs x in
+        let a = reduction_2pi a in
+          let is_less = a >= c_PI in
+            let flag = if is_less then not flag else flag in
+              let a = if is_less then a -. c_PI else a in
+                let a = if a >= fhalf c_PI then c_PI -. a else a in
+                  if a <= c_PI /. 4.0 then
+                    if flag then
+                      kernel_sin a
+                    else
+                      -. kernel_sin a
+                  else
+                    if flag then
+                      kernel_cos (fhalf c_PI -. a)
+                    else
+                      -. kernel_cos (fhalf c_PI -. a) in
 
 (* Calculate cosine *)
 let rec cos x =
-  let a = reduction_2pi (fabs x) in
-    let f = a >= c_PI in
-      let a = if f then a -. c_PI else a in
-        let f2 = a >= fhalf c_PI in
-          let f = if f2 then not f else f in
-            let a = if f2 then c_PI -. a else a in
-              let a = if a <= c_PI /. 4.0 then kernel_cos a else kernel_sin (c_PI /. 2.0 -. a) in
-                if f then a else -. a in
+  (* The king of constant: PI *)
+  let c_PI = 3.14159265358979323846 in
+    let flag = true in
+      let a = reduction_2pi (fabs x) in
+        let is_ge = a >= c_PI in
+          let a = if is_ge then a -. c_PI else a in
+            let flag = if is_ge then not flag else flag in
+              let is_ge = a >= fhalf c_PI in
+                let a = if is_ge then c_PI -. a else a in
+                  let flag = if is_ge then not flag else flag in
+                    if a <= c_PI /. 4.0 then
+                      if flag then
+                        kernel_cos a
+                      else
+                        -. kernel_cos a
+                    else
+                      if flag then
+                        kernel_sin (fhalf c_PI -. a)
+                      else
+                        -. kernel_sin (fhalf c_PI -. a) in
 
 (* Calculate arc tangent *)
 let rec atan x =
