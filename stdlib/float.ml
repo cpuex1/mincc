@@ -108,9 +108,16 @@ let rec atan x =
                 let x13 = x11 *. x2 in
                   x -. 0.3333333 *. x3 +. 0.2 *. x5 -. 0.142857142 *. x7 +. 0.111111104 *. x9 -. 0.08976446 *. x11 +. 0.060035485 *. x13 in
     let a = fabs x in
-      if a < 0.4375 then kernel_atan x
-      else if a < 2.4375 then
-        if x > 0.0 then c_PI /. 4.0 +. kernel_atan ((a -. 1.0) /. (a +. 1.0))
-        else -. c_PI /. 4.0 -. kernel_atan ((a -. 1.0) /. (a +. 1.0))
-      else if x > 0.0 then c_PI /. 2.0 -. kernel_atan (inv a)
-      else -. c_PI /. 2.0 +. kernel_atan (inv a) in
+      if a < 0.4375 then
+        kernel_atan x
+      else
+        if a < 2.4375 then
+          if x > 0.0 then
+            c_PI /. 4.0 +. kernel_atan ((a -. 1.0) /. (a +. 1.0))
+          else
+            -. c_PI /. 4.0 -. kernel_atan ((a -. 1.0) /. (a +. 1.0))
+        else
+          if x > 0.0 then
+            c_PI /. 2.0 -. kernel_atan (inv a)
+          else
+            -. c_PI /. 2.0 +. kernel_atan (inv a) in
