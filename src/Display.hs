@@ -67,13 +67,13 @@ insertIndent :: Int -> Text
 insertIndent depth = Data.Text.replicate depth "    "
 
 instance Display Loc where
-    display _ = ""
+    display loc = locFileName loc <> ":" <> pack (show (locLine loc)) <> ":" <> pack (show (locColumn loc))
 
 instance Display TypedState where
-    display (TypedState ty _) = " (* : " <> display ty <> " *)"
+    display (TypedState ty _) = ": " <> display ty
 
 instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr state identTy operandTy closureTy branchTy) where
-    displayI expression indentDepth = withoutState expression indentDepth <> display (getExprState expression)
+    displayI expression indentDepth = withoutState expression indentDepth <> " (* " <> display (getExprState expression) <> " *)"
       where
         withoutState :: (Display state, Display identTy, DisplayI operandTy) => Expr state identTy operandTy closureTy branchTy -> Int -> Text
         withoutState (Const _ lit) _ = display lit
@@ -242,136 +242,140 @@ instance Display (RegOrImm RegID Float) where
     display (Reg reg) = display reg
     display (Imm imm) = pack (show imm)
 
+instructionWidth :: Int
+instructionWidth = 30
+
 instance (Display stateTy) => DisplayI (Inst stateTy Int branchTy) where
-    displayI (ICompOp state op lhs rhs1 rhs2) _ =
-        case rhs2 of
-            (Reg rhs2') ->
-                toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2' <> display state
-            (Imm rhs2') ->
-                toOp op <> "i " <> display lhs <> ", " <> display rhs1 <> ", " <> pack (show rhs2') <> display state
+    displayI inst depth =
+        case inst of
+            (IBranch{}) -> displayed
+            _ -> justifyLeft instructionWidth ' ' displayed <> " # " <> display (getIState inst)
       where
-        toOp :: RelationBinOp -> Text
-        toOp Eq = "seq"
-        toOp Ne = "sne"
-        toOp Ge = "sge"
-        toOp Lt = "slt"
-    displayI (IFCompOp state op lhs rhs1 rhs2) _ =
-        toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2 <> display state
-      where
-        toOp :: RelationBinOp -> Text
-        toOp Eq = "feq"
-        toOp Ne = "fne"
-        toOp Ge = "fge"
-        toOp Lt = "flt"
-    displayI (IIntOp state op lhs rhs1 rhs2) _ =
-        case rhs2 of
-            (Reg rhs2') ->
-                toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2' <> display state
-            (Imm rhs2') ->
-                toOp op <> "i " <> display lhs <> ", " <> display rhs1 <> ", " <> pack (show rhs2') <> display state
-      where
-        toOp :: PrimitiveIntOp -> Text
-        toOp PAdd = "add"
-        toOp PSub = "sub"
-        toOp PMul = "mul"
-        toOp PDiv = "div"
-        toOp PAnd = "and"
-        toOp POr = "or"
-        toOp PXor = "xor"
-        toOp PShiftL = "sll"
-        toOp PShiftR = "srl"
-    displayI (IFOp state op lhs rhs1 rhs2) _ =
-        toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2 <> display state
-      where
-        toOp :: FloatBinOp -> Text
-        toOp FAdd = "fadd"
-        toOp FSub = "fsub"
-        toOp FMul = "fmul"
-        toOp FDiv = "fdiv"
-    displayI (IMov state lhs (Reg rhs)) _ =
-        "mov " <> display lhs <> ", " <> display rhs <> display state
-    displayI (IMov state lhs (Imm rhs)) _ =
-        "movi " <> display lhs <> ", " <> pack (show rhs) <> display state
-    displayI (IFMov state lhs (Reg rhs)) _ =
-        "fmov " <> display lhs <> ", " <> display rhs <> display state
-    displayI (IFMov state lhs (Imm rhs)) _ =
-        "fmovi " <> display lhs <> ", " <> pack (show rhs) <> display state
-    displayI (ILMov state lhs rhs) _ =
-        "movi " <> display lhs <> ", " <> rhs <> display state
-    displayI (IRichCall state func args fArgs) _ =
-        "call! "
-            <> func
-            <> ", ["
-            <> Data.Text.intercalate ", " (Prelude.map display args)
-            <> "], ["
-            <> Data.Text.intercalate ", " (Prelude.map display fArgs)
-            <> "]"
-            <> display state
-    displayI (IClosureCall state func args fArgs) _ =
-        "clcall! "
-            <> display func
-            <> ", ["
-            <> Data.Text.intercalate ", " (Prelude.map display args)
-            <> "], ["
-            <> Data.Text.intercalate ", " (Prelude.map display fArgs)
-            <> "]"
-            <> display state
-    displayI (IMakeClosure state dest func args fArgs) _ =
-        "clmake! "
-            <> display dest
-            <> ", "
-            <> func
-            <> ", ["
-            <> Data.Text.intercalate "," (Prelude.map display args)
-            <> "], ["
-            <> Data.Text.intercalate "," (Prelude.map display fArgs)
-            <> "]"
-            <> display state
-    displayI (ICall state func) _ =
-        "call " <> func <> display state
-    displayI (ICallReg state reg) _ =
-        "callr " <> display reg <> display state
-    displayI (ILoad state lhs rhs offset) _ =
-        "lw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")" <> display state
-    displayI (IStore state lhs rhs offset) _ =
-        "sw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")" <> display state
-    displayI (IFLoad state lhs rhs offset) _ =
-        "flw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")" <> display state
-    displayI (IFStore state lhs rhs offset) _ =
-        "fsw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")" <> display state
-    displayI (IRawInst state name RIRUnit iArgs fArgs) _ =
-        name
-            <> " "
-            <> Data.Text.intercalate ", " (Prelude.map display iArgs ++ Prelude.map display fArgs)
-            <> display state
-    displayI (IRawInst state name (RIRInt reg) iArgs fArgs) _ =
-        name
-            <> " "
-            <> Data.Text.intercalate ", " (display reg : Prelude.map display iArgs ++ Prelude.map display fArgs)
-            <> display state
-    displayI (IRawInst state name (RIRFloat reg) iArgs fArgs) _ =
-        name
-            <> " "
-            <> Data.Text.intercalate ", " (display reg : Prelude.map display iArgs ++ Prelude.map display fArgs)
-            <> display state
-    displayI (IBranch state op lhs rhs thenInst elseInst) depth =
-        toOp op
-            <> " "
-            <> display lhs
-            <> ", "
-            <> display rhs
-            <> display state
-            <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth + 1) <> displayI i (depth + 1)) thenInst)
-            <> "\n"
-            <> insertIndent depth
-            <> "else!"
-            <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth + 1) <> displayI i (depth + 1)) elseInst)
-      where
-        toOp :: RelationBinOp -> Text
-        toOp Eq = "ifeq!"
-        toOp Ne = "ifne!"
-        toOp Ge = "ifge!"
-        toOp Lt = "iflt!"
+        displayed = withoutState inst depth
+
+        withoutState :: (Display stateTy) => Inst stateTy Int branchTy -> Int -> Text
+        withoutState (ICompOp _ op lhs rhs1 rhs2) _ =
+            case rhs2 of
+                (Reg rhs2') ->
+                    toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2'
+                (Imm rhs2') ->
+                    toOp op <> "i " <> display lhs <> ", " <> display rhs1 <> ", " <> pack (show rhs2')
+          where
+            toOp :: RelationBinOp -> Text
+            toOp Eq = "seq"
+            toOp Ne = "sne"
+            toOp Ge = "sge"
+            toOp Lt = "slt"
+        withoutState (IFCompOp _ op lhs rhs1 rhs2) _ =
+            toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
+          where
+            toOp :: RelationBinOp -> Text
+            toOp Eq = "feq"
+            toOp Ne = "fne"
+            toOp Ge = "fge"
+            toOp Lt = "flt"
+        withoutState (IIntOp _ op lhs rhs1 rhs2) _ =
+            case rhs2 of
+                (Reg rhs2') ->
+                    toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2'
+                (Imm rhs2') ->
+                    toOp op <> "i " <> display lhs <> ", " <> display rhs1 <> ", " <> pack (show rhs2')
+          where
+            toOp :: PrimitiveIntOp -> Text
+            toOp PAdd = "add"
+            toOp PSub = "sub"
+            toOp PMul = "mul"
+            toOp PDiv = "div"
+            toOp PAnd = "and"
+            toOp POr = "or"
+            toOp PXor = "xor"
+            toOp PShiftL = "sll"
+            toOp PShiftR = "srl"
+        withoutState (IFOp _ op lhs rhs1 rhs2) _ =
+            toOp op <> " " <> display lhs <> ", " <> display rhs1 <> ", " <> display rhs2
+          where
+            toOp :: FloatBinOp -> Text
+            toOp FAdd = "fadd"
+            toOp FSub = "fsub"
+            toOp FMul = "fmul"
+            toOp FDiv = "fdiv"
+        withoutState (IMov _ lhs (Reg rhs)) _ =
+            "mov " <> display lhs <> ", " <> display rhs
+        withoutState (IMov _ lhs (Imm rhs)) _ =
+            "movi " <> display lhs <> ", " <> pack (show rhs)
+        withoutState (IFMov _ lhs (Reg rhs)) _ =
+            "fmov " <> display lhs <> ", " <> display rhs
+        withoutState (IFMov _ lhs (Imm rhs)) _ =
+            "fmovi " <> display lhs <> ", " <> pack (show rhs)
+        withoutState (ILMov _ lhs rhs) _ =
+            "movi " <> display lhs <> ", " <> rhs
+        withoutState (IRichCall _ func args fArgs) _ =
+            "call! "
+                <> func
+                <> ", ["
+                <> Data.Text.intercalate ", " (Prelude.map display args)
+                <> "], ["
+                <> Data.Text.intercalate ", " (Prelude.map display fArgs)
+                <> "]"
+        withoutState (IClosureCall _ func args fArgs) _ =
+            "clcall! "
+                <> display func
+                <> ", ["
+                <> Data.Text.intercalate ", " (Prelude.map display args)
+                <> "], ["
+                <> Data.Text.intercalate ", " (Prelude.map display fArgs)
+                <> "]"
+        withoutState (IMakeClosure _ dest func args fArgs) _ =
+            "clmake! "
+                <> display dest
+                <> ", "
+                <> func
+                <> ", ["
+                <> Data.Text.intercalate "," (Prelude.map display args)
+                <> "], ["
+                <> Data.Text.intercalate "," (Prelude.map display fArgs)
+                <> "]"
+        withoutState (ICall _ func) _ =
+            "call " <> func
+        withoutState (ICallReg _ reg) _ =
+            "callr " <> display reg
+        withoutState (ILoad _ lhs rhs offset) _ =
+            "lw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
+        withoutState (IStore _ lhs rhs offset) _ =
+            "sw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
+        withoutState (IFLoad _ lhs rhs offset) _ =
+            "flw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
+        withoutState (IFStore _ lhs rhs offset) _ =
+            "fsw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
+        withoutState (IRawInst _ name RIRUnit iArgs fArgs) _ =
+            name
+                <> " "
+                <> Data.Text.intercalate ", " (Prelude.map display iArgs ++ Prelude.map display fArgs)
+        withoutState (IRawInst _ name (RIRInt reg) iArgs fArgs) _ =
+            name
+                <> " "
+                <> Data.Text.intercalate ", " (display reg : Prelude.map display iArgs ++ Prelude.map display fArgs)
+        withoutState (IRawInst _ name (RIRFloat reg) iArgs fArgs) _ =
+            name
+                <> " "
+                <> Data.Text.intercalate ", " (display reg : Prelude.map display iArgs ++ Prelude.map display fArgs)
+        withoutState (IBranch _ op lhs rhs thenInst elseInst) depth' =
+            toOp op
+                <> " "
+                <> display lhs
+                <> ", "
+                <> display rhs
+                <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth' + 1) <> displayI i (depth' + 1)) thenInst)
+                <> "\n"
+                <> insertIndent depth'
+                <> "else!"
+                <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth' + 1) <> displayI i (depth' + 1)) elseInst)
+          where
+            toOp :: RelationBinOp -> Text
+            toOp Eq = "ifeq!"
+            toOp Ne = "ifne!"
+            toOp Ge = "ifge!"
+            toOp Lt = "iflt!"
 
 instance (Display stateTy) => Display (Inst stateTy Int branchTy) where
     display inst = displayI inst 0
@@ -391,7 +395,7 @@ instance Display (InstTerm stateTy Int) where
 
 instance Display LivenessState where
     display state =
-        " # ["
+        "["
             <> Data.Text.intercalate "," (Prelude.map (\i -> display (SavedReg i :: Register RegID Int)) (toAscList $ iAlive state))
             <> "], ["
             <> Data.Text.intercalate "," (Prelude.map (\i -> display (SavedReg i :: Register RegID Float)) (toAscList $ fAlive state))
