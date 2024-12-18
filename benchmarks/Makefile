@@ -6,10 +6,16 @@ SIMULATOR = ./bin/r7sim
 OUTPUT = ./print_int.txt
 EXEC = fib
 OPTION =
+SIMULATOR_OPT = -b ./breakpoints.txt
 
-%.s: %.ml
+minrt.s: ../stdlib/float.ml ./src/minrt/globals.ml ./src/minrt/minrt.ml
 	mkdir -p ./build/
-	stack run -- -i $^ -o ./build/$@ --emit-all --verbose $(OPTION)
+	stack run -- -i ../stdlib/float.ml -i globals.ml -i $^ -o ./build/$@ --emit-all --verbose
+	cp ./build/$@ .
+
+%.s: ./src/%.ml
+	mkdir -p ./build/
+	stack run -- $(OPTION) -i $^ -o ./build/$@ --emit-all --verbose
 	cp ./build/$@ .
 
 %.bin: %.s
@@ -19,7 +25,8 @@ OPTION =
 
 run: $(EXEC).bin
 	rm -f $(OUTPUT)
-	echo 2 | $(SIMULATOR) -i $^
+	cp ./build/$(EXEC)_labels.csv ./labels.csv
+	$(SIMULATOR) -i $^ $(SIMULATOR_OPT)
 
 clean:
 	rm -rf ./build/

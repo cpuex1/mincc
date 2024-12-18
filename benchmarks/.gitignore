@@ -11,5 +11,12 @@ config.json
 finv_table.txt
 fsqrt_table.txt
 
+# Input files
+breakpoints.txt
+labels.csv
+read_int.txt
+
 # Output files
 print_int.txt
+stat.txt
+*.ppm
