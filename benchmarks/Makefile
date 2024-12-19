@@ -8,9 +8,9 @@ EXEC = fib
 OPTION =
 SIMULATOR_OPT = -b ./breakpoints.txt
 
-minrt.s: ../stdlib/float.ml ./src/minrt/globals.ml ./src/minrt/minrt.ml
+minrt.s: ./src/minrt/minrt.ml
 	mkdir -p ./build/
-	stack run -- -i ../stdlib/float.ml -i globals.ml -i $^ -o ./build/$@ --emit-all --verbose
+	stack run -- -i ../stdlib/float.ml -i ./src/minrt/globals.ml -i $^ -o ./build/$@ --emit-all --verbose
 	cp ./build/$@ .
 
 %.s: ./src/%.ml
