@@ -26,7 +26,9 @@ let rec fabs x = if x > 0.0 then x else -. x in
 let rec fhalf x = x /. 2.0 in
 
 (* Floor *)
-let rec floor x = float_of_int (int_of_float x) in
+let rec floor x =
+  let a = float_of_int (int_of_float x) in
+    if a > x then a -. 1.0 else a in
 
 (* Utility functions for sine and cosine *)
 let rec reduction_2pi a =
