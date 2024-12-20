@@ -2,10 +2,9 @@
 
 module IdentAnalysis (
     IdentProp (IdentProp, typeOf, constant, isClosure),
-    IdentE,
-    defaultIdentE,
-    IdentEnvT (IdentEnvT, runIdentEnvT),
-    IdentEnv,
+    IdentContext (..),
+    IdentEnvT,
+    defaultIdentContext,
     registerProp,
     searchProp,
     getTyOf,
@@ -17,13 +16,14 @@ module IdentAnalysis (
     reportEnv,
 ) where
 
-import Control.Monad.Identity (Identity)
-import Control.Monad.Trans
+import Control.Monad.State (StateT, gets, modify)
+import Data.Map (Map, adjust, empty, insert, lookup, toList)
 import Data.Text (Text, pack)
 import Display (display)
 import Syntax
 import TypeInferrer (TypeEnv (variables), removeVar)
 import Typing (Ty, TypeKind (TUnit, TVar))
+import Prelude hiding (lookup)
 
 data IdentProp
     = IdentProp
@@ -33,58 +33,30 @@ data IdentProp
     }
     deriving (Show, Eq)
 
-data IdentE = IdentE {identProps :: [(Ident, IdentProp)], nextIdent :: Int}
+data IdentContext = IdentContext
+    { identProps :: Map Ident IdentProp
+    , nextIdent :: Int
+    }
     deriving (Show, Eq)
 
-defaultIdentE :: IdentE
-defaultIdentE = IdentE [] 0
+defaultIdentContext :: IdentContext
+defaultIdentContext = IdentContext empty 0
 
-newtype IdentEnvT m a = IdentEnvT {runIdentEnvT :: IdentE -> m (a, IdentE)}
-type IdentEnv a = IdentEnvT Identity a
-
-instance (Functor m) => Functor (IdentEnvT m) where
-    fmap f m = IdentEnvT $ \s -> do
-        fmap (\ ~(a, s') -> (f a, s')) (runIdentEnvT m s)
-
-instance (Functor m, Monad m) => Applicative (IdentEnvT m) where
-    pure a = IdentEnvT $ \s -> return (a, s)
-    IdentEnvT left <*> IdentEnvT right = IdentEnvT $ \s -> do
-        ~(f, s') <- left s
-        ~(a, s'') <- right s'
-        return (f a, s'')
-
-instance (Monad m) => Monad (IdentEnvT m) where
-    m >>= k = IdentEnvT $ \s -> do
-        ~(a, s') <- runIdentEnvT m s
-        runIdentEnvT (k a) s'
-
-instance MonadTrans IdentEnvT where
-    lift m = IdentEnvT $ \s -> do
-        a <- m
-        return (a, s)
-
-instance (MonadIO m) => MonadIO (IdentEnvT m) where
-    liftIO = lift . liftIO
-
-getEnv :: (Monad m) => IdentEnvT m IdentE
-getEnv = IdentEnvT $ \s -> return (s, s)
-
-modifyEnv :: (Monad m) => (IdentE -> IdentE) -> IdentEnvT m ()
-modifyEnv f = IdentEnvT $ \s -> return ((), f s)
+type IdentEnvT m = StateT IdentContext m
 
 registerProp :: (Monad m) => Ident -> IdentProp -> IdentEnvT m ()
 registerProp ident prop = do
     found <- searchProp ident
     case found of
         Just _ -> pure ()
-        Nothing -> modifyEnv $ \env ->
+        Nothing -> modify $ \env ->
             env
-                { identProps = (ident, prop) : identProps env
+                { identProps = insert ident prop $ identProps env
                 }
 
 searchProp :: (Monad m) => Ident -> IdentEnvT m (Maybe IdentProp)
 searchProp ident =
-    IdentEnvT $ \env -> return (lookup ident (identProps env), env)
+    gets identProps >>= \props -> pure (lookup ident props)
 
 {- | Get the type of an identifier.
 If the identifier is not found, return `TUnit`.
@@ -112,20 +84,18 @@ identState ident = do
 
 updateProp :: (Monad m) => Ident -> (IdentProp -> IdentProp) -> IdentEnvT m ()
 updateProp ident f =
-    modifyEnv $ \env ->
+    modify $ \env ->
         env
-            { identProps = map (\(i, p) -> if i == ident then (i, f p) else (i, p)) (identProps env)
+            { identProps = adjust f ident (identProps env)
             }
 
 genNewVar :: (Monad m) => Ty -> IdentEnvT m Ident
 genNewVar ty = do
-    newIdent <- IdentEnvT $ \env ->
-        return
-            ( CompilerGenerated (nextIdent env)
-            , env
-                { nextIdent = nextIdent env + 1
-                }
-            )
+    newIdent <- gets (CompilerGenerated . nextIdent)
+    modify $ \env ->
+        env
+            { nextIdent = nextIdent env + 1
+            }
     _ <- registerProp newIdent (IdentProp ty Nothing False)
     pure newIdent
 
@@ -140,20 +110,22 @@ loadTypeEnv typeEnv = do
     vars = variables typeEnv
 
 reportEnv :: (Monad m) => IdentEnvT m [Text]
-reportEnv = do
-    map
-        ( \(ident, IdentProp ty c isC) ->
-            display ident
-                <> " : "
-                <> display ty
-                <> " (Const: "
-                <> pack (show c)
-                <> ", IsClosure: "
-                <> if isC
-                    then "Yes"
-                    else
-                        "No"
-                            <> ")"
+reportEnv =
+    gets
+        ( map
+            ( \(ident, IdentProp ty c isC) ->
+                display ident
+                    <> " : "
+                    <> display ty
+                    <> " (Const: "
+                    <> pack (show c)
+                    <> ", IsClosure: "
+                    <> if isC
+                        then "Yes"
+                        else
+                            "No"
+                                <> ")"
+            )
+            . toList
+            . identProps
         )
-        . identProps
-        <$> getEnv

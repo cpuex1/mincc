@@ -23,9 +23,10 @@ import Backend.BackendEnv (BackendConfig (BackendConfig), liftB, runBackendState
 import ConstantAnalysis (registerConstants)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
+import Control.Monad.State (evalStateT)
 import Control.Monad.Trans.Class
 import Error
-import IdentAnalysis (IdentEnvT (runIdentEnvT), defaultIdentE, reportEnv)
+import IdentAnalysis (defaultIdentContext, reportEnv)
 import Log
 import Path
 import Syntax (Function, ResolvedExpr)
@@ -78,7 +79,7 @@ execArgs = do
                 printLog Debug "Resolved expressions are saved"
 
             -- Run with a monad that holds identifier information.
-            _ <- runIdentEnvT (execArgsWithIdent resolvedExpr) defaultIdentE
+            evalStateT (execArgsWithIdent resolvedExpr) defaultIdentContext
 
             printLog Done "Compilation succeeded"
         )
