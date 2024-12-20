@@ -2,20 +2,17 @@
 
 module NameRes (resolveNames) where
 
+import Data.Map (Map, empty, insert, lookup)
 import Data.Text (Text)
 import Syntax
+import Prelude hiding (lookup)
 
-type VarTable = [(Text, Loc)]
-
-findTable :: Text -> VarTable -> Maybe Loc
-findTable _ [] = Nothing
-findTable ident1 ((ident2, pos) : res)
-    | ident1 == ident2 = Just pos
-    | otherwise = findTable ident1 res
+type VarTable = Map Text Loc
 
 resolveNames :: ParsedExpr -> ResolvedExpr
-resolveNames = resolveNames' []
+resolveNames = resolveNames' empty
   where
+    -- Do not use State monad here, because its side effects can break this process.
     resolveNames' :: VarTable -> ParsedExpr -> ResolvedExpr
     resolveNames' _ (PGuard (Const pos lit)) = RGuard (Const pos lit)
     resolveNames' table (PGuard (Unary pos op expr)) = RGuard (Unary pos op (resolveNames' table expr))
@@ -35,23 +32,26 @@ resolveNames = resolveNames' []
         RGuard (Let pos (PVar (UserDefined identPos ident)) expr' body')
       where
         expr' = rExp (resolveNames' table $ PGuard expr)
-        body' = rExp (resolveNames' ((ident, identPos) : table) $ PGuard body)
+        body' = rExp (resolveNames' (insert ident identPos table) $ PGuard body)
     resolveNames' table (PGuard (Let pos (PRec (RawIdent funcPos func) args) expr body)) =
         RGuard (Let pos (PRec (UserDefined funcPos func) args') expr' body')
       where
-        argsTable = map (\(RawIdent argPos arg) -> (arg, argPos)) args
         args' = map (\(RawIdent argPos arg) -> UserDefined argPos arg) args
-        expr' = rExp (resolveNames' (argsTable ++ ((func, funcPos) : table)) $ PGuard expr)
-        body' = rExp (resolveNames' ((func, funcPos) : table) $ PGuard body)
+
+        tableWithFunc = insert func funcPos table
+        tableWithArgs = foldl (\t (RawIdent argPos arg) -> insert arg argPos t) tableWithFunc args
+
+        expr' = rExp (resolveNames' tableWithArgs $ PGuard expr)
+        body' = rExp (resolveNames' tableWithFunc $ PGuard body)
     resolveNames' table (PGuard (Let pos (PTuple values) expr body)) =
         RGuard (Let pos (PTuple values') expr' body')
       where
-        valuesTable = map (\(RawIdent pos' value) -> (value, pos')) values
+        valuesTable = foldl (\t (RawIdent pos' value) -> insert value pos' t) table values
         values' = map (\(RawIdent pos' value) -> UserDefined pos' value) values
         expr' = rExp (resolveNames' table $ PGuard expr)
-        body' = rExp (resolveNames' (valuesTable ++ table) $ PGuard body)
+        body' = rExp (resolveNames' valuesTable $ PGuard body)
     resolveNames' table (PGuard (Var pos (RawIdent _ ident))) =
-        case findTable ident table of
+        case lookup ident table of
             Just pos' -> RGuard (Var pos (UserDefined pos' ident))
             Nothing -> RGuard (Var pos (ExternalIdent ident))
     resolveNames' table (PGuard (App pos func args)) =
