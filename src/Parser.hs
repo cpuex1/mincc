@@ -312,7 +312,7 @@ parseThenExpr =
                 parseKeyword "then"
                 then' <- parseExpr'
                 parseKeyword "else"
-                PGuard . If pos cond (pExp then') . pExp <$> parseExpr'
+                PGuard . If pos (CIdentity cond) (pExp then') . pExp <$> parseExpr'
           )
             <|> ( do
                     pos <- getSourceLoc

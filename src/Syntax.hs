@@ -12,6 +12,7 @@ module Syntax (
     BinaryOp (RelationOp, IntOp, FloatOp),
     Ident (Entry, UserDefined, CompilerGenerated, ExternalIdent),
     Pattern (PUnit, PVar, PRec, PTuple),
+    Cond (..),
     ParsedExpr (PGuard, pExp),
     ResolvedExpr (RGuard, rExp),
     RawIdent (RawIdent),
@@ -27,23 +28,7 @@ module Syntax (
     AllowClosure (AllowClosure),
     DisallowClosure (DisallowClosure),
     AllowCompBranch (AllowCompBranch),
-    Expr (
-        Const,
-        Unary,
-        Binary,
-        If,
-        IfComp,
-        Let,
-        Var,
-        App,
-        Tuple,
-        ArrayCreate,
-        Get,
-        Put,
-        MakeClosure,
-        ClosureApp,
-        DirectApp
-    ),
+    Expr (..),
     getExprState,
     subst,
     visitExprM,
@@ -103,12 +88,28 @@ identLoc (UserDefined pos _) = pos
 identLoc (CompilerGenerated _) = Loc "generated" 0 0
 identLoc (ExternalIdent _) = Loc "external" 0 0
 
+-- | Pattern matching used in let-expressions.
 data Pattern identTy
     = PUnit
     | PVar identTy
     | PRec identTy [identTy]
     | PTuple [identTy]
     deriving (Show, Eq)
+
+data AllowCompBranch = AllowCompBranch
+    deriving (Show, Eq)
+
+-- | A condition of an if-expression.
+data Cond operandTy allowCompTy where
+    CIdentity :: operandTy -> Cond operandTy allowCompTy
+    CComp :: RelationBinOp -> operandTy -> operandTy -> Cond operandTy AllowCompBranch
+
+deriving instance
+    (Show operandTy, Show allowCompTy) =>
+    Show (Cond operandTy allowCompTy)
+deriving instance
+    (Eq operandTy, Eq allowCompTy) =>
+    Eq (Cond operandTy allowCompTy)
 
 {- | The type of an expression after parsing.
 PGuard is used for avoiding invalid recursive type definition.
@@ -139,10 +140,10 @@ newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr DisallowClos
     deriving (Show, Eq)
 
 -- | The type of an expression after K-normalization.
-type KExpr = Expr TypedState Ident Ident DisallowClosure ()
+type KExpr = Expr TypedState Ident Ident DisallowClosure AllowCompBranch
 
 -- | The type of an expression after introducing closures.
-type ClosureExpr = Expr TypedState Ident Ident AllowClosure ()
+type ClosureExpr = Expr TypedState Ident Ident AllowClosure AllowCompBranch
 
 data Function = Function
     { funcState :: TypedState
@@ -158,9 +159,6 @@ data AllowClosure = AllowClosure
     deriving (Show, Eq)
 
 data DisallowClosure = DisallowClosure
-    deriving (Show, Eq)
-
-data AllowCompBranch = AllowCompBranch
     deriving (Show, Eq)
 
 data Expr state identTy operandTy closureTy branchTy where
@@ -181,18 +179,10 @@ data Expr state identTy operandTy closureTy branchTy where
         Expr state a operandTy closureTy branchTy
     If ::
         state ->
-        operandTy ->
-        Expr state identTy operandTy closureTy () ->
-        Expr state identTy operandTy closureTy () ->
-        Expr state identTy operandTy closureTy ()
-    IfComp ::
-        state ->
-        RelationBinOp ->
-        operandTy ->
-        operandTy ->
-        Expr state identTy operandTy closureTy AllowCompBranch ->
-        Expr state identTy operandTy closureTy AllowCompBranch ->
-        Expr state identTy operandTy closureTy AllowCompBranch
+        Cond operandTy branchTy ->
+        Expr state identTy operandTy closureTy branchTy ->
+        Expr state identTy operandTy closureTy branchTy ->
+        Expr state identTy operandTy closureTy branchTy
     Let ::
         state ->
         Pattern identTy ->
@@ -256,7 +246,6 @@ getExprState (Const state _) = state
 getExprState (Unary state _ _) = state
 getExprState (Binary state _ _ _) = state
 getExprState (If state _ _ _) = state
-getExprState (IfComp state _ _ _ _ _) = state
 getExprState (Let state _ _ _) = state
 getExprState (Var state _) = state
 getExprState (App state _ _) = state
@@ -304,19 +293,19 @@ visitExprM fState _ fOperand (Binary state op lhs rhs) = do
     lhs' <- fOperand lhs
     rhs' <- fOperand rhs
     pure $ Binary state' op lhs' rhs'
-visitExprM fState fIdent fOperand (If state cond thenE elseE) = do
+visitExprM fState fIdent fOperand (If state (CIdentity cond) thenE elseE) = do
     state' <- fState state
     cond' <- fOperand cond
     thenE' <- visitExprM fState fIdent fOperand thenE
     elseE' <- visitExprM fState fIdent fOperand elseE
-    pure $ If state' cond' thenE' elseE'
-visitExprM fState fIdent fOperand (IfComp state op left right thenE elseE) = do
+    pure $ If state' (CIdentity cond') thenE' elseE'
+visitExprM fState fIdent fOperand (If state (CComp op lhs rhs) thenE elseE) = do
     state' <- fState state
-    left' <- fOperand left
-    right' <- fOperand right
+    lhs' <- fOperand lhs
+    rhs' <- fOperand rhs
     thenE' <- visitExprM fState fIdent fOperand thenE
     elseE' <- visitExprM fState fIdent fOperand elseE
-    pure $ IfComp state' op left' right' thenE' elseE'
+    pure $ If state' (CComp op lhs' rhs') thenE' elseE'
 visitExprM fState fIdent fOperand (Let state pat expr body) = do
     state' <- fState state
     expr' <- visitExprM fState fIdent fOperand expr

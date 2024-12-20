@@ -96,13 +96,33 @@ expandExprToInst _ fReg (Binary state (FloatOp op) operand1 operand2) = do
     operand1' <- findF operand1
     operand2' <- findF operand2
     pure [IFOp (getLoc state) op fReg operand1' operand2']
-expandExprToInst iReg fReg (If state cond thenExpr elseExpr) = do
+expandExprToInst iReg fReg (If state (CIdentity cond) thenExpr elseExpr) = do
     cond' <- findI cond
 
     thenExpr' <- expandExprToInst iReg fReg thenExpr
     elseExpr' <- expandExprToInst iReg fReg elseExpr
 
     pure [IBranch (getLoc state) Ne cond' ZeroReg thenExpr' elseExpr']
+expandExprToInst iReg fReg (If state (CComp op lhs rhs) thenExpr elseExpr) = do
+    thenExpr' <- expandExprToInst iReg fReg thenExpr
+    elseExpr' <- expandExprToInst iReg fReg elseExpr
+
+    lhsTy <- liftB $ getTyOf lhs
+    case lhsTy of
+        TFloat -> do
+            lhs' <- findF lhs
+            rhs' <- findF rhs
+            cond <- genTempIReg
+
+            pure
+                [ IFCompOp (getLoc state) op cond lhs' rhs'
+                , IBranch (getLoc state) Ne cond ZeroReg thenExpr' elseExpr'
+                ]
+        _ -> do
+            lhs' <- findI lhs
+            rhs' <- findI rhs
+
+            pure [IBranch (getLoc state) op lhs' rhs' thenExpr' elseExpr']
 expandExprToInst _ _ (Let _ (PRec _ _) _ _) =
     throwError $ OtherError "The function should be removed during closure conversion."
 expandExprToInst iReg fReg (Let _ PUnit expr body) = do

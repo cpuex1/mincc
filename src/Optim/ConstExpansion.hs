@@ -7,7 +7,19 @@ import Control.Monad (foldM)
 import Data.List (union)
 import Flatten (flattenExpr)
 import IdentAnalysis (IdentEnvT, IdentProp (constant), genNewVar, getTyOf, searchProp)
-import Syntax (Expr (..), Ident, KExpr, Literal, Pattern (PRec, PVar), TypedState (TypedState, getType), dummyLoc, getExprState, subst)
+import Syntax (
+    AllowCompBranch,
+    Cond (CComp, CIdentity),
+    Expr (..),
+    Ident,
+    KExpr,
+    Literal,
+    Pattern (PRec, PVar),
+    TypedState (TypedState, getType),
+    dummyLoc,
+    getExprState,
+    subst,
+ )
 
 -- | Picks a variable if and only if it is a constant.
 pickConstant :: (Monad m) => Ident -> IdentEnvT m [(Ident, Literal)]
@@ -30,10 +42,17 @@ requiredConstants (Binary _ _ ident1 ident2) = do
     c2 <- pickConstant ident2
     pure $ c1 `union` c2
 requiredConstants (If _ cond t f) = do
-    cond' <- pickConstant cond
+    cond' <- pickConstantInCond cond
     t' <- requiredConstants t
     f' <- requiredConstants f
     pure $ cond' `union` t' `union` f'
+  where
+    pickConstantInCond :: (Monad m) => Cond Ident AllowCompBranch -> IdentEnvT m [(Ident, Literal)]
+    pickConstantInCond (CIdentity cond') = pickConstant cond'
+    pickConstantInCond (CComp _ lhs rhs) = do
+        lhs' <- pickConstant lhs
+        rhs' <- pickConstant rhs
+        pure $ lhs' `union` rhs'
 requiredConstants (Let _ (PRec _ _) _ body) =
     -- The `let rec` pattern creates a new function, which has a different scope.
     requiredConstants body

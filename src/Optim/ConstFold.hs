@@ -6,6 +6,7 @@ import ConstantAnalysis (registerConstants)
 import IdentAnalysis (IdentEnvT, asConstant)
 import Syntax (
     BinaryOp (FloatOp, IntOp, RelationOp),
+    Cond (CComp, CIdentity),
     Expr (..),
     FloatBinOp (FAdd, FDiv, FMul, FSub),
     IntBinOp (Add, Div, Mul, Sub),
@@ -14,6 +15,12 @@ import Syntax (
     RelationBinOp (Eq, Ge, Lt, Ne),
     UnaryOp (FNeg, Neg, Not),
  )
+
+performRelationOp :: (Ord a) => RelationBinOp -> a -> a -> Bool
+performRelationOp Eq lhs' rhs' = lhs' == rhs'
+performRelationOp Ne lhs' rhs' = lhs' /= rhs'
+performRelationOp Lt lhs' rhs' = lhs' < rhs'
+performRelationOp Ge lhs' rhs' = lhs' <= rhs'
 
 -- | Calculates constant variables in the compile-time.
 constFold :: (Monad m) => KExpr -> IdentEnvT m KExpr
@@ -51,17 +58,11 @@ constFold' (Binary state (RelationOp op) lhs rhs) = do
     rhs' <- asConstant rhs
     case (lhs', rhs') of
         (Just (LInt lhs''), Just (LInt rhs'')) ->
-            pure $ Const state (LBool $ performOp op lhs'' rhs'')
+            pure $ Const state (LBool $ performRelationOp op lhs'' rhs'')
         (Just (LFloat lhs''), Just (LFloat rhs'')) ->
-            pure $ Const state (LBool $ performOp op lhs'' rhs'')
+            pure $ Const state (LBool $ performRelationOp op lhs'' rhs'')
         _ ->
             pure $ Binary state (RelationOp op) lhs rhs
-  where
-    performOp :: (Ord a) => RelationBinOp -> a -> a -> Bool
-    performOp Eq lhs' rhs' = lhs' == rhs'
-    performOp Ne lhs' rhs' = lhs' /= rhs'
-    performOp Lt lhs' rhs' = lhs' < rhs'
-    performOp Ge lhs' rhs' = lhs' <= rhs'
 constFold' (Binary state (IntOp op) lhs rhs) = do
     lhs' <- asConstant lhs
     rhs' <- asConstant rhs
@@ -90,7 +91,7 @@ constFold' (Binary state (FloatOp op) lhs rhs) = do
     performOp FSub lhs' rhs' = lhs' - rhs'
     performOp FMul lhs' rhs' = lhs' * rhs'
     performOp FDiv lhs' rhs' = lhs' / rhs'
-constFold' (If state cond t f) = do
+constFold' (If state (CIdentity cond) t f) = do
     cond' <- asConstant cond
     case cond' of
         Just (LBool True) -> constFold' t
@@ -98,7 +99,19 @@ constFold' (If state cond t f) = do
         _ -> do
             t' <- constFold' t
             f' <- constFold' f
-            pure $ If state cond t' f'
+            pure $ If state (CIdentity cond) t' f'
+constFold' (If state (CComp op lhs rhs) t f) = do
+    lhs' <- asConstant lhs
+    rhs' <- asConstant rhs
+    case (lhs', rhs') of
+        (Just (LInt lhs''), Just (LInt rhs'')) ->
+            pure $ if performRelationOp op lhs'' rhs'' then t else f
+        (Just (LFloat lhs''), Just (LFloat rhs'')) ->
+            pure $ if performRelationOp op lhs'' rhs'' then t else f
+        _ -> do
+            t' <- constFold' t
+            f' <- constFold' f
+            pure $ If state (CComp op lhs rhs) t' f'
 constFold' (Let state pattern expr body) = do
     expr' <- constFold' expr
     body' <- constFold' body

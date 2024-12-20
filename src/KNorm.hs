@@ -36,14 +36,14 @@ kNormalize (TGuard (Binary s op lhs rhs)) = do
         ( \ident ->
             insertLet rhs' (pure . Binary s op ident)
         )
-kNormalize (TGuard (If s cond thenE elseE)) = do
+kNormalize (TGuard (If s (CIdentity cond) thenE elseE)) = do
     cond' <- kNormalize cond
     insertLet
         cond'
         ( \ident -> do
             thenE' <- kNormalize (TGuard thenE)
             elseE' <- kNormalize (TGuard elseE)
-            pure $ If s ident thenE' elseE'
+            pure $ If s (CIdentity ident) thenE' elseE'
         )
 kNormalize (TGuard (Let s pat value body)) = do
     value' <- kNormalize (TGuard value)

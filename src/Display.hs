@@ -81,7 +81,7 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
             "(" <> display op <> " " <> displayI expr depth <> ")"
         withoutState (Binary _ op expr1 expr2) depth =
             "(" <> displayI expr1 depth <> " " <> display op <> " " <> displayI expr2 depth <> ")"
-        withoutState (If _ cond thenExpr elseExpr) depth =
+        withoutState (If _ (CIdentity cond) thenExpr elseExpr) depth =
             "(if "
                 <> displayI cond depth
                 <> " then\n"
@@ -93,14 +93,14 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
                 <> insertIndent (depth + 1)
                 <> displayI elseExpr (depth + 1)
                 <> ")"
-        withoutState (IfComp _ op left right thenExpr elseExpr) depth =
+        withoutState (If _ (CComp op lhs rhs) thenExpr elseExpr) depth =
             "(if "
                 <> "("
-                <> displayI left depth
+                <> displayI lhs depth
                 <> " "
                 <> display (RelationOp op)
                 <> " "
-                <> displayI right depth
+                <> displayI rhs depth
                 <> ")"
                 <> " then\n"
                 <> insertIndent (depth + 1)

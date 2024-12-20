@@ -8,7 +8,8 @@ import Display (Display (display))
 import Flatten (flattenExpr)
 import IdentAnalysis (IdentEnvT, IdentProp (IdentProp), genNewVar, registerProp)
 import Syntax (
-    BinaryOp (IntOp, RelationOp),
+    BinaryOp (IntOp),
+    Cond (CComp),
     Expr (..),
     Ident (UserDefined),
     IntBinOp (Add),
@@ -32,7 +33,6 @@ generateInitArrayFunc uniqueId valTy bodyGen = do
     idx <- genNewVar TInt
     size <- genNewVar TInt
     value <- genNewVar valTy
-    cond <- genNewVar TBool
     inc <- genNewVar TInt
     incResult <- genNewVar TInt
 
@@ -40,35 +40,30 @@ generateInitArrayFunc uniqueId valTy bodyGen = do
     registerProp init_array_func (IdentProp func_ty Nothing False)
 
     let func_body =
-            Let
+            If
                 (TypedState TUnit dummyLoc)
-                (PVar cond)
-                (Binary (TypedState TBool dummyLoc) (RelationOp Lt) idx size)
-                ( If
+                (CComp Lt idx size)
+                ( Let
                     (TypedState TUnit dummyLoc)
-                    cond
+                    PUnit
+                    (Put (TypedState TUnit dummyLoc) array idx value)
                     ( Let
                         (TypedState TUnit dummyLoc)
-                        PUnit
-                        (Put (TypedState TUnit dummyLoc) array idx value)
+                        (PVar inc)
+                        (Const (TypedState TInt dummyLoc) (LInt 1))
                         ( Let
                             (TypedState TUnit dummyLoc)
-                            (PVar inc)
-                            (Const (TypedState TInt dummyLoc) (LInt 1))
-                            ( Let
+                            (PVar incResult)
+                            (Binary (TypedState TInt dummyLoc) (IntOp Add) idx inc)
+                            ( App
                                 (TypedState TUnit dummyLoc)
-                                (PVar incResult)
-                                (Binary (TypedState TInt dummyLoc) (IntOp Add) idx inc)
-                                ( App
-                                    (TypedState TUnit dummyLoc)
-                                    init_array_func
-                                    [array, incResult, size, value]
-                                )
+                                init_array_func
+                                [array, incResult, size, value]
                             )
                         )
                     )
-                    (Const (TypedState TUnit dummyLoc) LUnit)
                 )
+                (Const (TypedState TUnit dummyLoc) LUnit)
     pure $ Let (TypedState func_ty dummyLoc) (PRec init_array_func [array, idx, size, value]) func_body body
   where
     init_array_func = UserDefined dummyLoc $ "Array.create" <> uniqueId

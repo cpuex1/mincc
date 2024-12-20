@@ -256,13 +256,13 @@ inferIE (RGuard (Binary pos (FloatOp op) expr1 expr2)) = do
     doUnify (getExprState $ rExp expr1) TFloat (getTy expr1')
     doUnify (getExprState $ rExp expr2) TFloat (getTy expr2')
     pure $ ITGuard $ Binary (TFloat, pos) (FloatOp op) expr1' expr2'
-inferIE (RGuard (If pos cond thenExpr elseExpr)) = do
+inferIE (RGuard (If pos (CIdentity cond) thenExpr elseExpr)) = do
     cond' <- inferIE cond
     doUnify (getExprState $ rExp cond) TBool (getTy cond')
     thenExpr' <- inferIE (RGuard thenExpr)
     elseExpr' <- inferIE (RGuard elseExpr)
     doUnify (getExprState elseExpr) (getTy thenExpr') (getTy elseExpr')
-    pure $ ITGuard $ If (getTy thenExpr', pos) cond' (iTExp thenExpr') (iTExp elseExpr')
+    pure $ ITGuard $ If (getTy thenExpr', pos) (CIdentity cond') (iTExp thenExpr') (iTExp elseExpr')
 inferIE (RGuard (Let pos PUnit expr body)) = do
     expr' <- inferIE (RGuard expr)
     body' <- inferIE (RGuard body)
