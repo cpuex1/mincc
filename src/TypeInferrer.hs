@@ -1,5 +1,4 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module TypeInferrer (
@@ -16,10 +15,12 @@ import Builtin (BuiltinFunction (builtinName, builtinType), builtinFunctions)
 import Control.Monad (void)
 import Control.Monad.Except (ExceptT, MonadError (catchError, throwError), runExceptT)
 import Control.Monad.State
+import Data.Map (Map, fromList, insert, lookup)
 import Display
 import Error (CompilerError (TypeError))
 import Syntax
 import Typing
+import Prelude hiding (lookup)
 
 newtype ITypedExpr = ITGuard {iTExp :: Expr (ITy, Loc) Ident ITypedExpr DisallowClosure ()}
     deriving (Show, Eq)
@@ -29,8 +30,8 @@ getTy = fst . getExprState . iTExp
 
 data TypeEnv = TypeEnv
     { assigned :: Int
-    , table :: [Maybe ITy]
-    , variables :: [(Ident, TypeId)]
+    , table :: Map TypeId ITy
+    , variables :: Map Ident TypeId
     }
     deriving (Show, Eq)
 
@@ -40,18 +41,19 @@ defaultEnv :: TypeEnv
 defaultEnv =
     TypeEnv builtinLength builtinVarsTable builtinVars
   where
-    builtinVars = zip (map builtinName builtinFunctions) ([0 ..] :: [TypeId])
-    builtinVarsTable = map (Just . weakenTy . builtinType) builtinFunctions
+    builtinVars = fromList $ zip (map builtinName builtinFunctions) ([0 ..] :: [TypeId])
+    builtinVarsTable = fromList $ zip ([0 ..] :: [TypeId]) (map (weakenTy . builtinType) builtinFunctions)
     builtinLength = length builtinFunctions
 
 genNewId :: TypingM TypeId
 genNewId = do
     a <- gets assigned
-    modify (\e -> e{assigned = assigned e + 1, table = table e ++ [Nothing]})
+    modify (\e -> e{assigned = assigned e + 1})
     pure a
 
 fromTypeId :: TypeId -> TypingM (Maybe ITy)
-fromTypeId tId = get >>= \env -> return $ table env !! tId
+fromTypeId tId =
+    gets (lookup tId . table)
 
 registerIdent :: Ident -> TypingM ()
 registerIdent ident = do
@@ -60,7 +62,7 @@ registerIdent ident = do
         Just _ -> pure ()
         Nothing -> do
             tId <- genNewId
-            modify (\e -> e{variables = (ident, tId) : variables e})
+            modify (\e -> e{variables = insert ident tId $ variables e})
 
 registerAll :: ResolvedExpr -> TypingM ()
 registerAll (RGuard expr) =
@@ -76,22 +78,9 @@ getTyOfIdent ident = do
 
 updateEnv :: TypeId -> ITy -> TypingM ()
 updateEnv typeId ty = do
-    env <- get
-    env' <-
-        mapM
-            ( \case
-                Just ty' -> do
-                    t <- resolveTy ty'
-                    pure $ Just t
-                Nothing -> pure Nothing
-            )
-            $ replaceWithIdx typeId ty (table env)
-    modify (\e -> e{table = env'})
-  where
-    replaceWithIdx :: Int -> ITy -> [Maybe ITy] -> [Maybe ITy]
-    replaceWithIdx _ _ [] = []
-    replaceWithIdx 0 replaced (_ : xs) = Just replaced : xs
-    replaceWithIdx idx replaced (x : xs) = x : replaceWithIdx (idx - 1) replaced xs
+    table' <- gets (insert typeId ty . table)
+    resolved <- mapM resolveTy table'
+    modify (\e -> e{table = resolved})
 
 -- | Remove all type variables from a type.
 removeVar :: TypeEnv -> ITy -> Ty

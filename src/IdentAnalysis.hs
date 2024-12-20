@@ -105,7 +105,7 @@ loadTypeEnv typeEnv = do
         ( \(ident, tId) ->
             registerProp ident (IdentProp (removeVar typeEnv (TVar tId)) Nothing False)
         )
-        vars
+        $ toList vars
   where
     vars = variables typeEnv
 
