@@ -80,7 +80,7 @@ data Ident
       CompilerGenerated Int
     | -- | An identifier that is used to refer to an external item.
       ExternalIdent Text
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 identLoc :: Ident -> Loc
 identLoc (Entry pos) = pos
@@ -124,7 +124,7 @@ newtype ResolvedExpr = RGuard {rExp :: Expr Loc Ident ResolvedExpr DisallowClosu
     deriving (Show, Eq)
 
 data Loc = Loc {locFileName :: Text, locLine :: Int, locColumn :: Int}
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 fromSourcePos :: SourcePos -> Loc
 fromSourcePos pos = Loc (pack (sourceName pos)) (unPos (sourceLine pos)) (unPos (sourceColumn pos))

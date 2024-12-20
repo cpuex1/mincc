@@ -32,23 +32,24 @@ import Backend.Spill (spillF, spillI)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
-import Control.Monad (when)
+import Control.Monad (foldM, when)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Reader (asks)
 import Control.Monad.State.Lazy (StateT (runStateT), gets, modify)
 import Control.Monad.Trans.Class
 import qualified Data.ByteString as B
-import Data.Text (pack)
+import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Display (display)
 import Error
 import Flatten (flattenExpr)
 import Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
-import IdentAnalysis (loadTypeEnv)
+import IdentAnalysis (IdentEnvT, loadTypeEnv)
 import KNorm
 import Log
 import NameRes (resolveNames)
+import Optim.CompMerging (runMergeComp)
 import Optim.ConstFold (constFold)
 import Parser
 import Syntax
@@ -94,17 +95,29 @@ kNormalizeIO = kNormalize
 flattenExprIO :: KExpr -> IdentEnvIO KExpr
 flattenExprIO expr = expandArrayCreate (flattenExpr expr)
 
+optimChain :: (Monad m) => [(Text, KExpr -> IdentEnvT m KExpr)]
+optimChain =
+    [ ("Constant folding", constFold)
+    , ("Comparison merging", runMergeComp)
+    ]
+
 optimIO :: KExpr -> Int -> IdentEnvIO KExpr
 optimIO expr limit = do
     if limit == 0
         then
             pure expr
         else do
-            -- Constant folding
-            expr' <- constFold expr
-            _ <- lift $ printLog Info "Constant folding performed"
-            when (expr == expr') $ do
-                lift $ printLog Info "Make no change"
+            expr' <-
+                foldM
+                    ( \e (name, optim) -> do
+                        expr' <- optim e
+                        _ <- lift $ printTextLog Info $ name <> " performed"
+                        when (expr' == e) $ do
+                            lift $ printLog Info "Make no change"
+                        pure expr'
+                    )
+                    expr
+                    optimChain
             if expr == expr'
                 then do
                     _ <- lift $ printLog Info "No space for optimization"
