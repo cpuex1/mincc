@@ -24,12 +24,14 @@ import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
+import Data.Map (Map, insert, lookup)
 import qualified Data.Map as M
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
 import Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
 import Syntax (Ident (ExternalIdent))
+import Prelude hiding (lookup)
 
 data BackendConfig = BackendConfig
     { iRegLimit :: Int
@@ -43,8 +45,8 @@ data BackendEnv = BackendEnv
     , generatedFReg :: Int
     , iArgsLen :: Int
     , fArgsLen :: Int
-    , iMap :: [(Ident, Register RegID Int)]
-    , fMap :: [(Ident, Register RegID Float)]
+    , iMap :: Map Ident (Register RegID Int)
+    , fMap :: Map Ident (Register RegID Float)
     , usedIRegLen :: Int
     , usedFRegLen :: Int
     }
@@ -58,8 +60,8 @@ defaultBackendEnv table =
         , generatedFReg = 0
         , iArgsLen = 0
         , fArgsLen = 0
-        , iMap = []
-        , fMap = []
+        , iMap = M.empty
+        , fMap = M.empty
         , usedIRegLen = 0
         , usedFRegLen = 0
         }
@@ -91,7 +93,7 @@ genIReg ident = do
     reg <- genTempIReg
     modify $ \e ->
         e
-            { iMap = (ident, reg) : iMap e
+            { iMap = insert ident reg $ iMap e
             }
     pure reg
 
@@ -100,7 +102,7 @@ genFReg ident = do
     reg <- genTempFReg
     modify $ \e ->
         e
-            { fMap = (ident, reg) : fMap e
+            { fMap = insert ident reg $ fMap e
             }
     pure reg
 

@@ -14,6 +14,7 @@ import Builtin (BuiltinFunction (builtinInst), builtinMakeTuple, findBuiltin)
 import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (modify)
+import Data.Map (fromList)
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
@@ -458,8 +459,8 @@ toInstructions function = do
             env
                 { iArgsLen = length iBoundedReg
                 , fArgsLen = length fBoundedReg
-                , iMap = iBoundedReg ++ map snd iFreeVarsReg
-                , fMap = fBoundedReg ++ map snd fFreeVarsReg
+                , iMap = fromList $ iBoundedReg ++ map snd iFreeVarsReg
+                , fMap = fromList $ fBoundedReg ++ map snd fFreeVarsReg
                 }
         inst <- expandExprToInst RetReg RetReg body
         pure $ map fst iFreeVarsReg ++ map fst fFreeVarsReg ++ inst
