@@ -10,13 +10,14 @@ module Globals (
     GlobalProp (..),
 ) where
 
+import Builtin (builtinMakeTuple)
 import Control.Monad.State (MonadTrans (lift), StateT, gets, modify)
 import Data.Map (Map, elems, empty, insert, lookup)
 import Data.Text (Text, pack)
 import Display (Display, display)
 import IdentAnalysis (IdentEnvT, IdentProp (IdentProp), asConstant, getTyOf, registerProp)
-import Syntax (Expr (ArrayCreate, If, Let), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PVar), subst)
-import Typing (Ty)
+import Syntax (Expr (App, ArrayCreate, If, Let, Tuple), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PUnit, PVar), TypedState (TypedState), dummyLoc, subst)
+import Typing (Ty, TypeKind (TUnit))
 import Prelude hiding (lookup)
 
 data GlobalProp = GlobalProp
@@ -59,6 +60,7 @@ searchGlobalTable table name =
 
 extractGlobals :: (Monad m) => KExpr -> GlobalState m KExpr
 extractGlobals (Let state1 (PVar v) (ArrayCreate state2 idx initVal) body) = do
+    -- Globalize an array outside of let-expressions.
     constIdx <- lift $ asConstant idx
     case constIdx of
         Just (LInt constIdx') -> do
@@ -73,10 +75,25 @@ extractGlobals (Let state1 (PVar v) (ArrayCreate state2 idx initVal) body) = do
             let body' = subst v newV v newV body
             extractGlobals body'
         _ -> do
+            -- The size of it cannot be determined at compile time.
             body' <- extractGlobals body
             pure $ Let state1 (PVar v) (ArrayCreate state2 idx initVal) body'
+extractGlobals (Let state1 (PVar v) (Tuple _ values) body) = do
+    -- Register it to the global table.
+    let name = display v
+    ty <- lift $ getTyOf v
+    addGlobalTable name ty (length values)
+
+    -- Substitute a global variable for a tuple inside bodies.
+    let newV = ExternalIdent name
+    lift $ registerProp newV $ IdentProp ty Nothing False
+    let body' = subst v newV v newV body
+
+    -- Replace it with builtin_mk_tuple.
+    let makingTuple = App (TypedState TUnit dummyLoc) builtinMakeTuple (newV : values)
+    extractGlobals $ Let state1 PUnit makingTuple body'
 extractGlobals (Let state pattern expr body) = do
-    -- Do not search for globals in the expression.
+    -- Do not search for globals in the expression of let.
     body' <- extractGlobals body
     pure $ Let state pattern expr body'
 extractGlobals (If state cond then' else') = do

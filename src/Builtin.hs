@@ -4,6 +4,7 @@ module Builtin (
     BuiltinFunction (..),
     builtinFunctions,
     findBuiltin,
+    builtinMakeTuple,
 ) where
 
 import Data.Text (Text)
@@ -28,3 +29,6 @@ builtinFunctions =
 
 findBuiltin :: Ident -> Maybe BuiltinFunction
 findBuiltin ident = lookup ident $ map (\b -> (builtinName b, b)) builtinFunctions
+
+builtinMakeTuple :: Ident
+builtinMakeTuple = ExternalIdent "builtin_mk_tuple"

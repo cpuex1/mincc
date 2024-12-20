@@ -24,7 +24,7 @@ import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
-import Data.Map as M
+import qualified Data.Map as M
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
@@ -106,7 +106,7 @@ genFReg ident = do
 
 findI :: (Monad m) => Ident -> BackendStateT m (Register RegID Int)
 findI ident = do
-    regID <- gets (Prelude.lookup ident . iMap)
+    regID <- gets (lookup ident . iMap)
     case regID of
         Just actual -> pure actual
         Nothing -> do
@@ -119,7 +119,7 @@ findI' ident = Reg <$> findI ident
 
 findF :: (Monad m) => Ident -> BackendStateT m (Register RegID Float)
 findF ident = do
-    regID <- gets (Prelude.lookup ident . fMap)
+    regID <- gets (lookup ident . fMap)
     case regID of
         Just actual -> pure actual
         Nothing -> do

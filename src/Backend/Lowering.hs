@@ -10,10 +10,11 @@ module Backend.Lowering (
 import Backend.Asm
 import Backend.BackendEnv
 import Backend.FunctionCall (saveArgs)
-import Builtin (BuiltinFunction (builtinInst), findBuiltin)
+import Builtin (BuiltinFunction (builtinInst), builtinMakeTuple, findBuiltin)
 import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (modify)
+import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
 import Globals (GlobalProp (globalOffset))
@@ -286,32 +287,74 @@ expandExprToInst iReg _ (MakeClosure state func freeV) = do
     fFreeV' <- mapM findF fFreeV
     pure [IMakeClosure (getLoc state) iReg (display func) iFreeV' fFreeV']
 expandExprToInst iReg fReg (DirectApp state func args) = do
-    (iArgs', fArgs') <- resolveArgs args
-    case getType state of
-        TUnit -> do
-            case findBuiltin func of
-                Just builtin -> do
-                    pure [IRawInst (getLoc state) (builtinInst builtin) RIRUnit iArgs' fArgs']
-                Nothing -> do
-                    pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
-        TFloat -> do
-            case findBuiltin func of
-                Just builtin -> do
-                    pure [IRawInst (getLoc state) (builtinInst builtin) (RIRFloat fReg) iArgs' fArgs']
-                Nothing -> do
-                    pure
-                        [ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                        , IFMov (getLoc state) fReg (Reg RetReg)
-                        ]
-        _ -> do
-            case findBuiltin func of
-                Just builtin -> do
-                    pure [IRawInst (getLoc state) (builtinInst builtin) (RIRInt iReg) iArgs' fArgs']
-                Nothing -> do
-                    pure
-                        [ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                        , IMov (getLoc state) iReg (Reg RetReg)
-                        ]
+    case args of
+        (ExternalIdent tuple) : values -> do
+            if func == builtinMakeTuple
+                then
+                    mkTuple tuple values
+                else
+                    simpleApp
+        _ -> simpleApp
+  where
+    mkTuple :: (Monad m) => Text -> [Ident] -> BackendIdentState m [Inst Loc RegID AllowBranch]
+    mkTuple tuple values = do
+        prop <- findGlobal tuple
+        let offset = globalOffset prop
+        concat
+            <$> mapM
+                ( \(idx, val) -> do
+                    ty <- liftB $ getTyOf val
+                    case ty of
+                        TFloat -> do
+                            reg <- findF val
+                            pure [IFStore (getLoc state) reg ZeroReg (offset + idx * 4)]
+                        _ -> do
+                            reg <- findI' val
+                            case reg of
+                                Reg reg' -> do
+                                    pure [IStore (getLoc state) reg' ZeroReg (offset + idx * 4)]
+                                Imm imm -> do
+                                    temp' <- genTempIReg
+                                    pure
+                                        [ IMov (getLoc state) temp' (Imm imm)
+                                        , IStore (getLoc state) temp' ZeroReg (offset + idx * 4)
+                                        ]
+                )
+                ( zip
+                    [0 ..]
+                    values
+                )
+
+    simpleApp ::
+        (Monad m) =>
+        BackendIdentState m [Inst Loc RegID AllowBranch]
+    simpleApp = do
+        (iArgs', fArgs') <- resolveArgs args
+        case getType state of
+            TUnit -> do
+                case findBuiltin func of
+                    Just builtin -> do
+                        pure [IRawInst (getLoc state) (builtinInst builtin) RIRUnit iArgs' fArgs']
+                    Nothing -> do
+                        pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
+            TFloat -> do
+                case findBuiltin func of
+                    Just builtin -> do
+                        pure [IRawInst (getLoc state) (builtinInst builtin) (RIRFloat fReg) iArgs' fArgs']
+                    Nothing -> do
+                        pure
+                            [ IRichCall (getLoc state) (display func) iArgs' fArgs'
+                            , IFMov (getLoc state) fReg (Reg RetReg)
+                            ]
+            _ -> do
+                case findBuiltin func of
+                    Just builtin -> do
+                        pure [IRawInst (getLoc state) (builtinInst builtin) (RIRInt iReg) iArgs' fArgs']
+                    Nothing -> do
+                        pure
+                            [ IRichCall (getLoc state) (display func) iArgs' fArgs'
+                            , IMov (getLoc state) iReg (Reg RetReg)
+                            ]
 expandExprToInst iReg fReg (ClosureApp state func args) = do
     func' <- findI func
     (iArgs', fArgs') <- resolveArgs args
