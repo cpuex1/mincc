@@ -51,6 +51,7 @@ import Log
 import NameRes (resolveNames)
 import Optim.CompMerging (runMergeComp)
 import Optim.ConstFold (constFold)
+import Optim.UnusedElim (unusedElim)
 import Parser
 import Syntax
 import Text.Megaparsec
@@ -99,6 +100,7 @@ optimChain :: (Monad m) => [(Text, KExpr -> IdentEnvT m KExpr)]
 optimChain =
     [ ("Constant folding", constFold)
     , ("Comparison merging", runMergeComp)
+    , ("Unused variables elimination", unusedElim)
     ]
 
 optimIO :: KExpr -> Int -> IdentEnvIO KExpr

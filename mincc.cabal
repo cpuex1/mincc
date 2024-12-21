@@ -49,6 +49,8 @@ library
       Optim.CompMerging
       Optim.ConstExpansion
       Optim.ConstFold
+      Optim.Pure
+      Optim.UnusedElim
       Parser
       Syntax
       TypeInferrer

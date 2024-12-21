@@ -7,6 +7,7 @@ module IdentAnalysis (
     defaultIdentContext,
     registerProp,
     searchProp,
+    removeProp,
     getTyOf,
     asConstant,
     identState,
@@ -17,7 +18,7 @@ module IdentAnalysis (
 ) where
 
 import Control.Monad.State (StateT, gets, modify)
-import Data.Map (Map, adjust, empty, insert, lookup, toList)
+import Data.Map (Map, adjust, delete, empty, insert, lookup, toList)
 import Data.Text (Text, pack)
 import Display (display)
 import Syntax
@@ -57,6 +58,10 @@ registerProp ident prop = do
 searchProp :: (Monad m) => Ident -> IdentEnvT m (Maybe IdentProp)
 searchProp ident =
     gets identProps >>= \props -> pure (lookup ident props)
+
+removeProp :: (Monad m) => Ident -> IdentEnvT m ()
+removeProp ident =
+    modify $ \env -> env{identProps = delete ident $ identProps env}
 
 {- | Get the type of an identifier.
 If the identifier is not found, return `TUnit`.
