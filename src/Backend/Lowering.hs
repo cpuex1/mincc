@@ -153,10 +153,10 @@ expandExprToInst iReg fReg (Let state (PTuple vals) expr body) = do
                 case ty of
                     TFloat -> do
                         val' <- genFReg val
-                        pure $ IFLoad (getLoc state) val' tuple (idx * 4)
+                        pure $ IFLoad (getLoc state) val' tuple idx
                     _ -> do
                         val' <- genIReg val
-                        pure $ ILoad (getLoc state) val' tuple (idx * 4)
+                        pure $ ILoad (getLoc state) val' tuple idx
             )
             $ zip [0 ..] vals
     body' <- expandExprToInst iReg fReg body
@@ -194,68 +194,51 @@ expandExprToInst iReg _ (Tuple state vars) = do
                             let offset = globalOffset prop
                             pure
                                 [ IMov (getLoc state) temp (Imm offset)
-                                , IStore (getLoc state) temp HeapReg (index * 4)
+                                , IStore (getLoc state) temp HeapReg index
                                 ]
                         _ -> do
                             varTy <- liftB $ getTyOf var
                             case varTy of
                                 TFloat -> do
                                     var' <- findF var
-                                    pure [IFStore (getLoc state) var' HeapReg (index * 4)]
+                                    pure [IFStore (getLoc state) var' HeapReg index]
                                 _ -> do
                                     var' <- findI var
-                                    pure [IStore (getLoc state) var' HeapReg (index * 4)]
+                                    pure [IStore (getLoc state) var' HeapReg index]
                 )
                 (zip [0 ..] vars)
     pure $
         inst
             ++ [ IMov (getLoc state) iReg (Reg HeapReg)
-               , IIntOp (getLoc state) PAdd HeapReg HeapReg (Imm $ length vars * 4)
+               , IIntOp (getLoc state) PAdd HeapReg HeapReg (Imm $ length vars)
                ]
-expandExprToInst iReg _ (ArrayCreate state size initVal) = do
-    initValTy <- liftB $ getTyOf initVal
+expandExprToInst iReg _ (ArrayCreate state size _) = do
     size' <- findI size
-    offset <- genTempIReg
-    case initValTy of
-        TFloat -> do
-            pure
-                [ IMov (getLoc state) iReg (Reg HeapReg)
-                , IIntOp (getLoc state) PShiftL offset size' (Imm 2)
-                , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg offset)
-                ]
-        _ -> do
-            pure
-                [ IMov (getLoc state) iReg (Reg HeapReg)
-                , IIntOp (getLoc state) PShiftL offset size' (Imm 2)
-                , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg offset)
-                ]
+    pure
+        [ IMov (getLoc state) iReg (Reg HeapReg)
+        , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg size')
+        ]
 expandExprToInst iReg fReg (Get state array index) = do
     array' <- case array of
         ExternalIdent arrayName ->
             Imm . globalOffset <$> findGlobal arrayName
         _ -> Reg <$> findI array
     index' <- findI index
-    offset <- genTempIReg
     addr <- genTempIReg
     let ty = getType state
     case ty of
         TFloat ->
             pure
-                [ IIntOp (getLoc state) PShiftL offset index' (Imm 2)
-                , IIntOp (getLoc state) PAdd addr offset array'
+                [ IIntOp (getLoc state) PAdd addr index' array'
                 , IFLoad (getLoc state) fReg addr 0
                 ]
         _ ->
             pure
-                [ IIntOp (getLoc state) PShiftL offset index' (Imm 2)
-                , IIntOp (getLoc state) PAdd addr offset array'
+                [ IIntOp (getLoc state) PAdd addr index' array'
                 , ILoad (getLoc state) iReg addr 0
                 ]
 expandExprToInst _ _ (Put state dest idx src) = do
-    dest' <- case dest of
-        ExternalIdent destName ->
-            Imm . globalOffset <$> findGlobal destName
-        _ -> Reg <$> findI dest
+    dest' <- findI' dest
     idx' <- findI idx
     srcTy <- liftB $ getTyOf src
     case src of
@@ -265,8 +248,7 @@ expandExprToInst _ _ (Put state dest idx src) = do
             temp <- genTempIReg
             offset <- genTempIReg
             pure
-                [ IIntOp (getLoc state) PShiftL offset idx' (Imm 2)
-                , IIntOp (getLoc state) PAdd offset offset dest'
+                [ IIntOp (getLoc state) PAdd offset idx' dest'
                 , IMov (getLoc state) temp (Imm src'')
                 , IStore (getLoc state) temp offset 0
                 ]
@@ -276,16 +258,14 @@ expandExprToInst _ _ (Put state dest idx src) = do
                     src' <- findF src
                     offset <- genTempIReg
                     pure
-                        [ IIntOp (getLoc state) PShiftL offset idx' (Imm 2)
-                        , IIntOp (getLoc state) PAdd offset offset dest'
+                        [ IIntOp (getLoc state) PAdd offset idx' dest'
                         , IFStore (getLoc state) src' offset 0
                         ]
                 _ -> do
                     src' <- findI src
                     offset <- genTempIReg
                     pure
-                        [ IIntOp (getLoc state) PShiftL offset idx' (Imm 2)
-                        , IIntOp (getLoc state) PAdd offset offset dest'
+                        [ IIntOp (getLoc state) PAdd offset idx' dest'
                         , IStore (getLoc state) src' offset 0
                         ]
 expandExprToInst iReg _ (MakeClosure state func freeV) = do
@@ -328,17 +308,17 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
                     case ty of
                         TFloat -> do
                             reg <- findF val
-                            pure [IFStore (getLoc state) reg ZeroReg (offset + idx * 4)]
+                            pure [IFStore (getLoc state) reg ZeroReg (offset + idx)]
                         _ -> do
                             reg <- findI' val
                             case reg of
                                 Reg reg' -> do
-                                    pure [IStore (getLoc state) reg' ZeroReg (offset + idx * 4)]
+                                    pure [IStore (getLoc state) reg' ZeroReg (offset + idx)]
                                 Imm imm -> do
                                     temp' <- genTempIReg
                                     pure
                                         [ IMov (getLoc state) temp' (Imm imm)
-                                        , IStore (getLoc state) temp' ZeroReg (offset + idx * 4)
+                                        , IStore (getLoc state) temp' ZeroReg (offset + idx)
                                         ]
                 )
                 ( zip
@@ -444,14 +424,14 @@ toInstructions function = do
             mapM
                 ( \(v, i) -> do
                     reg <- genIReg v
-                    pure (ILoad dummyLoc reg closureArg (i * 4), (v, reg))
+                    pure (ILoad dummyLoc reg closureArg i, (v, reg))
                 )
                 $ zip iFreeVars [0 ..]
         fFreeVarsReg <-
             mapM
                 ( \(v, i) -> do
                     reg <- genFReg v
-                    pure (IFLoad dummyLoc reg closureArg (i * 4), (v, reg))
+                    pure (IFLoad dummyLoc reg closureArg i, (v, reg))
                 )
                 $ zip fFreeVars [length iFreeVars ..]
 

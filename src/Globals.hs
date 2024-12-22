@@ -39,7 +39,7 @@ type GlobalState m = StateT GlobalTable (IdentEnvT m)
 
 -- | The address of starting the global table.
 startGlobalTableAddr :: Int
-startGlobalTableAddr = 0x100
+startGlobalTableAddr = 0x40
 
 defaultGlobalTable :: GlobalTable
 defaultGlobalTable = GlobalTable empty startGlobalTableAddr startGlobalTableAddr
@@ -51,7 +51,7 @@ addGlobalTable name ty size = do
     modify $ \table ->
         table
             { globalTable = insert name prop $ globalTable table
-            , endAddr = endAddr table + size * 4
+            , endAddr = endAddr table + size
             }
 
 searchGlobalTable :: GlobalTable -> Text -> Maybe GlobalProp
