@@ -199,15 +199,15 @@ saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) lab
             then
                 []
             else
-                IIntOp dummyLoc PAdd StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
+                IIntOp dummyLoc PAdd StackReg StackReg (Imm $ -(length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
-            (\i arg -> IStore dummyLoc (SavedReg arg) StackReg (i * 4))
+            (\i arg -> IStore dummyLoc (SavedReg arg) StackReg i)
             [0 ..]
             $ toAscList iToBeSaved
     fPrologue =
         zipWith
-            (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg (i * 4))
+            (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg i)
             [length iToBeSaved ..]
             $ toAscList fToBeSaved
 
@@ -216,15 +216,15 @@ saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) lab
             then
                 []
             else
-                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
+                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd StackReg StackReg (Imm $ length iToBeSaved + length fToBeSaved)]
     iEpilogue =
         zipWith
-            (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg (i * 4))
+            (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg i)
             [0 ..]
             $ toAscList iToBeSaved
     fEpilogue =
         zipWith
-            (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg (i * 4))
+            (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg i)
             [length iToBeSaved ..]
             $ toAscList fToBeSaved
 saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) cl iArgs fArgs) =
@@ -238,15 +238,15 @@ saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) 
             then
                 []
             else
-                IIntOp dummyLoc PAdd StackReg StackReg (Imm $ -(4 * (length iToBeSaved + length fToBeSaved))) : (iPrologue ++ fPrologue)
+                IIntOp dummyLoc PAdd StackReg StackReg (Imm $ -(length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
-            (\i arg -> IStore dummyLoc (SavedReg arg) StackReg (i * 4))
+            (\i arg -> IStore dummyLoc (SavedReg arg) StackReg i)
             [0 ..]
             $ toAscList iToBeSaved
     fPrologue =
         zipWith
-            (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg (i * 4))
+            (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg i)
             [length iToBeSaved ..]
             $ toAscList fToBeSaved
 
@@ -255,15 +255,15 @@ saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) 
             then
                 []
             else
-                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd StackReg StackReg (Imm $ 4 * (length iToBeSaved + length fToBeSaved))]
+                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd StackReg StackReg (Imm $ length iToBeSaved + length fToBeSaved)]
     iEpilogue =
         zipWith
-            (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg (i * 4))
+            (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg i)
             [0 ..]
             $ toAscList iToBeSaved
     fEpilogue =
         zipWith
-            (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg (i * 4))
+            (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg i)
             [length iToBeSaved ..]
             $ toAscList fToBeSaved
 saveRegBeyondCall (IBranch state op left right thenBlock elseBlock) =

@@ -19,7 +19,7 @@ loadNewIReg vars searching victim =
     if SavedReg searching == victim
         then do
             newReg <- genTempIReg
-            pure (newReg, [ILoad dummyLoc newReg StackReg (vars * 4)])
+            pure (newReg, [ILoad dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
 loadNewIReg' :: (Monad m) => Int -> RegID -> RegOrImm RegID Int -> BackendStateT m (RegOrImm RegID Int, [Inst Loc RegID AllowBranch])
@@ -27,7 +27,7 @@ loadNewIReg' vars searching victim =
     if Reg (SavedReg searching) == victim
         then do
             newReg <- genTempIReg
-            pure (Reg newReg, [ILoad dummyLoc newReg StackReg (vars * 4)])
+            pure (Reg newReg, [ILoad dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
 loadNewFReg :: (Monad m) => Int -> RegID -> Register RegID Float -> BackendStateT m (Register RegID Float, [Inst Loc RegID AllowBranch])
@@ -35,7 +35,7 @@ loadNewFReg vars searching victim =
     if SavedReg searching == victim
         then do
             newReg <- genTempFReg
-            pure (newReg, [IFLoad dummyLoc newReg StackReg (vars * 4)])
+            pure (newReg, [IFLoad dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
 loadNewFReg' :: (Monad m) => Int -> RegID -> RegOrImm RegID Float -> BackendStateT m (RegOrImm RegID Float, [Inst Loc RegID AllowBranch])
@@ -43,7 +43,7 @@ loadNewFReg' vars searching victim =
     if Reg (SavedReg searching) == victim
         then do
             newReg <- genTempFReg
-            pure (Reg newReg, [IFLoad dummyLoc newReg StackReg (vars * 4)])
+            pure (Reg newReg, [IFLoad dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
 storeNewIReg :: (Monad m) => Int -> RegID -> Register RegID Int -> BackendStateT m (Register RegID Int, [Inst Loc RegID AllowBranch])
@@ -51,7 +51,7 @@ storeNewIReg vars searching victim =
     if SavedReg searching == victim
         then do
             newReg <- genTempIReg
-            pure (newReg, [IStore dummyLoc newReg StackReg (vars * 4)])
+            pure (newReg, [IStore dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
 storeNewFReg :: (Monad m) => Int -> RegID -> Register RegID Float -> BackendStateT m (Register RegID Float, [Inst Loc RegID AllowBranch])
@@ -59,7 +59,7 @@ storeNewFReg vars searching victim =
     if SavedReg searching == victim
         then do
             newReg <- genTempFReg
-            pure (newReg, [IFStore dummyLoc newReg StackReg (vars * 4)])
+            pure (newReg, [IFStore dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
 replaceIRegWithMem :: (Monad m) => Int -> RegID -> Inst Loc RegID AllowBranch -> BackendStateT m [Inst Loc RegID AllowBranch]
