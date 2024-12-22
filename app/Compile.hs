@@ -32,12 +32,14 @@ import Backend.Spill (spillF, spillI)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
 import CommandLine
+import Control.Exception (IOException, try)
 import Control.Monad (foldM, when)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Reader (asks)
 import Control.Monad.State.Lazy (StateT (runStateT), gets, modify)
 import Control.Monad.Trans.Class
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
@@ -54,13 +56,20 @@ import Optim.ConstFold (constFold)
 import Optim.UnusedElim (unusedElim)
 import Parser
 import Syntax
-import Text.Megaparsec
+import Text.Megaparsec (MonadParsec (eof), parse)
 import TypeInferrer (inferType)
+
+readFileIO :: FilePath -> ConfigIO ByteString
+readFileIO path = do
+    content <- liftIO (try (B.readFile path) :: IO (Either IOException ByteString))
+    case content of
+        Left _ -> throwError $ OtherError $ "Failed to read " <> pack path
+        Right content' -> pure content'
 
 parseAllIO :: [FilePath] -> ConfigIO ParsedExpr
 parseAllIO [] = throwError $ OtherError "No input files"
 parseAllIO [path] = do
-    content <- liftIO $ B.readFile path
+    content <- readFileIO path
     case parse (parseExpr <* eof) path $ decodeUtf8 content of
         Left err ->
             throwError $ ParserError err
@@ -68,7 +77,7 @@ parseAllIO [path] = do
             printLog Info $ "Parsed " ++ path
             return expr
 parseAllIO (path : paths) = do
-    content <- liftIO $ B.readFile path
+    content <- readFileIO path
     parsed <- parseAllIO paths
     case parse (parsePartialExpr parsed <* eof) path $ decodeUtf8 content of
         Left err ->
