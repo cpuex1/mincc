@@ -2,3 +2,4 @@
 # Due to the license of the original source code, we cannot include minrt files.
 #
 *.ml
+*.sld

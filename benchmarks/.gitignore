@@ -8,6 +8,7 @@ build/
 
 # Configuration files
 config.json
+notifier-config.json
 finv_table.txt
 fsqrt_table.txt
 
@@ -20,3 +21,5 @@ read_int.txt
 print_int.txt
 stat.txt
 *.ppm
+img/**/*
+!img/.gitkeep

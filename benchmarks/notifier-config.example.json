@@ -1,0 +1,7 @@
+{
+    "webhook": "https://discord.com/api/webhooks/dummy",
+    "avatar": "https://github.com/cpuex1.png",
+    "output": "img/minrt-%Y-%m-%d-%H-%M-%S.png",
+    "width": 256,
+    "height": 256
+}

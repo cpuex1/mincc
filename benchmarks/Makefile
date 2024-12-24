@@ -1,32 +1,41 @@
-.PHONY: run clean
+.PHONY: run clean minrt
 .PRECIOUS: %.s
 
-ASSEMBLER = ./bin/r72b
-SIMULATOR = ./bin/r7sim
-OUTPUT = ./print_int.txt
-EXEC = fib
-OPTION =
-SIMULATOR_OPT = -b ./breakpoints.txt
+# Tools
+MINCC = stack run --
+ASM = ./bin/r72b
+SIM = ./bin/r7sim
 
+# Tool options
+MINCC_OPTION = --emit-all --verbose
+ASM_OPTION =
+SIM_OPTION = -b ./breakpoints.txt
+
+# Build options
+BUILD_DIR = ./build
+
+# Configurations
+EXEC = fib
+
+# Include minrt targets
 include ./src/minrt/minrt.mk
 
 %.s: ./src/%.ml
-	mkdir -p ./build/
-	stack run -- $(OPTION) -i $^ -o ./build/$@ --emit-all --verbose
-	cp ./build/$@ .
+	mkdir -p $(BUILD_DIR)
+	$(MINCC) $(MINCC_OPTION) -i $^ -o $(BUILD_DIR)/$@
+	cp $(BUILD_DIR)/$@ .
 
 %.bin: %.s
-	mkdir -p ./build/
-	$(ASSEMBLER) -input $^ -output ./build/$(basename $@ .bin)
-	cp ./build/$@ .
+	mkdir -p $(BUILD_DIR)
+	$(ASM) $(ASM_OPTION) -input $^ -output $(BUILD_DIR)/$(basename $@ .bin)
+	cp $(BUILD_DIR)/$@ .
 
 run: $(EXEC).bin
-	rm -f $(OUTPUT)
-	cp ./build/$(EXEC)_labels.csv ./labels.csv
-	$(SIMULATOR) -i $^ $(SIMULATOR_OPT)
+	rm -f print_int.txt
+	cp $(BUILD_DIR)/$(EXEC)_labels.csv ./labels.csv
+	$(SIM) -i $^ $(SIM_OPTION)
 
 clean:
-	rm -rf ./build/
+	rm -rf $(BUILD_DIR)
 	rm -f *.s
 	rm -f *.bin
-	rm -f $(OUTPUT)
