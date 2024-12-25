@@ -49,6 +49,7 @@ library
       Optim.CompMerging
       Optim.ConstExpansion
       Optim.ConstFold
+      Optim.Inlining
       Optim.Pure
       Optim.UnitElim
       Optim.UnusedElim
