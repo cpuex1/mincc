@@ -53,6 +53,7 @@ import Log
 import NameRes (resolveNames)
 import Optim.CompMerging (runMergeComp)
 import Optim.ConstFold (constFold)
+import Optim.UnitElim (elimUnitArgs)
 import Optim.UnusedElim (unusedElim)
 import Parser
 import Syntax
@@ -110,6 +111,7 @@ optimChain =
     [ ("Constant folding", constFold)
     , ("Comparison merging", runMergeComp)
     , ("Unused variables elimination", unusedElim)
+    , ("Unit args elimination", elimUnitArgs)
     ]
 
 optimIO :: KExpr -> Int -> IdentEnvIO KExpr

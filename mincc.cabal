@@ -50,6 +50,7 @@ library
       Optim.ConstExpansion
       Optim.ConstFold
       Optim.Pure
+      Optim.UnitElim
       Optim.UnusedElim
       Parser
       Syntax
