@@ -256,8 +256,10 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         insertBuf $ IIntOp state op dest src1 src2
     transformInst (IFOp state op dest src1 src2) =
         insertBuf $ IFOp state op dest src1 src2
+    transformInst (IMov _ ZeroReg _) = pure ()
     transformInst (IMov state dest src) =
         insertBuf $ IMov state dest src
+    transformInst (IFMov _ ZeroReg _) = pure ()
     transformInst (IFMov state dest src) =
         insertBuf $ IFMov state dest src
     transformInst (IRichCall state label' iArgs fArgs) = do
