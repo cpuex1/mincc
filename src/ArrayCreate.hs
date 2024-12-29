@@ -22,6 +22,7 @@ import Syntax (
         getType
     ),
     dummyLoc,
+    getExprState,
  )
 import Typing (Ty, TypeKind (..))
 
@@ -64,7 +65,8 @@ generateInitArrayFunc uniqueId valTy bodyGen = do
                     )
                 )
                 (Const (TypedState TUnit dummyLoc) LUnit)
-    pure $ Let (TypedState func_ty dummyLoc) (PRec init_array_func [array, idx, size, value]) func_body body
+    let bodyTy = getType $ getExprState body
+    pure $ Let (TypedState bodyTy dummyLoc) (PRec init_array_func [array, idx, size, value]) func_body body
   where
     init_array_func = UserDefined dummyLoc $ "Array.create" <> uniqueId
     func_ty = TFun [TArray valTy, TInt, TInt, valTy] TUnit
