@@ -9,11 +9,11 @@ flattenExpr (If s cond thenExpr elseExpr) =
     If s cond (flattenExpr thenExpr) (flattenExpr elseExpr)
 flattenExpr (Let s (PRec f args) value body) =
     Let s (PRec f args) (flattenExpr value) (flattenExpr body)
-flattenExpr (Let s pat value body) =
+flattenExpr (Let (TypedState ty loc) pat value body) =
     insert (flattenExpr value)
   where
     insert :: KExpr -> KExpr
-    insert (Let s' pat' value' body') =
-        Let s' pat' value' (insert body')
-    insert expr = Let s pat expr (flattenExpr body)
+    insert (Let (TypedState _ loc') pat' value' body') =
+        Let (TypedState ty loc') pat' value' (insert body')
+    insert expr = Let (TypedState ty loc) pat expr (flattenExpr body)
 flattenExpr e = e

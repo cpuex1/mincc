@@ -94,7 +94,7 @@ expandArrayCreate expr = flattenExpr <$> expandArrayCreate' expr
                             ( Let
                                 state1
                                 PUnit
-                                (App state1 func [v, zero, size, val])
+                                (App (TypedState TUnit loc) func [v, zero, size, val])
                                 body'
                             )
                         )
