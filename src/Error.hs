@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Error (CompilerError (ParserError, TypeError, OtherError), displayError) where
+module Error (CompilerError (..), displayError) where
 
 import Data.List.NonEmpty (toList)
 import Data.Proxy
@@ -13,6 +13,7 @@ import Text.Megaparsec
 data CompilerError
     = ParserError (ParseErrorBundle Text Void)
     | TypeError (Maybe Loc) Text
+    | AssertionError Loc Text
     | OtherError Text
     deriving (Show, Eq)
 
@@ -29,6 +30,8 @@ displayError err =
             ["Type error: " <> msg <> displayLoc pos]
         TypeError Nothing msg ->
             ["Type error: " <> msg]
+        AssertionError pos msg ->
+            ["Assertion failed: " <> msg <> displayLoc pos]
         OtherError msg ->
             [msg]
   where

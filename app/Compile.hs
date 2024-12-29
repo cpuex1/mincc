@@ -64,6 +64,7 @@ import Optim.ConstFold (constFold)
 import Optim.Inlining (runInlining)
 import Optim.UnitElim (elimUnitArgs)
 import Optim.UnusedElim (unusedElim)
+import Optim.Validator (validate)
 import Parser (parseExpr, parsePartialExpr)
 import Syntax (
     Function,
@@ -132,10 +133,16 @@ optimChain =
     ]
 
 optimIO :: KExpr -> IdentEnvIO KExpr
-optimIO expr = evalStateT (optimIOLoop expr) (OptimContext 470 0 0)
+optimIO expr = evalStateT (optimIOLoop expr) (OptimContext 500 0 0)
   where
     optimIOLoop :: KExpr -> OptimStateT ConfigIO KExpr
     optimIOLoop beforeExpr = do
+        -- Perform validation.
+        validationResult <- lift $ validate beforeExpr
+        case validationResult of
+            Left err -> throwError err
+            Right _ -> pure ()
+
         optimExpr <-
             foldM
                 ( \e (name, optim) -> do

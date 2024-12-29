@@ -53,6 +53,7 @@ library
       Optim.Inlining
       Optim.UnitElim
       Optim.UnusedElim
+      Optim.Validator
       Parser
       Syntax
       TypeInferrer
