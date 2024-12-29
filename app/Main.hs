@@ -117,8 +117,7 @@ execArgsWithIdent resolvedExpr = do
     reported <- reportEnv
     lift $ mapM_ (printTextLog Debug) reported
 
-    optimLevel <- lift $ asks cOptimize
-    optimizedExpr <- optimIO flattenExpr optimLevel
+    optimizedExpr <- optimIO flattenExpr
     lift $ printLog Done "Optimization succeeded"
     emitOptim <- lift $ asks cEmitOptim
     when emitOptim $ do

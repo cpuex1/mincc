@@ -17,7 +17,14 @@ module Compile (
 ) where
 
 import ArrayCreate (expandArrayCreate)
-import Backend.Asm
+import Backend.Asm (
+    CodeBlock,
+    IntermediateCodeBlock (getICBInst, getICBLabel),
+    RegID,
+    Register (SavedReg),
+    exitBlock,
+    substIState,
+ )
 import Backend.BackendEnv (
     BackendConfig (fRegLimit, iRegLimit),
     BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen),
@@ -25,38 +32,47 @@ import Backend.BackendEnv (
  )
 import Backend.FunctionCall (saveRegisters)
 import Backend.Liveness (LivenessLoc (livenessLoc), liveness)
-import Backend.Lowering
+import Backend.Lowering (toInstructions)
 import Backend.Optim.MulElim (elimMul)
 import Backend.RegisterAlloc (assignRegister)
 import Backend.Spill (spillF, spillI)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
-import CommandLine
+import CommandLine (BackendIdentStateIO, ConfigIO, IdentEnvIO)
 import Control.Exception (IOException, try)
 import Control.Monad (foldM, when)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Reader (asks)
-import Control.Monad.State.Lazy (StateT (runStateT), gets, modify)
-import Control.Monad.Trans.Class
+import Control.Monad.State.Lazy (StateT (runStateT), evalStateT, gets, modify)
+import Control.Monad.Trans.Class (MonadTrans (lift))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Display (display)
-import Error
+import Error (CompilerError (OtherError, ParserError))
 import Flatten (flattenExpr)
 import Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
-import IdentAnalysis (IdentEnvT, loadTypeEnv)
-import KNorm
-import Log
+import IdentAnalysis (loadTypeEnv)
+import KNorm (kNormalize)
+import Log (LogLevel (Debug, Info), printLog, printTextLog)
 import NameRes (resolveNames)
+import Optim.Base (OptimContext (OptimContext), OptimStateT)
 import Optim.CompMerging (runMergeComp)
 import Optim.ConstFold (constFold)
+import Optim.Inlining (runInlining)
 import Optim.UnitElim (elimUnitArgs)
 import Optim.UnusedElim (unusedElim)
-import Parser
-import Syntax
+import Parser (parseExpr, parsePartialExpr)
+import Syntax (
+    Function,
+    KExpr,
+    Loc,
+    ParsedExpr,
+    ResolvedExpr,
+    TypedExpr,
+ )
 import Text.Megaparsec (MonadParsec (eof), parse)
 import TypeInferrer (inferType)
 
@@ -106,38 +122,38 @@ kNormalizeIO = kNormalize
 flattenExprIO :: KExpr -> IdentEnvIO KExpr
 flattenExprIO expr = expandArrayCreate (flattenExpr expr)
 
-optimChain :: (Monad m) => [(Text, KExpr -> IdentEnvT m KExpr)]
+optimChain :: (Monad m) => [(Text, KExpr -> OptimStateT m KExpr)]
 optimChain =
-    [ ("Constant folding", constFold)
+    [ ("Function inlining", runInlining)
+    , ("Constant folding", constFold)
     , ("Comparison merging", runMergeComp)
     , ("Unused variables elimination", unusedElim)
     , ("Unit args elimination", elimUnitArgs)
     ]
 
-optimIO :: KExpr -> Int -> IdentEnvIO KExpr
-optimIO expr limit = do
-    if limit == 0
-        then
-            pure expr
-        else do
-            expr' <-
-                foldM
-                    ( \e (name, optim) -> do
-                        expr' <- optim e
-                        _ <- lift $ printTextLog Info $ name <> " performed"
-                        when (expr' == e) $ do
-                            lift $ printLog Info "Make no change"
-                        pure expr'
-                    )
-                    expr
-                    optimChain
-            if expr == expr'
-                then do
-                    _ <- lift $ printLog Info "No space for optimization"
-                    pure expr'
-                else do
-                    _ <- lift $ printLog Info "Perform more optimization"
-                    optimIO expr' (limit - 1)
+optimIO :: KExpr -> IdentEnvIO KExpr
+optimIO expr = evalStateT (optimIOLoop expr) (OptimContext 470 0 0)
+  where
+    optimIOLoop :: KExpr -> OptimStateT ConfigIO KExpr
+    optimIOLoop beforeExpr = do
+        optimExpr <-
+            foldM
+                ( \e (name, optim) -> do
+                    optimExpr <- optim e
+                    lift $ lift $ printTextLog Info $ name <> " performed"
+                    when (optimExpr == e) $ do
+                        lift $ lift $ printLog Info "Make no change"
+                    pure optimExpr
+                )
+                beforeExpr
+                optimChain
+        if beforeExpr == optimExpr
+            then do
+                _ <- lift $ lift $ printLog Info "No space for optimization"
+                pure optimExpr
+            else do
+                _ <- lift $ lift $ printLog Info "Perform more optimization"
+                optimIOLoop optimExpr
 
 extractGlobalsIO :: KExpr -> IdentEnvIO (KExpr, GlobalTable)
 extractGlobalsIO expr =

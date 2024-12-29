@@ -4,9 +4,11 @@ module Optim.ConstExpansion (expandConstants) where
 
 import ConstantAnalysis (registerConstants)
 import Control.Monad (foldM)
+import Control.Monad.Trans (MonadTrans (lift))
 import Data.List (union)
 import Flatten (flattenExpr)
-import IdentAnalysis (IdentEnvT, IdentProp (constant), genNewVar, getTyOf, searchProp)
+import IdentAnalysis (IdentProp (constant), genNewVar, getTyOf, searchProp)
+import Optim.Base (OptimStateT)
 import Syntax (
     AllowCompBranch,
     Cond (CComp, CIdentity),
@@ -22,9 +24,9 @@ import Syntax (
  )
 
 -- | Picks a variable if and only if it is a constant.
-pickConstant :: (Monad m) => Ident -> IdentEnvT m [(Ident, Literal)]
+pickConstant :: (Monad m) => Ident -> OptimStateT m [(Ident, Literal)]
 pickConstant ident = do
-    prop <- searchProp ident
+    prop <- lift $ searchProp ident
     case prop of
         Just prop' ->
             case constant prop' of
@@ -34,7 +36,7 @@ pickConstant ident = do
         Nothing -> pure []
 
 -- | Finds all required constants from the function.
-requiredConstants :: (Monad m) => KExpr -> IdentEnvT m [(Ident, Literal)]
+requiredConstants :: (Monad m) => KExpr -> OptimStateT m [(Ident, Literal)]
 requiredConstants (Const _ _) = pure []
 requiredConstants (Unary _ _ ident) = pickConstant ident
 requiredConstants (Binary _ _ ident1 ident2) = do
@@ -47,7 +49,7 @@ requiredConstants (If _ cond t f) = do
     f' <- requiredConstants f
     pure $ cond' `union` t' `union` f'
   where
-    pickConstantInCond :: (Monad m) => Cond Ident AllowCompBranch -> IdentEnvT m [(Ident, Literal)]
+    pickConstantInCond :: (Monad m) => Cond Ident AllowCompBranch -> OptimStateT m [(Ident, Literal)]
     pickConstantInCond (CIdentity cond') = pickConstant cond'
     pickConstantInCond (CComp _ lhs rhs) = do
         lhs' <- pickConstant lhs
@@ -76,7 +78,7 @@ requiredConstants (Put _ _ idx val) = do
     val' <- pickConstant val
     pure $ idx' `union` val'
 
-expandChildrenConstants :: (Monad m) => KExpr -> IdentEnvT m KExpr
+expandChildrenConstants :: (Monad m) => KExpr -> OptimStateT m KExpr
 expandChildrenConstants (Let state (PRec v pats) expr body) = do
     -- If the function was found, just expand all constants in that body.
     expr' <- expandConstants' expr
@@ -93,23 +95,23 @@ expandChildrenConstants (If state cond t f) = do
 expandChildrenConstants expr = pure expr
 
 -- | Expands all constants in the expression.
-expandConstants :: (Monad m) => KExpr -> IdentEnvT m KExpr
+expandConstants :: (Monad m) => KExpr -> OptimStateT m KExpr
 expandConstants expr = do
-    registerConstants expr
+    lift $ registerConstants expr
     expr' <- expandChildrenConstants expr
     let expr'' = flattenExpr expr'
-    registerConstants expr''
+    lift $ registerConstants expr''
     pure expr''
 
-expandConstants' :: (Monad m) => KExpr -> IdentEnvT m KExpr
+expandConstants' :: (Monad m) => KExpr -> OptimStateT m KExpr
 expandConstants' expr = do
     expr' <- expandChildrenConstants expr
     consts <- requiredConstants expr'
     foldM
         ( \body (ident, lit) -> do
             let exprTy = getType $ getExprState body
-            ty <- getTyOf ident
-            v <- genNewVar ty
+            ty <- lift $ getTyOf ident
+            v <- lift $ genNewVar ty
             let constExpr = Const (TypedState ty dummyLoc) lit
             let substBody = subst ident v ident v body
             pure $ Let (TypedState exprTy dummyLoc) (PVar v) constExpr substBody

@@ -3,9 +3,10 @@
 module Optim.UnusedElim (unusedElim) where
 
 import Control.Monad.State (State, execState, modify)
+import Control.Monad.Trans (lift)
 import Data.Set (Set, delete, empty, insert, member)
-import IdentAnalysis (IdentEnvT, removeProp)
-import Optim.Pure (definitelyPure)
+import IdentAnalysis (removeProp)
+import Optim.Base (OptimStateT, definitelyPure)
 import Syntax (
     Cond (CComp, CIdentity),
     Expr (..),
@@ -83,9 +84,9 @@ searchUnused (Put _ arr idx val) = do
     markAsUsed idx
     markAsUsed val
 
-unusedElim :: (Monad m) => KExpr -> IdentEnvT m KExpr
+unusedElim :: (Monad m) => KExpr -> OptimStateT m KExpr
 unusedElim expr = do
-    mapM_ removeProp unused
+    lift $ mapM_ removeProp unused
     pure $ removeUnused expr
   where
     unused = unusedVars $ execState (searchUnused expr) (UnusedElimContext empty)

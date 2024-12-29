@@ -3,7 +3,7 @@ module Optim.CompMerging (runMergeComp) where
 import Control.Monad.State (StateT, evalStateT, gets, modify)
 import Data.Map (Map, empty, insert)
 import qualified Data.Map as M
-import IdentAnalysis (IdentEnvT)
+import Optim.Base (OptimStateT)
 import Syntax (BinaryOp (RelationOp), Cond (CComp, CIdentity), Expr (..), Ident, KExpr, Pattern (PVar), RelationBinOp)
 
 newtype CompContext = CompContext
@@ -11,9 +11,9 @@ newtype CompContext = CompContext
     }
     deriving (Show, Eq)
 
-type CompStateT m = StateT CompContext (IdentEnvT m)
+type CompStateT m = StateT CompContext (OptimStateT m)
 
-runMergeComp :: (Monad m) => KExpr -> IdentEnvT m KExpr
+runMergeComp :: (Monad m) => KExpr -> OptimStateT m KExpr
 runMergeComp expr =
     evalStateT (mergeComp expr) (CompContext empty)
 
