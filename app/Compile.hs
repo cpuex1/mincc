@@ -38,7 +38,7 @@ import Backend.RegisterAlloc (assignRegister)
 import Backend.Spill (spillF, spillI)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
-import CommandLine (BackendIdentStateIO, ConfigIO, IdentEnvIO)
+import CommandLine (BackendIdentStateIO, CompilerConfig (cEmitOptim), ConfigIO, IdentEnvIO)
 import Control.Exception (IOException, try)
 import Control.Monad (foldM, when)
 import Control.Monad.Error.Class (MonadError (throwError))
@@ -50,13 +50,14 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
+import Data.Text.IO as TIO
 import Display (display)
 import Error (CompilerError (OtherError, ParserError))
 import Flatten (flattenExpr)
 import Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
 import IdentAnalysis (loadTypeEnv)
 import KNorm (kNormalize)
-import Log (LogLevel (Debug, Info), printLog, printTextLog)
+import Log (LogLevel (..), printLog, printTextLog)
 import NameRes (resolveNames)
 import Optim.Base (OptimContext (OptimContext), OptimStateT)
 import Optim.CompMerging (runMergeComp)
@@ -66,6 +67,7 @@ import Optim.UnitElim (elimUnitArgs)
 import Optim.UnusedElim (unusedElim)
 import Optim.Validator (validate)
 import Parser (parseExpr, parsePartialExpr)
+import Path (changeExt)
 import Syntax (
     Function,
     KExpr,
@@ -132,11 +134,13 @@ optimChain =
     , ("Unit args elimination", elimUnitArgs)
     ]
 
-optimIO :: KExpr -> IdentEnvIO KExpr
-optimIO expr = evalStateT (optimIOLoop expr) (OptimContext 500 0 0)
+optimIO :: FilePath -> KExpr -> IdentEnvIO KExpr
+optimIO path expr = evalStateT (optimIOLoop 1 expr) (OptimContext 0 0 0)
   where
-    optimIOLoop :: KExpr -> OptimStateT ConfigIO KExpr
-    optimIOLoop beforeExpr = do
+    optimIOLoop :: Int -> KExpr -> OptimStateT ConfigIO KExpr
+    optimIOLoop roundCount beforeExpr = do
+        lift $ lift $ printTextLog Debug $ "Optimization round " <> pack (show roundCount) <> " started"
+
         -- Perform validation.
         validationResult <- lift $ validate beforeExpr
         case validationResult of
@@ -160,7 +164,13 @@ optimIO expr = evalStateT (optimIOLoop expr) (OptimContext 500 0 0)
                 pure optimExpr
             else do
                 _ <- lift $ lift $ printLog Info "Perform more optimization"
-                optimIOLoop optimExpr
+
+                emitOptim <- lift $ asks cEmitOptim
+                when emitOptim $ do
+                    lift $ liftIO $ TIO.writeFile (changeExt (show roundCount ++ ".optim.ml") path) $ display optimExpr
+                    lift $ lift $ printLog Debug "Optimized expressions are saved"
+
+                optimIOLoop (roundCount + 1) optimExpr
 
 extractGlobalsIO :: KExpr -> IdentEnvIO (KExpr, GlobalTable)
 extractGlobalsIO expr =
