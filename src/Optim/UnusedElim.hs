@@ -85,29 +85,38 @@ searchUnused (Put _ arr idx val) = do
     markAsUsed val
 
 unusedElim :: (Monad m) => KExpr -> OptimStateT m KExpr
-unusedElim expr = do
-    lift $ mapM_ removeProp unused
-    pure $ removeUnused expr
+unusedElim expr =
+    removeUnused expr
   where
     unused = unusedVars $ execState (searchUnused expr) (UnusedElimContext empty)
 
-    removeUnused :: KExpr -> KExpr
+    removeUnused :: (Monad m) => KExpr -> OptimStateT m KExpr
     removeUnused (Let state (PVar v) expr' body) =
         if member v unused && definitelyPure expr'
-            then
+            then do
+                lift $ removeProp v
                 removeUnused body
-            else
-                Let state (PVar v) (removeUnused expr') (removeUnused body)
+            else do
+                removedExpr <- removeUnused expr'
+                removedBody <- removeUnused body
+                pure $ Let state (PVar v) removedExpr removedBody
     removeUnused (Let state (PRec func args) expr' body) =
         if member func unused
-            then
+            then do
                 -- Since an unused function itself does not have any side effects,
                 -- we would not make sure it is pure.
+                lift $ removeProp func
                 removeUnused body
-            else
-                Let state (PRec func args) (removeUnused expr') (removeUnused body)
-    removeUnused (Let state pat expr' body) =
-        Let state pat (removeUnused expr') (removeUnused body)
-    removeUnused (If state cond lhs rhs) =
-        If state cond (removeUnused lhs) (removeUnused rhs)
-    removeUnused expr' = expr'
+            else do
+                removedExpr <- removeUnused expr'
+                removedBody <- removeUnused body
+                pure $ Let state (PRec func args) removedExpr removedBody
+    removeUnused (Let state pat expr' body) = do
+        removedExpr <- removeUnused expr'
+        removedBody <- removeUnused body
+        pure $ Let state pat removedExpr removedBody
+    removeUnused (If state cond lhs rhs) = do
+        removedLeft <- removeUnused lhs
+        removedRight <- removeUnused rhs
+        pure $ If state cond removedLeft removedRight
+    removeUnused expr' = pure expr'

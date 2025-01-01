@@ -4,6 +4,7 @@ module Optim.ConstFold (constFold) where
 
 import ConstantAnalysis (registerConstants)
 import Control.Monad.Trans (MonadTrans (lift))
+import Flatten (flattenExpr)
 import IdentAnalysis (asConstant)
 import Optim.Base (OptimStateT)
 import Syntax (
@@ -117,7 +118,7 @@ constFold' (If state (CComp op lhs rhs) t f) = do
 constFold' (Let state pattern expr body) = do
     expr' <- constFold' expr
     body' <- constFold' body
-    pure $ Let state pattern expr' body'
+    pure $ flattenExpr $ Let state pattern expr' body'
 constFold' (Var state v) = do
     v' <- lift $ asConstant v
     case v' of
