@@ -115,8 +115,8 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
             "(let () = "
                 <> displayI value depth
                 <> " in\n"
-                <> insertIndent (depth + 1)
-                <> displayI body (depth + 1)
+                <> insertIndent depth
+                <> displayI body depth
                 <> ")"
         withoutState (Let _ (PVar v) value body) depth =
             "(let "
@@ -124,19 +124,20 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
                 <> " = "
                 <> displayI value depth
                 <> " in\n"
-                <> insertIndent (depth + 1)
-                <> displayI body (depth + 1)
+                <> insertIndent depth
+                <> displayI body depth
                 <> ")"
         withoutState (Let _ (PRec f args) value body) depth =
             "(let rec "
                 <> display f
                 <> " "
                 <> Data.Text.unwords (Prelude.map display args)
-                <> " = "
-                <> displayI value depth
-                <> " in\n"
+                <> " =\n"
                 <> insertIndent (depth + 1)
-                <> displayI body (depth + 1)
+                <> displayI value (depth + 1)
+                <> " in\n"
+                <> insertIndent depth
+                <> displayI body depth
                 <> ")"
         withoutState (Let _ (PTuple values) value body) depth =
             "(let "
@@ -144,8 +145,8 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
                 <> " = "
                 <> displayI value depth
                 <> " in\n"
-                <> insertIndent (depth + 1)
-                <> displayI body (depth + 1)
+                <> insertIndent depth
+                <> displayI body depth
                 <> ")"
         withoutState (App _ func args) depth =
             "(" <> displayI func depth <> " " <> Data.Text.unwords (Prelude.map (`displayI` depth) args) <> ")"
