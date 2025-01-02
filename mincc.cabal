@@ -46,6 +46,7 @@ library
       IdentAnalysis
       KNorm
       NameRes
+      Optim.All
       Optim.Base
       Optim.CompMerging
       Optim.ConstExpansion

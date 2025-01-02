@@ -7,6 +7,8 @@ module Optim.Base (
     withFreshVars,
     OptimContext (..),
     OptimStateT,
+    Threshold (..),
+    toThreshold,
 ) where
 
 import Control.Monad.State (State, StateT, execState, modify)
@@ -67,6 +69,9 @@ genFresh ident = do
     ty <- lift $ getTyOf ident
     lift $ genNewVar ty
 
+{- | Replaces bounded variables with fresh ones.
+This function is implemented to keep all variable names unique.
+-}
 withFreshVars :: (Monad m) => KExpr -> OptimStateT m KExpr
 withFreshVars (Let state (PVar ident) expr body) = do
     fresh <- genFresh ident
@@ -104,10 +109,27 @@ withFreshVars (If state cond then' else') = do
     pure $ If state cond then'' else''
 withFreshVars expr = pure expr
 
+-- | Threshold for inlining.
+data Threshold
+    = ThresholdInt Int
+    | ThresholdInfinity
+    deriving (Show, Eq)
+
+instance Ord Threshold where
+    compare (ThresholdInt a) (ThresholdInt b) = compare a b
+    compare ThresholdInfinity ThresholdInfinity = EQ
+    compare ThresholdInfinity _ = GT
+    compare _ ThresholdInfinity = LT
+
+-- | Converts `Maybe Int` to `Threshold`.
+toThreshold :: Maybe Int -> Threshold
+toThreshold Nothing = ThresholdInfinity
+toThreshold (Just n) = ThresholdInt n
+
 data OptimContext = OptimContext
-    { inliningSizeThreshold :: Int
+    { inliningSizeThreshold :: Threshold
     , recInliningLimit :: Int
-    , recInliningSizeThreshold :: Int
+    , recInliningSizeThreshold :: Threshold
     }
     deriving (Show, Eq)
 

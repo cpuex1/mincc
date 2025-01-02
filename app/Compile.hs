@@ -38,7 +38,7 @@ import Backend.RegisterAlloc (assignRegister)
 import Backend.Spill (spillF, spillI)
 import Backend.Transform (transformCodeBlock)
 import Closure (getFunctions)
-import CommandLine (BackendIdentStateIO, CompilerConfig (cEmitOptim), ConfigIO, IdentEnvIO)
+import CommandLine (BackendIdentStateIO, CompilerConfig (cActivatedOptim, cEmitOptim, cInliningSize, cMaxInlining, cRecInliningSize), ConfigIO, IdentEnvIO)
 import Control.Exception (IOException, try)
 import Control.Monad (foldM, when)
 import Control.Monad.Error.Class (MonadError (throwError))
@@ -48,7 +48,7 @@ import Control.Monad.State.Lazy (StateT (runStateT), evalStateT, gets, modify)
 import Control.Monad.Trans.Class (MonadTrans (lift))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Data.Text (Text, pack)
+import Data.Text (pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Text.IO as TIO
 import Display (display)
@@ -59,12 +59,11 @@ import IdentAnalysis (loadTypeEnv)
 import KNorm (kNormalize)
 import Log (LogLevel (..), printLog, printTextLog)
 import NameRes (resolveNames)
-import Optim.Base (OptimContext (OptimContext), OptimStateT)
-import Optim.CompMerging (runMergeComp)
-import Optim.ConstFold (constFold)
-import Optim.Inlining (runInlining)
-import Optim.UnitElim (elimUnitArgs)
-import Optim.UnusedElim (unusedElim)
+import Optim.All (runOptim)
+import Optim.Base (
+    OptimContext (OptimContext),
+    OptimStateT,
+ )
 import Optim.Validator (validate)
 import Parser (parseExpr, parsePartialExpr)
 import Path (changeExt)
@@ -125,17 +124,12 @@ kNormalizeIO = kNormalize
 flattenExprIO :: KExpr -> IdentEnvIO KExpr
 flattenExprIO expr = expandArrayCreate (flattenExpr expr)
 
-optimChain :: (Monad m) => [(Text, KExpr -> OptimStateT m KExpr)]
-optimChain =
-    [ ("Function inlining", runInlining)
-    , ("Constant folding", constFold)
-    , ("Comparison merging", runMergeComp)
-    , ("Unused variables elimination", unusedElim)
-    , ("Unit args elimination", elimUnitArgs)
-    ]
-
 optimIO :: FilePath -> KExpr -> IdentEnvIO KExpr
-optimIO path expr = evalStateT (optimIOLoop 1 expr) (OptimContext 0 0 0)
+optimIO path expr = do
+    inliningSize <- asks cInliningSize
+    recInliningSize <- asks cRecInliningSize
+    maxInlining <- asks cMaxInlining
+    evalStateT (optimIOLoop 1 expr) (OptimContext inliningSize maxInlining recInliningSize)
   where
     optimIOLoop :: Int -> KExpr -> OptimStateT ConfigIO KExpr
     optimIOLoop roundCount beforeExpr = do
@@ -147,17 +141,20 @@ optimIO path expr = evalStateT (optimIOLoop 1 expr) (OptimContext 0 0 0)
             Left err -> throwError err
             Right _ -> pure ()
 
+        -- Get activated optimizations.
+        optimizations <- asks cActivatedOptim
+
         optimExpr <-
             foldM
-                ( \e (name, optim) -> do
-                    optimExpr <- optim e
-                    lift $ lift $ printTextLog Info $ name <> " performed"
+                ( \e kind -> do
+                    optimExpr <- runOptim kind e
+                    lift $ lift $ printTextLog Info $ display kind <> " performed"
                     when (optimExpr == e) $ do
                         lift $ lift $ printLog Info "Make no change"
                     pure optimExpr
                 )
                 beforeExpr
-                optimChain
+                optimizations
         if beforeExpr == optimExpr
             then do
                 _ <- lift $ lift $ printLog Info "No space for optimization"
@@ -193,7 +190,15 @@ optimInstIO :: [IntermediateCodeBlock Loc RegID] -> BackendIdentStateIO [Interme
 optimInstIO inst = pure $ map elimMul inst
 
 transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [CodeBlock Loc Int]
-transformCodeBlockIO blocks = (\blocks' -> blocks' ++ [exitBlock]) . concat <$> mapM transformCodeBlock blocks
+transformCodeBlockIO blocks =
+    (\blocks' -> blocks' ++ [exitBlock]) . concat
+        <$> mapM
+            ( \block -> do
+                blocks' <- transformCodeBlock block
+                liftB $ lift $ printTextLog Debug $ "Generated " <> getICBLabel block
+                pure blocks'
+            )
+            blocks
 
 livenessIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [IntermediateCodeBlock LivenessLoc Int]
 livenessIO = mapM livenessIO'

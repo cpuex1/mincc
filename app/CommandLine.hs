@@ -11,8 +11,11 @@ module CommandLine (
 import Backend.Lowering (BackendIdentState)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
+import Data.Set (Set, insert)
 import Error (CompilerError)
 import IdentAnalysis (IdentEnvT)
+import Optim.All (OptimKind (CompMerging, ConstFold, Inlining, UnusedElim))
+import Optim.Base (Threshold, toThreshold)
 import Options.Applicative
 import System.Console.ANSI (hNowSupportsANSI)
 import System.IO (stdout)
@@ -21,11 +24,17 @@ type ConfigIO = ReaderT CompilerConfig (ExceptT CompilerError IO)
 type IdentEnvIO = IdentEnvT ConfigIO
 type BackendIdentStateIO = BackendIdentState ConfigIO
 
+defaultMaxInlining :: Int
+defaultMaxInlining = 1
+
 data CompilerConfig = CompilerConfig
     { cInput :: [String]
     , cOutput :: String
     , cVerbose :: Bool
-    , cOptimize :: Int
+    , cInliningSize :: Threshold
+    , cRecInliningSize :: Threshold
+    , cMaxInlining :: Int
+    , cActivatedOptim :: Set OptimKind
     , cILimit :: Int
     , cFLimit :: Int
     , cANSI :: Bool
@@ -43,7 +52,14 @@ data CommandLineArg = CommandLineArg
     { input :: [String]
     , output :: String
     , verbose :: Bool
-    , optimize :: Int
+    , inliningSize :: Maybe Int
+    , recInliningSize :: Maybe Int
+    , maxInlining :: Int
+    , optCompMerging :: Bool
+    , optConstFold :: Bool
+    , optInlining :: Bool
+    , optUnusedElim :: Bool
+    , optimize :: Bool
     , iLimit :: Int
     , fLimit :: Int
     , emitAll :: Bool
@@ -82,11 +98,46 @@ parseArg =
             )
         <*> option
             auto
-            ( long "optimize"
-                <> help "Optimization level"
+            ( long "inlining-size"
+                <> help "The maximum size of functions to be inlined. Infinity if not specified."
+                <> value Nothing
+                <> metavar "THRESHOLD"
+            )
+        <*> option
+            auto
+            ( long "rec-inlining-size"
+                <> help "The maximum size of recursive functions to be inlined. Infinity if not specified."
+                <> value Nothing
+                <> metavar "THRESHOLD"
+            )
+        <*> option
+            auto
+            ( long "max-inlining"
+                <> help "The maximum number of inlining. This option is only for recursive functions."
                 <> showDefault
-                <> value 100
-                <> metavar "INT"
+                <> value defaultMaxInlining
+                <> metavar "ROUND"
+            )
+        <*> switch
+            ( long "opt-comp-merging"
+                <> help "Enable comparison merging optimization"
+            )
+        <*> switch
+            ( long "opt-const-fold"
+                <> help "Enable constant folding optimization"
+            )
+        <*> switch
+            ( long "opt-inlining"
+                <> help "Enable function inlining optimization"
+            )
+        <*> switch
+            ( long "opt-unused-elim"
+                <> help "Enable unused variable elimination optimization"
+            )
+        <*> switch
+            ( long "optimize"
+                <> short 'O'
+                <> help "Enable all optimizations"
             )
         <*> option
             auto
@@ -150,7 +201,10 @@ toCompilerConfig arg = do
             { cInput = input arg
             , cOutput = output arg
             , cVerbose = verbose arg
-            , cOptimize = optimize arg
+            , cInliningSize = toThreshold $ inliningSize arg
+            , cRecInliningSize = toThreshold $ recInliningSize arg
+            , cMaxInlining = maxInlining arg
+            , cActivatedOptim = selectedOptim
             , cILimit = iLimit arg
             , cFLimit = fLimit arg
             , cANSI = ansiSupported
@@ -163,3 +217,14 @@ toCompilerConfig arg = do
             , cEmitClosure = emitAll arg || emitClosure arg
             , cEmitIR = emitAll arg || emitIR arg
             }
+  where
+    insertIf :: (Ord a) => Bool -> a -> Set a -> Set a
+    insertIf True x = insert x
+    insertIf False _ = id
+
+    selectedOptim =
+        insertIf (optimize arg || optCompMerging arg) CompMerging
+            . insertIf (optimize arg || optConstFold arg) ConstFold
+            . insertIf (optimize arg || optInlining arg) Inlining
+            . insertIf (optimize arg || optUnusedElim arg) UnusedElim
+            $ mempty

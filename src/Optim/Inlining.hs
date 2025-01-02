@@ -12,7 +12,7 @@ import Control.Monad.State (
  )
 import Data.Map (Map, empty, insert, lookup)
 import Flatten (flattenExpr)
-import Optim.Base (OptimContext (inliningSizeThreshold, recInliningLimit, recInliningSizeThreshold), OptimStateT, exprSize, isUsed, withFreshVars)
+import Optim.Base (OptimContext (inliningSizeThreshold, recInliningLimit, recInliningSizeThreshold), OptimStateT, Threshold (ThresholdInt), exprSize, isUsed, withFreshVars)
 import Syntax (Expr (App, If, Let), Ident, KExpr, Pattern (PRec), subst)
 import Prelude hiding (lookup)
 
@@ -41,12 +41,12 @@ tryRegister func args expr =
             -- Recursive function
             recInliningLimit' <- lift $ gets recInliningLimit
             recInliningSizeThreshold' <- lift $ gets recInliningSizeThreshold
-            when (recInliningLimit' > 0 && size <= recInliningSizeThreshold') $
+            when (recInliningLimit' > 0 && ThresholdInt size <= recInliningSizeThreshold') $
                 registerTarget func args expr
         else do
             -- Non-recursive function
             inliningSizeThreshold' <- lift $ gets inliningSizeThreshold
-            when (size <= inliningSizeThreshold') $
+            when (ThresholdInt size <= inliningSizeThreshold') $
                 registerTarget func args expr
   where
     size = exprSize expr

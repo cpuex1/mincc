@@ -7,7 +7,7 @@ ASM = ./bin/r72b
 SIM = ./bin/r7sim
 
 # Tool options
-MINCC_OPTION = --emit-all --verbose
+MINCC_OPTION = --emit-all --verbose -O
 ASM_OPTION =
 SIM_OPTION = -b ./breakpoints.txt
 
@@ -17,8 +17,9 @@ BUILD_DIR = ./build
 # Configurations
 EXEC = fib
 
-# Include minrt targets
+# Include targets
 include ./src/minrt/minrt.mk
+include ./src/mincaml/mincaml.mk
 
 %.s: ./src/%.ml
 	mkdir -p $(BUILD_DIR)
@@ -39,3 +40,6 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f *.s
 	rm -f *.bin
+	rm -f *.ppm
+	rm -f print_int.txt
+	rm -f stat.txt
