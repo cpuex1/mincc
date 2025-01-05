@@ -107,7 +107,7 @@ parseLiteral =
         _ <- char '.'
         num2 <- many digitChar
         e <- option "" parseExp
-        pure $ read $ (if null num2 then num else num ++ "." ++ num2) ++ e
+        pure $ (read :: String -> Float) $ (if null num2 then num else num ++ "." ++ num2) ++ e
       where
         parseExp :: Parser String
         parseExp = do

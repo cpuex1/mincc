@@ -1,5 +1,5 @@
 (* The king of constant: PI *)
-let c_PI = 3.14159265358979323846 in
+let c_PI = 3.1415927410125732421875 in
 
 (* Check whether it is zero *)
 let rec fiszero x = x = 0.0 in
@@ -56,7 +56,7 @@ let rec kernel_cos x =
 (* Calculate sine *)
 let rec sin x =
   (* The king of constant: PI *)
-  let c_PI = 3.14159265358979323846 in
+  let c_PI = 3.1415927410125732421875 in
     let flag = x > 0.0 in
       let a = fabs x in
         let a = reduction_2pi a in
@@ -78,7 +78,7 @@ let rec sin x =
 (* Calculate cosine *)
 let rec cos x =
   (* The king of constant: PI *)
-  let c_PI = 3.14159265358979323846 in
+  let c_PI = 3.1415927410125732421875 in
     let flag = true in
       let a = reduction_2pi (fabs x) in
         let is_ge = a >= c_PI in

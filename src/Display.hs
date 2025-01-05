@@ -8,6 +8,7 @@ import Backend.Asm
 import Backend.Liveness (LivenessLoc (livenessState), LivenessState (fAlive, iAlive))
 import Data.Set (toAscList)
 import Data.Text
+import Numeric (showFFloat)
 import Syntax
 import Typing
 
@@ -22,7 +23,7 @@ instance Display Literal where
     display (LBool True) = "true"
     display (LBool False) = "false"
     display (LInt n) = pack $ show n
-    display (LFloat f) = pack $ show f
+    display (LFloat f) = pack $ showFFloat Nothing f ""
 
 instance Display UnaryOp where
     display Not = "not"
