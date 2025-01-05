@@ -52,8 +52,8 @@ data CommandLineArg = CommandLineArg
     { input :: [String]
     , output :: String
     , verbose :: Bool
-    , inliningSize :: Maybe Int
-    , recInliningSize :: Maybe Int
+    , inliningSize :: Int
+    , recInliningSize :: Int
     , maxInlining :: Int
     , optCompMerging :: Bool
     , optConstFold :: Bool
@@ -100,14 +100,14 @@ parseArg =
             auto
             ( long "inlining-size"
                 <> help "The maximum size of functions to be inlined. Infinity if not specified."
-                <> value Nothing
+                <> value (-1)
                 <> metavar "THRESHOLD"
             )
         <*> option
             auto
             ( long "rec-inlining-size"
                 <> help "The maximum size of recursive functions to be inlined. Infinity if not specified."
-                <> value Nothing
+                <> value (-1)
                 <> metavar "THRESHOLD"
             )
         <*> option
@@ -201,8 +201,8 @@ toCompilerConfig arg = do
             { cInput = input arg
             , cOutput = output arg
             , cVerbose = verbose arg
-            , cInliningSize = toThreshold $ inliningSize arg
-            , cRecInliningSize = toThreshold $ recInliningSize arg
+            , cInliningSize = toThreshold $ if inliningSize' < 0 then Nothing else Just inliningSize'
+            , cRecInliningSize = toThreshold $ if recInliningSize' < 0 then Nothing else Just recInliningSize'
             , cMaxInlining = maxInlining arg
             , cActivatedOptim = selectedOptim
             , cILimit = iLimit arg
@@ -218,6 +218,9 @@ toCompilerConfig arg = do
             , cEmitIR = emitAll arg || emitIR arg
             }
   where
+    inliningSize' = inliningSize arg
+    recInliningSize' = recInliningSize arg
+
     insertIf :: (Ord a) => Bool -> a -> Set a -> Set a
     insertIf True x = insert x
     insertIf False _ = id
