@@ -10,7 +10,7 @@ import Control.Monad.State (
     gets,
     modify,
  )
-import Data.Map (Map, empty, insert, lookup)
+import Data.Map (Map, delete, empty, insert, lookup)
 import Flatten (flattenExpr)
 import Optim.Base (OptimContext (inliningSizeThreshold, recInliningLimit, recInliningSizeThreshold), OptimStateT, Threshold (ThresholdInt), exprSize, isUsed, withFreshVars)
 import Syntax (Expr (App, If, Let), Ident, KExpr, Pattern (PRec), subst)
@@ -67,6 +67,16 @@ inlining (If state cond thenExpr elseExpr) = do
     thenExpr' <- inlining thenExpr
     elseExpr' <- inlining elseExpr
     pure $ If state cond thenExpr' elseExpr'
+inlining (Let state (PRec func args) expr body) = do
+    targets' <- gets targets
+    -- To prevent the definition of target function from being inlined.
+    modify $ \ctx ->
+        ctx{targets = delete func targets'}
+    expr' <- inlining expr
+    modify $ \ctx ->
+        ctx{targets = targets'}
+    body' <- inlining body
+    pure $ flattenExpr $ Let state (PRec func args) expr' body'
 inlining (Let state pat expr body) = do
     expr' <- inlining expr
     body' <- inlining body
