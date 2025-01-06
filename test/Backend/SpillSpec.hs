@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Backend.SpillSpec (spec) where
+module BackEnd.SpillSpec (spec) where
 
-import Backend.Asm (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), PrimitiveIntOp (PAdd), RegOrImm (Imm, Reg), Register (SavedReg, StackReg))
-import Backend.BackendEnv (BackendConfig (BackendConfig), BackendEnv (generatedFReg, generatedIReg), RegID, runBackendStateT)
-import Backend.Spill
+import BackEnd.Asm (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), PrimitiveIntOp (PAdd), RegOrImm (Imm, Reg), Register (SavedReg, StackReg))
+import BackEnd.BackendEnv (BackendConfig (BackendConfig), BackendEnv (generatedFReg, generatedIReg), RegID, runBackendStateT)
+import BackEnd.Spill
 import Control.Monad.Identity (Identity (runIdentity))
 import Control.Monad.State (modify)
 import Error (CompilerError)
-import Globals (defaultGlobalTable)
+import MiddleEnd.Globals (defaultGlobalTable)
 import Syntax (FloatBinOp (FAdd), Loc, dummyLoc)
 import Test.Hspec
 

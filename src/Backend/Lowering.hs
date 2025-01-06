@@ -1,15 +1,15 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Backend.Lowering (
+module BackEnd.Lowering (
     RegID,
     BackendIdentState,
     toInstructions,
 ) where
 
-import Backend.Asm
-import Backend.BackendEnv
-import Backend.FunctionCall (saveArgs)
+import BackEnd.Asm
+import BackEnd.BackendEnv
+import BackEnd.FunctionCall (saveArgs)
 import Builtin (BuiltinFunction (builtinInst), builtinMakeTuple, findBuiltin)
 import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError))
@@ -18,8 +18,8 @@ import Data.Map (fromList)
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
-import Globals (GlobalProp (globalOffset))
-import IdentAnalysis (IdentEnvT, asConstant, getTyOf)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, asConstant, getTyOf)
+import MiddleEnd.Globals (GlobalProp (globalOffset))
 import Syntax
 import Typing (TypeKind (TFloat, TUnit))
 

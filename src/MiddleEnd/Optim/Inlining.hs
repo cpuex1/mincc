@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs #-}
 
-module Optim.Inlining (runInlining) where
+module MiddleEnd.Optim.Inlining (runInlining) where
 
 import Control.Monad (when)
 import Control.Monad.State (
@@ -11,8 +11,8 @@ import Control.Monad.State (
     modify,
  )
 import Data.Map (Map, delete, empty, insert, lookup)
-import Flatten (flattenExpr)
-import Optim.Base (OptimContext (inliningSizeThreshold, recInliningLimit, recInliningSizeThreshold), OptimStateT, Threshold (ThresholdInt), exprSize, isUsed, withFreshVars)
+import FrontEnd.Flatten (flattenExpr)
+import MiddleEnd.Optim.Base (OptimContext (inliningSizeThreshold, recInliningLimit, recInliningSizeThreshold), OptimStateT, Threshold (ThresholdInt), exprSize, isUsed, withFreshVars)
 import Syntax (Expr (App, If, Let), Ident, KExpr, Pattern (PRec), subst)
 import Prelude hiding (lookup)
 

@@ -1,9 +1,9 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Backend.Transform (transformCodeBlock, CodeBlockGenStateT) where
+module BackEnd.Transform (transformCodeBlock, CodeBlockGenStateT) where
 
-import Backend.Asm (
+import BackEnd.Asm (
     AllowBranch,
     CodeBlock (..),
     DisallowBranch,
@@ -16,11 +16,11 @@ import Backend.Asm (
     RegOrImm (..),
     Register (..),
  )
-import Backend.BackendEnv (BackendEnv (globals), BackendStateT)
-import Backend.Shuffle (shuffleRegOrImm, shuffleRegs)
+import BackEnd.BackendEnv (BackendEnv (globals), BackendStateT)
+import BackEnd.Shuffle (shuffleRegOrImm, shuffleRegs)
 import Control.Monad.State (MonadTrans (lift), StateT, execStateT, gets, modify)
 import Data.Text (Text, isPrefixOf, pack)
-import Globals (
+import MiddleEnd.Globals (
     GlobalTable (endAddr),
  )
 import Syntax (Loc, dummyLoc)

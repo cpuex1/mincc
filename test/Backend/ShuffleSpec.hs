@@ -1,6 +1,6 @@
-module Backend.ShuffleSpec (spec) where
+module BackEnd.ShuffleSpec (spec) where
 
-import Backend.Shuffle
+import BackEnd.Shuffle
 import Test.Hspec
 
 spec :: Spec

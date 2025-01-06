@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module IdentAnalysis (
+module MiddleEnd.Analysis.Identifier (
     IdentProp (IdentProp, typeOf, constant, isClosure),
     IdentContext (..),
     IdentEnvT,
@@ -21,8 +21,8 @@ import Control.Monad.State (StateT, gets, modify)
 import Data.Map (Map, adjust, delete, empty, insert, lookup, toList)
 import Data.Text (Text, pack)
 import Display (display)
+import FrontEnd.TypeInferrer (TypeEnv (variables), removeVar)
 import Syntax
-import TypeInferrer (TypeEnv (variables), removeVar)
 import Typing (Ty, TypeKind (TUnit, TVar))
 import Prelude hiding (lookup)
 

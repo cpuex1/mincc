@@ -19,15 +19,15 @@ import Options.Applicative (
     (<**>),
  )
 
-import Backend.BackendEnv (BackendConfig (BackendConfig), liftB, runBackendStateT)
-import ConstantAnalysis (registerConstants)
+import BackEnd.BackendEnv (BackendConfig (BackendConfig), liftB, runBackendStateT)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.State (evalStateT)
 import Control.Monad.Trans.Class
 import Error
-import IdentAnalysis (defaultIdentContext, reportEnv)
 import Log
+import MiddleEnd.Analysis.Constant (registerConstants)
+import MiddleEnd.Analysis.Identifier (defaultIdentContext, reportEnv)
 import Path
 import Syntax (Function, ResolvedExpr)
 import System.Exit (ExitCode (ExitFailure), exitWith)

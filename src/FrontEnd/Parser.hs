@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (
+module FrontEnd.Parser (
     lexeme,
     parseLiteral,
     parseIdent,

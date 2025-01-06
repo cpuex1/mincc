@@ -1,10 +1,10 @@
 {-# LANGUAGE GADTs #-}
 
-module KNorm (
+module FrontEnd.KNorm (
     kNormalize,
 ) where
 
-import IdentAnalysis (IdentEnvT, genNewVar)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar)
 import Syntax
 
 -- | Insert a let expression to a tail of the K-normalized expression.

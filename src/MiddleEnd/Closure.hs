@@ -1,10 +1,10 @@
 {-# LANGUAGE GADTs #-}
 
-module Closure (getFunctions, ClosureEnv (ClosureEnv)) where
+module MiddleEnd.Closure (getFunctions, ClosureEnv (ClosureEnv)) where
 
 import Control.Monad (unless)
 import Control.Monad.State (MonadTrans (lift), State, StateT (runStateT), execState, get, gets, modify)
-import IdentAnalysis (IdentEnvT, genNewVar, getTyOf, identState)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar, getTyOf, identState)
 import Syntax
 import Typing (TypeKind (TUnit))
 

@@ -8,14 +8,14 @@ module CommandLine (
     toCompilerConfig,
 ) where
 
-import Backend.Lowering (BackendIdentState)
+import BackEnd.Lowering (BackendIdentState)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
 import Data.Set (Set, insert)
 import Error (CompilerError)
-import IdentAnalysis (IdentEnvT)
-import Optim.All (OptimKind (CompMerging, ConstFold, Inlining, UnusedElim))
-import Optim.Base (Threshold, toThreshold)
+import MiddleEnd.Analysis.Identifier (IdentEnvT)
+import MiddleEnd.Optim.All (OptimKind (CompMerging, ConstFold, Inlining, UnusedElim))
+import MiddleEnd.Optim.Base (Threshold, toThreshold)
 import Options.Applicative
 import System.Console.ANSI (hNowSupportsANSI)
 import System.IO (stdout)

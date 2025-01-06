@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Backend.Asm (
+module BackEnd.Asm (
     RegID,
     InstLabel,
     Register (..),

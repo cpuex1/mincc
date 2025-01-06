@@ -1,4 +1,4 @@
-module Backend.Shuffle (
+module BackEnd.Shuffle (
     runDetectLoop,
     detectAllLoops,
     genCirc,
@@ -7,7 +7,7 @@ module Backend.Shuffle (
     shuffleRegOrImm,
 ) where
 
-import Backend.Asm (RegID, RegOrImm (Reg), Register (ArgsReg, TempReg))
+import BackEnd.Asm (RegID, RegOrImm (Reg), Register (ArgsReg, TempReg))
 import Control.Monad (when)
 import Control.Monad.State (State, evalState, gets, modify)
 import Data.List ((\\))

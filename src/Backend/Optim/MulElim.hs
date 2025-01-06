@@ -1,8 +1,8 @@
 {-# LANGUAGE GADTs #-}
 
-module Backend.Optim.MulElim (elimMul) where
+module BackEnd.Optim.MulElim (elimMul) where
 
-import Backend.Asm (
+import BackEnd.Asm (
     AllowBranch,
     Inst (IBranch, IIntOp),
     IntermediateCodeBlock (getICBInst),

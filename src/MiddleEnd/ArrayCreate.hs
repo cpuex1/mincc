@@ -1,12 +1,12 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module ArrayCreate (expandArrayCreate) where
+module MiddleEnd.ArrayCreate (expandArrayCreate) where
 
 import Data.Text (Text)
 import Display (Display (display))
-import Flatten (flattenExpr)
-import IdentAnalysis (IdentEnvT, IdentProp (IdentProp), genNewVar, registerProp)
+import FrontEnd.Flatten (flattenExpr)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (IdentProp), genNewVar, registerProp)
 import Syntax (
     BinaryOp (IntOp),
     Cond (CComp),

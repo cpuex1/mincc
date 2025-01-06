@@ -25,39 +25,39 @@ source-repository head
 
 library
   exposed-modules:
-      ArrayCreate
-      Backend.Asm
-      Backend.BackendEnv
-      Backend.FunctionCall
-      Backend.Liveness
-      Backend.Lowering
-      Backend.Optim.MulElim
-      Backend.RegisterAlloc
-      Backend.Shuffle
-      Backend.Spill
-      Backend.Transform
+      BackEnd.Asm
+      BackEnd.BackendEnv
+      BackEnd.FunctionCall
+      BackEnd.Liveness
+      BackEnd.Lowering
+      BackEnd.Optim.MulElim
+      BackEnd.RegisterAlloc
+      BackEnd.Shuffle
+      BackEnd.Spill
+      BackEnd.Transform
       Builtin
-      Closure
-      ConstantAnalysis
       Display
       Error
-      Flatten
-      Globals
-      IdentAnalysis
-      KNorm
-      NameRes
-      Optim.All
-      Optim.Base
-      Optim.CompMerging
-      Optim.ConstExpansion
-      Optim.ConstFold
-      Optim.Inlining
-      Optim.UnitElim
-      Optim.UnusedElim
-      Optim.Validator
-      Parser
+      FrontEnd.Flatten
+      FrontEnd.KNorm
+      FrontEnd.NameRes
+      FrontEnd.Parser
+      FrontEnd.TypeInferrer
+      MiddleEnd.Analysis.Constant
+      MiddleEnd.Analysis.Identifier
+      MiddleEnd.ArrayCreate
+      MiddleEnd.Closure
+      MiddleEnd.Globals
+      MiddleEnd.Optim.All
+      MiddleEnd.Optim.Base
+      MiddleEnd.Optim.CompMerging
+      MiddleEnd.Optim.ConstExpansion
+      MiddleEnd.Optim.ConstFold
+      MiddleEnd.Optim.Inlining
+      MiddleEnd.Optim.UnitElim
+      MiddleEnd.Optim.UnusedElim
+      MiddleEnd.Validator
       Syntax
-      TypeInferrer
       Typing
   other-modules:
       Paths_mincc
@@ -111,8 +111,8 @@ test-suite mincc-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Backend.ShuffleSpec
-      Backend.SpillSpec
+      BackEnd.ShuffleSpec
+      BackEnd.SpillSpec
       ParserSpec
       Paths_mincc
   autogen-modules:

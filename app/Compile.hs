@@ -16,8 +16,7 @@ module Compile (
     assignRegisterIO,
 ) where
 
-import ArrayCreate (expandArrayCreate)
-import Backend.Asm (
+import BackEnd.Asm (
     CodeBlock,
     IntermediateCodeBlock (getICBInst, getICBLabel),
     RegID,
@@ -25,20 +24,24 @@ import Backend.Asm (
     exitBlock,
     substIState,
  )
-import Backend.BackendEnv (
+import BackEnd.BackendEnv (
     BackendConfig (fRegLimit, iRegLimit),
     BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen),
     liftB,
  )
-import Backend.FunctionCall (saveRegisters)
-import Backend.Liveness (LivenessLoc (livenessLoc), liveness)
-import Backend.Lowering (toInstructions)
-import Backend.Optim.MulElim (elimMul)
-import Backend.RegisterAlloc (assignRegister)
-import Backend.Spill (spillF, spillI)
-import Backend.Transform (transformCodeBlock)
-import Closure (getFunctions)
-import CommandLine (BackendIdentStateIO, CompilerConfig (cActivatedOptim, cEmitOptim, cInliningSize, cMaxInlining, cRecInliningSize), ConfigIO, IdentEnvIO)
+import BackEnd.FunctionCall (saveRegisters)
+import BackEnd.Liveness (LivenessLoc (livenessLoc), liveness)
+import BackEnd.Lowering (toInstructions)
+import BackEnd.Optim.MulElim (elimMul)
+import BackEnd.RegisterAlloc (assignRegister)
+import BackEnd.Spill (spillF, spillI)
+import BackEnd.Transform (transformCodeBlock)
+import CommandLine (
+    BackendIdentStateIO,
+    CompilerConfig (cActivatedOptim, cEmitOptim, cInliningSize, cMaxInlining, cRecInliningSize),
+    ConfigIO,
+    IdentEnvIO,
+ )
 import Control.Exception (IOException, try)
 import Control.Monad (foldM, when)
 import Control.Monad.Error.Class (MonadError (throwError))
@@ -53,19 +56,22 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Text.IO as TIO
 import Display (display)
 import Error (CompilerError (OtherError, ParserError))
-import Flatten (flattenExpr)
-import Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
-import IdentAnalysis (loadTypeEnv)
-import KNorm (kNormalize)
+import FrontEnd.Flatten (flattenExpr)
+import FrontEnd.KNorm (kNormalize)
+import FrontEnd.NameRes (resolveNames)
+import FrontEnd.Parser (parseExpr, parsePartialExpr)
+import FrontEnd.TypeInferrer (inferType)
 import Log (LogLevel (..), printLog, printTextLog)
-import NameRes (resolveNames)
-import Optim.All (runOptim)
-import Optim.Base (
+import MiddleEnd.Analysis.Identifier (loadTypeEnv)
+import MiddleEnd.ArrayCreate (expandArrayCreate)
+import MiddleEnd.Closure (getFunctions)
+import MiddleEnd.Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
+import MiddleEnd.Optim.All (runOptim)
+import MiddleEnd.Optim.Base (
     OptimContext (OptimContext),
     OptimStateT,
  )
-import Optim.Validator (validate)
-import Parser (parseExpr, parsePartialExpr)
+import MiddleEnd.Validator (validate)
 import Path (changeExt)
 import Syntax (
     Function,
@@ -76,7 +82,6 @@ import Syntax (
     TypedExpr,
  )
 import Text.Megaparsec (MonadParsec (eof), parse)
-import TypeInferrer (inferType)
 
 readFileIO :: FilePath -> ConfigIO ByteString
 readFileIO path = do

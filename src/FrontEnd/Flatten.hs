@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs #-}
 
-module Flatten (flattenExpr) where
+module FrontEnd.Flatten (flattenExpr) where
 
 import Syntax
 

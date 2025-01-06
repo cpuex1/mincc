@@ -1,12 +1,12 @@
 {-# LANGUAGE GADTs #-}
 
-module Optim.ConstFold (constFold) where
+module MiddleEnd.Optim.ConstFold (constFold) where
 
-import ConstantAnalysis (registerConstants)
 import Control.Monad.Trans (MonadTrans (lift))
-import Flatten (flattenExpr)
-import IdentAnalysis (asConstant)
-import Optim.Base (OptimStateT)
+import FrontEnd.Flatten (flattenExpr)
+import MiddleEnd.Analysis.Constant (registerConstants)
+import MiddleEnd.Analysis.Identifier (asConstant)
+import MiddleEnd.Optim.Base (OptimStateT)
 import Syntax (
     BinaryOp (FloatOp, IntOp, RelationOp),
     Cond (CComp, CIdentity),

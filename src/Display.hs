@@ -4,8 +4,8 @@
 
 module Display (display, Display) where
 
-import Backend.Asm
-import Backend.Liveness (LivenessLoc (livenessState), LivenessState (fAlive, iAlive))
+import BackEnd.Asm
+import BackEnd.Liveness (LivenessLoc (livenessState), LivenessState (fAlive, iAlive))
 import Data.Set (toAscList)
 import Data.Text
 import Numeric (showFFloat)

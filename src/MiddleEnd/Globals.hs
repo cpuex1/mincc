@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Globals (
+module MiddleEnd.Globals (
     searchGlobalTable,
     defaultGlobalTable,
     extractGlobals,
@@ -15,7 +15,7 @@ import Control.Monad.State (MonadTrans (lift), StateT, gets, modify)
 import Data.Map (Map, elems, empty, insert, lookup)
 import Data.Text (Text, pack)
 import Display (Display, display)
-import IdentAnalysis (IdentEnvT, IdentProp (IdentProp), asConstant, getTyOf, registerProp)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (IdentProp), asConstant, getTyOf, registerProp)
 import Syntax (Expr (App, ArrayCreate, If, Let, Tuple), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PUnit, PVar), TypedState (TypedState), dummyLoc, subst)
 import Typing (Ty, TypeKind (TUnit))
 import Prelude hiding (lookup)

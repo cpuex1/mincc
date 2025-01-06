@@ -1,14 +1,14 @@
 {-# LANGUAGE GADTs #-}
 
-module Optim.ConstExpansion (expandConstants) where
+module MiddleEnd.Optim.ConstExpansion (expandConstants) where
 
-import ConstantAnalysis (registerConstants)
 import Control.Monad (foldM)
 import Control.Monad.Trans (MonadTrans (lift))
 import Data.List (union)
-import Flatten (flattenExpr)
-import IdentAnalysis (IdentProp (constant), genNewVar, getTyOf, searchProp)
-import Optim.Base (OptimStateT)
+import FrontEnd.Flatten (flattenExpr)
+import MiddleEnd.Analysis.Constant (registerConstants)
+import MiddleEnd.Analysis.Identifier (IdentProp (constant), genNewVar, getTyOf, searchProp)
+import MiddleEnd.Optim.Base (OptimStateT)
 import Syntax (
     AllowCompBranch,
     Cond (CComp, CIdentity),

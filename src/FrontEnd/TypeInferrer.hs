@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module TypeInferrer (
+module FrontEnd.TypeInferrer (
     genNewId,
     defaultEnv,
     inferType,

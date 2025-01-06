@@ -3,7 +3,7 @@
 module ParserSpec (spec) where
 
 import Data.Either (isLeft, isRight)
-import Parser
+import FrontEnd.Parser
 import Syntax
 import Test.Hspec
 import Text.Megaparsec (MonadParsec (eof), parse)

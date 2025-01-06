@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs #-}
 
-module Backend.Liveness (
+module BackEnd.Liveness (
     liveness,
     RegGraph (..),
     LivenessLoc (LivenessLoc, livenessLoc, livenessState),
@@ -9,7 +9,7 @@ module Backend.Liveness (
     toGraph,
 ) where
 
-import Backend.Asm
+import BackEnd.Asm
 import Control.Monad.State (MonadState (get, put), State, evalState, gets, modify)
 import Data.Map (Map, fromList)
 import Data.Set (Set, delete, empty, insert, toAscList, union, unions)

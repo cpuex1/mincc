@@ -1,13 +1,13 @@
 {-# LANGUAGE GADTs #-}
 
-module Backend.FunctionCall (
+module BackEnd.FunctionCall (
     saveArgs,
     saveRegisters,
 ) where
 
-import Backend.Asm
-import Backend.BackendEnv (BackendEnv (fArgsLen), BackendStateT, genTempFReg, genTempIReg, iArgsLen)
-import Backend.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
+import BackEnd.Asm
+import BackEnd.BackendEnv (BackendEnv (fArgsLen), BackendStateT, genTempFReg, genTempIReg, iArgsLen)
+import BackEnd.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
 import Data.Set (toAscList)

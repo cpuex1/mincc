@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs #-}
 
-module Optim.Base (
+module MiddleEnd.Optim.Base (
     definitelyPure,
     exprSize,
     isUsed,
@@ -13,7 +13,7 @@ module Optim.Base (
 
 import Control.Monad.State (State, StateT, execState, modify)
 import Control.Monad.Trans (lift)
-import IdentAnalysis (IdentEnvT, genNewVar, getTyOf)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar, getTyOf)
 import Syntax (Expr (..), Ident, KExpr, Pattern (PRec, PTuple, PUnit, PVar), subst, visitExprM)
 
 {- | Checks if the expression is pure.

@@ -1,8 +1,8 @@
 {-# LANGUAGE GADTs #-}
 
-module Backend.Spill (spillI, spillF) where
+module BackEnd.Spill (spillI, spillF) where
 
-import Backend.Asm (
+import BackEnd.Asm (
     AllowBranch,
     Inst (..),
     IntermediateCodeBlock (getICBInst, localVars),
@@ -11,7 +11,7 @@ import Backend.Asm (
     RegOrImm (Reg),
     Register (SavedReg, StackReg),
  )
-import Backend.BackendEnv (BackendStateT, genTempFReg, genTempIReg)
+import BackEnd.BackendEnv (BackendStateT, genTempFReg, genTempIReg)
 import Syntax (Loc, dummyLoc)
 
 loadNewIReg :: (Monad m) => Int -> RegID -> Register RegID Int -> BackendStateT m (Register RegID Int, [Inst Loc RegID AllowBranch])

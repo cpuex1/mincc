@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Optim.All (OptimKind (..), runOptim) where
+module MiddleEnd.Optim.All (OptimKind (..), runOptim) where
 
 import Display (Display (display))
-import Optim.Base (OptimStateT)
-import Optim.CompMerging (runMergeComp)
-import Optim.ConstFold (constFold)
-import Optim.Inlining (runInlining)
-import Optim.UnusedElim (unusedElim)
+import MiddleEnd.Optim.Base (OptimStateT)
+import MiddleEnd.Optim.CompMerging (runMergeComp)
+import MiddleEnd.Optim.ConstFold (constFold)
+import MiddleEnd.Optim.Inlining (runInlining)
+import MiddleEnd.Optim.UnusedElim (unusedElim)
 import Syntax (KExpr)
 
 -- | List of optimizations.

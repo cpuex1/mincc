@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Optim.Validator (validate, validateFlatten, validateType) where
+module MiddleEnd.Validator (validate, validateFlatten, validateType) where
 
 import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
@@ -9,7 +9,7 @@ import Control.Monad.Trans (MonadTrans (lift))
 import Data.Text (Text)
 import Display (Display (display))
 import Error (CompilerError (AssertionError))
-import IdentAnalysis (IdentEnvT, getTyOf)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, getTyOf)
 import Syntax (
     AllowCompBranch,
     BinaryOp (FloatOp, IntOp, RelationOp),

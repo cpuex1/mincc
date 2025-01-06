@@ -1,8 +1,8 @@
 {-# LANGUAGE GADTs #-}
 
-module ConstantAnalysis (registerConstants) where
+module MiddleEnd.Analysis.Constant (registerConstants) where
 
-import IdentAnalysis (IdentEnvT, IdentProp (constant), updateProp)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (constant), updateProp)
 import Syntax (Expr (Const, If, Let), KExpr, Pattern (PRec, PVar))
 
 -- | Registers variables that hold a constant value.
