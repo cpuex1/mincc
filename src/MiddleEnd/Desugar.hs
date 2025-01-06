@@ -1,9 +1,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module MiddleEnd.ArrayCreate (expandArrayCreate) where
+module MiddleEnd.Desugar (expandArrayCreate) where
 
-import Data.Text (Text)
+import Control.Monad (foldM)
+import Control.Monad.State (MonadTrans (lift), StateT (runStateT), modify)
 import Display (Display (display))
 import FrontEnd.Flatten (flattenExpr)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (IdentProp), genNewVar, registerProp)
@@ -26,10 +27,11 @@ import Syntax (
  )
 import Typing (Ty, TypeKind (..))
 
-generateInitArrayFunc :: (Monad m) => Text -> Ty -> (Ident -> IdentEnvT m KExpr) -> IdentEnvT m KExpr
-generateInitArrayFunc uniqueId valTy bodyGen = do
-    body <- bodyGen init_array_func
+-- Use List instead of Set because ordering is not defined for `KExpr -> IdentEnvT m KExpr`.
+type ArrayCreateStateT m = StateT [KExpr -> IdentEnvT m KExpr] (IdentEnvT m)
 
+generateInitArrayFunc :: (Monad m) => Ident -> Ty -> KExpr -> IdentEnvT m KExpr
+generateInitArrayFunc uniqueId valTy body = do
     array <- genNewVar (TArray valTy)
     idx <- genNewVar TInt
     size <- genNewVar TInt
@@ -38,7 +40,7 @@ generateInitArrayFunc uniqueId valTy bodyGen = do
     incResult <- genNewVar TInt
 
     -- Registers variables.
-    registerProp init_array_func (IdentProp func_ty Nothing False)
+    registerProp uniqueId (IdentProp func_ty Nothing False)
 
     let func_body =
             If
@@ -58,7 +60,7 @@ generateInitArrayFunc uniqueId valTy bodyGen = do
                             (Binary (TypedState TInt dummyLoc) (IntOp Add) idx inc)
                             ( App
                                 (TypedState TUnit dummyLoc)
-                                init_array_func
+                                uniqueId
                                 [array, incResult, size, value]
                             )
                         )
@@ -66,39 +68,40 @@ generateInitArrayFunc uniqueId valTy bodyGen = do
                 )
                 (Const (TypedState TUnit dummyLoc) LUnit)
     let bodyTy = getType $ getExprState body
-    pure $ Let (TypedState bodyTy dummyLoc) (PRec init_array_func [array, idx, size, value]) func_body body
+    pure $ Let (TypedState bodyTy dummyLoc) (PRec uniqueId [array, idx, size, value]) func_body body
   where
-    init_array_func = UserDefined dummyLoc $ "Array.create" <> uniqueId
     func_ty = TFun [TArray valTy, TInt, TInt, valTy] TUnit
 
 expandArrayCreate :: (Monad m) => KExpr -> IdentEnvT m KExpr
-expandArrayCreate expr = flattenExpr <$> expandArrayCreate' expr
+expandArrayCreate expr = do
+    (expr', funcGenerators) <- runStateT (expandArrayCreate' expr) []
+    flattenExpr <$> foldM (\e gen -> gen e) expr' funcGenerators
   where
-    expandArrayCreate' :: (Monad m) => KExpr -> IdentEnvT m KExpr
+    expandArrayCreate' :: (Monad m) => KExpr -> ArrayCreateStateT m KExpr
     expandArrayCreate' (Let state1 (PVar v) (ArrayCreate (TypedState (TArray valTy) loc) size val) body) = do
         body' <- expandArrayCreate' body
-        generateInitArrayFunc
-            (display v)
-            valTy
-            ( \func -> do
-                zero <- genNewVar TInt
-                pure $
-                    Let
+
+        let funcGen = generateInitArrayFunc uniqueId valTy
+        modify $ \ctx -> funcGen : ctx
+        zero <- lift $ genNewVar TInt
+        pure $
+            Let
+                state1
+                (PVar v)
+                (ArrayCreate (TypedState (TArray valTy) loc) size val)
+                ( Let
+                    state1
+                    (PVar zero)
+                    (Const (TypedState TInt loc) (LInt 0))
+                    ( Let
                         state1
-                        (PVar v)
-                        (ArrayCreate (TypedState (TArray valTy) loc) size val)
-                        ( Let
-                            state1
-                            (PVar zero)
-                            (Const (TypedState TInt loc) (LInt 0))
-                            ( Let
-                                state1
-                                PUnit
-                                (App (TypedState TUnit loc) func [v, zero, size, val])
-                                body'
-                            )
-                        )
-            )
+                        PUnit
+                        (App (TypedState TUnit loc) uniqueId [v, zero, size, val])
+                        body'
+                    )
+                )
+      where
+        uniqueId = UserDefined dummyLoc $ "Array.create" <> display v
     expandArrayCreate' (Let state pat expr' body) = do
         expr'' <- expandArrayCreate' expr'
         body' <- expandArrayCreate' body
@@ -108,6 +111,6 @@ expandArrayCreate expr = flattenExpr <$> expandArrayCreate' expr
         else'' <- expandArrayCreate' else'
         pure $ If state cond then'' else''
     expandArrayCreate' (ArrayCreate state size val) = do
-        temp <- genNewVar (getType state)
+        temp <- lift $ genNewVar (getType state)
         expandArrayCreate' (Let state (PVar temp) (ArrayCreate state size val) (Var state temp))
     expandArrayCreate' expr' = pure expr'

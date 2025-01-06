@@ -45,8 +45,8 @@ library
       FrontEnd.TypeInferrer
       MiddleEnd.Analysis.Constant
       MiddleEnd.Analysis.Identifier
-      MiddleEnd.ArrayCreate
       MiddleEnd.Closure
+      MiddleEnd.Desugar
       MiddleEnd.Globals
       MiddleEnd.Optim.All
       MiddleEnd.Optim.Base
