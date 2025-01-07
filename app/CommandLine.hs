@@ -14,7 +14,7 @@ import Control.Monad.Trans.Reader
 import Data.Set (Set, insert)
 import Error (CompilerError)
 import MiddleEnd.Analysis.Identifier (IdentEnvT)
-import MiddleEnd.Optim.All (OptimKind (CompMerging, ConstFold, Inlining, UnusedElim))
+import MiddleEnd.Optim.All (OptimKind (..))
 import MiddleEnd.Optim.Base (Threshold, toThreshold)
 import Options.Applicative
 import System.Console.ANSI (hNowSupportsANSI)
@@ -56,6 +56,7 @@ data CommandLineArg = CommandLineArg
     , recInliningSize :: Int
     , maxInlining :: Int
     , optCompMerging :: Bool
+    , optVarMerging :: Bool
     , optConstFold :: Bool
     , optInlining :: Bool
     , optUnusedElim :: Bool
@@ -121,6 +122,10 @@ parseArg =
         <*> switch
             ( long "opt-comp-merging"
                 <> help "Enable comparison merging optimization"
+            )
+        <*> switch
+            ( long "opt-var-merging"
+                <> help "Enable variable merging optimization"
             )
         <*> switch
             ( long "opt-const-fold"
@@ -227,6 +232,7 @@ toCompilerConfig arg = do
 
     selectedOptim =
         insertIf (optimize arg || optCompMerging arg) CompMerging
+            . insertIf (optimize arg || optVarMerging arg) VarMerging
             . insertIf (optimize arg || optConstFold arg) ConstFold
             . insertIf (optimize arg || optInlining arg) Inlining
             . insertIf (optimize arg || optUnusedElim arg) UnusedElim

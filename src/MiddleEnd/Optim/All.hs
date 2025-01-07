@@ -8,11 +8,13 @@ import MiddleEnd.Optim.CompMerging (runMergeComp)
 import MiddleEnd.Optim.ConstFold (constFold)
 import MiddleEnd.Optim.Inlining (runInlining)
 import MiddleEnd.Optim.UnusedElim (unusedElim)
+import MiddleEnd.Optim.VarMerging (mergeVars)
 import Syntax (KExpr)
 
 -- | List of optimizations.
 data OptimKind
     = CompMerging
+    | VarMerging
     | ConstFold
     | UnusedElim
     | Inlining
@@ -21,12 +23,14 @@ data OptimKind
 -- | Run the optimization.
 runOptim :: (Monad m) => OptimKind -> KExpr -> OptimStateT m KExpr
 runOptim CompMerging = runMergeComp
+runOptim VarMerging = mergeVars
 runOptim ConstFold = constFold
 runOptim Inlining = runInlining
 runOptim UnusedElim = unusedElim
 
 instance Display OptimKind where
     display CompMerging = "Comparison merging"
+    display VarMerging = "Variable merging"
     display ConstFold = "Constant folding"
     display Inlining = "Function inlining"
     display UnusedElim = "Unused variables elimination"
