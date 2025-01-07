@@ -23,7 +23,7 @@ performRelationOp :: (Ord a) => RelationBinOp -> a -> a -> Bool
 performRelationOp Eq lhs' rhs' = lhs' == rhs'
 performRelationOp Ne lhs' rhs' = lhs' /= rhs'
 performRelationOp Lt lhs' rhs' = lhs' < rhs'
-performRelationOp Ge lhs' rhs' = lhs' <= rhs'
+performRelationOp Ge lhs' rhs' = lhs' >= rhs'
 
 -- | Calculates constant variables in the compile-time.
 constFold :: (Monad m) => KExpr -> OptimStateT m KExpr
