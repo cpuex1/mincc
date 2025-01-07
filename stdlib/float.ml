@@ -31,16 +31,16 @@ let rec floor x =
     if a > x then a -. 1.0 else a in
 
 (* Utility functions for sine and cosine *)
+let rec half_loop a p =
+  if a < c_PI *. 2.0 then
+    a
+  else
+    if a >= p then half_loop (a -. p) (fhalf p)
+    else half_loop a (fhalf p) in
+let rec double_loop a p =
+  if a < p then p else double_loop a (p *. 2.0) in
 let rec reduction_2pi a =
-  let rec double_loop a p =
-    if a < p then p else double_loop a (p *. 2.0) in
-    let rec half_loop a p =
-      if a < c_PI *. 2.0 then
-        a
-      else
-        if a >= p then half_loop (a -. p) (fhalf p)
-        else half_loop a (fhalf p) in
-      half_loop a (double_loop a (c_PI *. 2.0)) in
+  half_loop a (double_loop a (c_PI *. 2.0)) in
 let rec kernel_sin x =
   let x2 = x *. x in
     let x3 = x *. x2 in
