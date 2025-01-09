@@ -66,8 +66,8 @@ import MiddleEnd.Analysis.Identifier (loadTypeEnv)
 import MiddleEnd.Closure (getFunctions)
 import MiddleEnd.Desugar (expandArrayCreate)
 import MiddleEnd.Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
-import MiddleEnd.Optim.All (runOptim)
-import MiddleEnd.Optim.Base (
+import MiddleEnd.Optim (runOptim)
+import MiddleEnd.Optim.Common (
     OptimContext (OptimContext),
     OptimStateT,
  )

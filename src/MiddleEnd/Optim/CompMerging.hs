@@ -3,7 +3,7 @@ module MiddleEnd.Optim.CompMerging (runMergeComp) where
 import Control.Monad.State (StateT, evalStateT, gets, modify)
 import Data.Map (Map, empty, insert)
 import qualified Data.Map as M
-import MiddleEnd.Optim.Base (OptimStateT)
+import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (BinaryOp (RelationOp), Cond (CComp, CIdentity), Expr (..), Ident, KExpr, Pattern (PVar), RelationBinOp)
 
 newtype CompContext = CompContext

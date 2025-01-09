@@ -12,7 +12,8 @@ import Control.Monad.State (
  )
 import Data.Map (Map, delete, empty, insert, lookup)
 import FrontEnd.Flatten (flattenExpr)
-import MiddleEnd.Optim.Base (OptimContext (inliningSizeThreshold, recInliningLimit, recInliningSizeThreshold), OptimStateT, Threshold (ThresholdInt), exprSize, isUsed, withFreshVars)
+import MiddleEnd.Analysis.Common (exprSize, isUsed)
+import MiddleEnd.Optim.Common (OptimContext (inliningSizeThreshold, recInliningLimit, recInliningSizeThreshold), OptimStateT, Threshold (ThresholdInt), withFreshVars)
 import Syntax (Expr (App, If, Let), Ident, KExpr, Pattern (PRec), subst)
 import Prelude hiding (lookup)
 

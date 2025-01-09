@@ -2,7 +2,7 @@ module MiddleEnd.Optim.VarMerging (mergeVars) where
 
 import Control.Monad.Trans (MonadTrans (lift))
 import MiddleEnd.Analysis.Identifier (removeProp)
-import MiddleEnd.Optim.Base (OptimStateT)
+import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (Expr (..), KExpr, Pattern (PVar), subst)
 
 mergeVars :: (Monad m) => KExpr -> OptimStateT m KExpr

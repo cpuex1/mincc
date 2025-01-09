@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module MiddleEnd.Optim.All (OptimKind (..), runOptim) where
+module MiddleEnd.Optim (OptimKind (..), runOptim) where
 
 import Display (Display (display))
-import MiddleEnd.Optim.Base (OptimStateT)
+import MiddleEnd.Optim.Common (OptimStateT)
 import MiddleEnd.Optim.CompMerging (runMergeComp)
 import MiddleEnd.Optim.ConstFold (constFold)
 import MiddleEnd.Optim.Inlining (runInlining)

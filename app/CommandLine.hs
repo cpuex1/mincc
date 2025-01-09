@@ -14,8 +14,8 @@ import Control.Monad.Trans.Reader
 import Data.Set (Set, insert)
 import Error (CompilerError)
 import MiddleEnd.Analysis.Identifier (IdentEnvT)
-import MiddleEnd.Optim.All (OptimKind (..))
-import MiddleEnd.Optim.Base (Threshold, toThreshold)
+import MiddleEnd.Optim (OptimKind (..))
+import MiddleEnd.Optim.Common (Threshold, toThreshold)
 import Options.Applicative
 import System.Console.ANSI (hNowSupportsANSI)
 import System.IO (stdout)

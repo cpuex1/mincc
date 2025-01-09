@@ -5,7 +5,7 @@ module MiddleEnd.Optim.UnitElim (elimUnitArgs) where
 import Control.Monad (filterM)
 import Control.Monad.Trans (MonadTrans (lift))
 import MiddleEnd.Analysis.Identifier (IdentProp (typeOf), genNewVar, getTyOf, updateProp)
-import MiddleEnd.Optim.Base (OptimStateT)
+import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (Expr (App, Const, If, Let), Ident (ExternalIdent), KExpr, Literal (LUnit), Pattern (PRec, PVar), TypedState (TypedState, getType), dummyLoc, getExprState, subst)
 import Typing (TypeKind (TFun, TUnit))
 

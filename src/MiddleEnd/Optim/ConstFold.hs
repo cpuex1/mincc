@@ -6,7 +6,7 @@ import Control.Monad.Trans (MonadTrans (lift))
 import FrontEnd.Flatten (flattenExpr)
 import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (asConstant)
-import MiddleEnd.Optim.Base (OptimStateT)
+import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (
     BinaryOp (FloatOp, IntOp, RelationOp),
     Cond (CComp, CIdentity),

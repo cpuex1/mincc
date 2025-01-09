@@ -5,8 +5,9 @@ module MiddleEnd.Optim.UnusedElim (unusedElim) where
 import Control.Monad.State (State, execState, modify)
 import Control.Monad.Trans (lift)
 import Data.Set (Set, delete, empty, insert, member)
+import MiddleEnd.Analysis.Common (definitelyPure)
 import MiddleEnd.Analysis.Identifier (removeProp)
-import MiddleEnd.Optim.Base (OptimStateT, definitelyPure)
+import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (
     Cond (CComp, CIdentity),
     Expr (..),

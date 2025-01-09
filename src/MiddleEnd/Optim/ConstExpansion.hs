@@ -8,7 +8,7 @@ import Data.List (union)
 import FrontEnd.Flatten (flattenExpr)
 import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (IdentProp (constant), genNewVar, getTyOf, searchProp)
-import MiddleEnd.Optim.Base (OptimStateT)
+import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (
     AllowCompBranch,
     Cond (CComp, CIdentity),
