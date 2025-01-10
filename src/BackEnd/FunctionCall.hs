@@ -5,7 +5,7 @@ module BackEnd.FunctionCall (
     saveRegisters,
 ) where
 
-import BackEnd.BackendEnv (BackendEnv (regContext), BackendStateT, RegContext (argsLength), chooseTy, genTempReg)
+import BackEnd.BackendEnv (BackendEnv (regContext), BackendStateT, RegContext (argsLength), genTempReg)
 import BackEnd.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
@@ -21,7 +21,7 @@ saveArgs block = do
   where
     saveArgs' :: (Monad m) => [Inst stateTy RegID AllowBranch] -> BackendStateT m [Inst stateTy RegID AllowBranch]
     saveArgs' inst'' = do
-        iLen <- gets (chooseTy RInt argsLength . regContext)
+        iLen <- gets (argsLength . selectVariant RInt . regContext)
         modInst <-
             foldlM
                 ( \inst' arg -> do
@@ -39,7 +39,7 @@ saveArgs block = do
                 inst''
                 [0 .. iLen - 1]
 
-        fLen <- gets (chooseTy RFloat argsLength . regContext)
+        fLen <- gets (argsLength . selectVariant RFloat . regContext)
         foldlM
             ( \inst' arg -> do
                 if evalState (isUsedAfterCallF (ArgsReg arg) inst') False

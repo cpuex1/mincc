@@ -1,15 +1,9 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 module BackEnd.BackendEnv (
     RegConfig (..),
     RegContext (..),
-    RegVariant,
-    selectTy,
-    chooseTy,
-    updateVariant,
     BackendConfig (..),
     BackendEnv (..),
     createBackendConfig,
@@ -34,7 +28,7 @@ import qualified Data.Map as M
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
-import IR (RegID, RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (SavedReg))
+import IR (RegID, RegOrImm (Imm, Reg), RegType (RInt), RegVariant (..), Register (SavedReg), selectVariant, updateVariant)
 import MiddleEnd.Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
 import Syntax (Ident (ExternalIdent))
 import Prelude hiding (lookup)
@@ -60,26 +54,6 @@ defaultRegContext =
         , registerMap = M.empty
         , usedRegLen = 0
         }
-
-data RegVariant f
-    = RegVariant
-    { iVariant :: f Int
-    , fVariant :: f Float
-    }
-
-deriving instance (Show (f Int), Show (f Float)) => Show (RegVariant f)
-deriving instance (Eq (f Int), Eq (f Float)) => Eq (RegVariant f)
-
-selectTy :: RegVariant f -> RegType a -> f a
-selectTy (RegVariant i _) RInt = i
-selectTy (RegVariant _ f) RFloat = f
-
-chooseTy :: RegType a -> (f a -> b) -> RegVariant f -> b
-chooseTy rTy func variant = func $ selectTy variant rTy
-
-updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
-updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}
-updateVariant RFloat func variant = variant{fVariant = func $ fVariant variant}
 
 newtype BackendConfig = BackendConfig
     { regConfig :: RegVariant RegConfig
@@ -136,7 +110,7 @@ genTempReg rTy = do
                     )
                     $ regContext ctx'
             }
-    pure $ SavedReg $ chooseTy rTy generatedReg ctx
+    pure $ SavedReg $ generatedReg $ selectVariant rTy ctx
 
 genReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
 genReg rTy ident = do
@@ -157,7 +131,7 @@ genReg rTy ident = do
 
 findReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
 findReg rTy ident = do
-    regID <- gets (chooseTy rTy (lookup ident . registerMap) . regContext)
+    regID <- gets ((lookup ident . registerMap) . selectVariant rTy . regContext)
     case regID of
         Just actual -> pure actual
         Nothing -> do

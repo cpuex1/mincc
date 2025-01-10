@@ -1,11 +1,15 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module IR (
     RegID,
     InstLabel,
     RegType (..),
+    RegVariant (..),
+    selectVariant,
+    updateVariant,
     Register (..),
     RegOrImm (Reg, Imm),
     PrimitiveIntOp (..),
@@ -38,6 +42,23 @@ data RegType ty where
 
 deriving instance (Show ty) => Show (RegType ty)
 deriving instance (Eq ty) => Eq (RegType ty)
+
+data RegVariant f
+    = RegVariant
+    { iVariant :: f Int
+    , fVariant :: f Float
+    }
+
+deriving instance (Show (f Int), Show (f Float)) => Show (RegVariant f)
+deriving instance (Eq (f Int), Eq (f Float)) => Eq (RegVariant f)
+
+selectVariant :: RegType a -> RegVariant f -> f a
+selectVariant RInt (RegVariant i _) = i
+selectVariant RFloat (RegVariant _ f) = f
+
+updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
+updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}
+updateVariant RFloat func variant = variant{fVariant = func $ fVariant variant}
 
 data Register idTy ty where
     ZeroReg :: Register idTy ty

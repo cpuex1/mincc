@@ -21,9 +21,7 @@ import BackEnd.BackendEnv (
     BackendEnv (regContext),
     RegConfig (regLimit),
     RegContext (generatedReg, usedRegLen),
-    chooseTy,
     liftB,
-    updateVariant,
  )
 import BackEnd.FunctionCall (saveRegisters)
 import BackEnd.Liveness (LivenessLoc (livenessLoc), liveness)
@@ -64,7 +62,9 @@ import IR (
     RegType (RFloat, RInt),
     Register (SavedReg),
     exitBlock,
+    selectVariant,
     substIState,
+    updateVariant,
  )
 import Log (LogLevel (..), printLog, printTextLog)
 import MiddleEnd.Analysis.Identifier (loadTypeEnv)
@@ -221,8 +221,8 @@ livenessIO = mapM livenessIO'
 assignRegisterIO :: [IntermediateCodeBlock LivenessLoc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
 assignRegisterIO blocks = do
     -- Report used registers.
-    usedIRegLen' <- gets (chooseTy RInt generatedReg . regContext)
-    usedFRegLen' <- gets (chooseTy RFloat generatedReg . regContext)
+    usedIRegLen' <- gets (generatedReg . selectVariant RInt . regContext)
+    usedFRegLen' <- gets (generatedReg . selectVariant RFloat . regContext)
     liftB $ lift $ printLog Debug $ "Before: int: " <> show usedIRegLen' <> ", float: " <> show usedFRegLen'
 
     blocks' <-
@@ -238,8 +238,8 @@ assignRegisterIO blocks = do
             blocks
 
     -- Report used registers.
-    usedIRegLen'' <- gets (chooseTy RInt generatedReg . regContext)
-    usedFRegLen'' <- gets (chooseTy RFloat generatedReg . regContext)
+    usedIRegLen'' <- gets (generatedReg . selectVariant RInt . regContext)
+    usedFRegLen'' <- gets (generatedReg . selectVariant RFloat . regContext)
     liftB $ lift $ printLog Debug $ "After: int: " <> show usedIRegLen'' <> ", float: " <> show usedFRegLen''
 
     -- Perform register saving.
@@ -260,7 +260,7 @@ assignRegisterIO blocks = do
                         <> ", "
                         <> pack (show usedF)
 
-        iLimit <- asks (chooseTy RInt regLimit . regConfig)
+        iLimit <- asks (regLimit . selectVariant RInt . regConfig)
         if iLimit < usedI
             then do
                 case iSpillTarget of
@@ -274,7 +274,7 @@ assignRegisterIO blocks = do
                     Nothing -> do
                         throwError $ OtherError "Failed to find a spill target for int registers."
             else do
-                fLimit <- asks (chooseTy RFloat regLimit . regConfig)
+                fLimit <- asks (regLimit . selectVariant RFloat . regConfig)
                 if fLimit < usedF
                     then do
                         case fSpillTarget of

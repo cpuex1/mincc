@@ -7,7 +7,6 @@ import BackEnd.BackendEnv (
     RegContext (generatedReg),
     createBackendConfig,
     runBackendStateT,
-    updateVariant,
  )
 import BackEnd.Spill
 import Control.Monad.Identity (Identity (runIdentity))
@@ -21,6 +20,7 @@ import IR (
     RegOrImm (Imm, Reg),
     RegType (RFloat, RInt),
     Register (SavedReg, StackReg),
+    updateVariant,
  )
 import MiddleEnd.Globals (defaultGlobalTable)
 import Syntax (FloatBinOp (FAdd), Loc, dummyLoc)
