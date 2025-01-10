@@ -5,6 +5,7 @@
 module IR (
     RegID,
     InstLabel,
+    RegType (..),
     Register (..),
     RegOrImm (Reg, Imm),
     PrimitiveIntOp (..),
@@ -29,6 +30,14 @@ import Syntax (FloatBinOp, IntBinOp (..), Loc, RelationBinOp)
 
 type RegID = Int
 type InstLabel = Text
+
+-- | Holds the type of a register.
+data RegType ty where
+    RInt :: RegType Int
+    RFloat :: RegType Float
+
+deriving instance (Show ty) => Show (RegType ty)
+deriving instance (Eq ty) => Eq (RegType ty)
 
 data Register idTy ty where
     ZeroReg :: Register idTy ty

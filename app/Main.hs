@@ -19,7 +19,7 @@ import Options.Applicative (
     (<**>),
  )
 
-import BackEnd.BackendEnv (BackendConfig (BackendConfig), liftB, runBackendStateT)
+import BackEnd.BackendEnv (createBackendConfig, liftB, runBackendStateT)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.State (evalStateT)
@@ -140,7 +140,7 @@ execArgsWithIdent resolvedExpr = do
 
     iLimit' <- lift $ asks cILimit
     fLimit' <- lift $ asks cFLimit
-    blocks <- runBackendStateT (execArgsWithBackend functions) (BackendConfig iLimit' fLimit') globals
+    blocks <- runBackendStateT (execArgsWithBackend functions) (createBackendConfig iLimit' fLimit') globals
     case blocks of
         Left err -> lift $ throwError err
         Right _ -> pure ()

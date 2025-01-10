@@ -1,9 +1,17 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module BackEnd.BackendEnv (
-    RegID,
+    RegConfig (..),
+    RegContext (..),
+    RegVariant,
+    selectTy,
+    getRegLimit,
     BackendConfig (..),
     BackendEnv (..),
+    createBackendConfig,
     defaultBackendEnv,
     BackendState,
     BackendStateT,
@@ -28,16 +36,51 @@ import qualified Data.Map as M
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
-import IR (RegID, RegOrImm (Imm, Reg), Register (SavedReg))
+import IR (RegID, RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (SavedReg))
 import MiddleEnd.Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
 import Syntax (Ident (ExternalIdent))
 import Prelude hiding (lookup)
 
-data BackendConfig = BackendConfig
-    { iRegLimit :: Int
-    , fRegLimit :: Int
+newtype RegConfig ty
+    = RegConfig {regLimit :: Int}
+    deriving (Show, Eq)
+
+data RegContext ty
+    = RegContext
+    { generatedReg :: Int
+    , registerMap :: Map Ident (Register RegID ty)
+    , usedRegLen :: Int
     }
     deriving (Show, Eq)
+
+data RegVariant f
+    = RegVariant
+    { iVariant :: f Int
+    , fVariant :: f Float
+    }
+
+deriving instance (Show (f Int), Show (f Float)) => Show (RegVariant f)
+deriving instance (Eq (f Int), Eq (f Float)) => Eq (RegVariant f)
+
+selectTy :: RegVariant f -> RegType a -> f a
+selectTy (RegVariant i _) RInt = i
+selectTy (RegVariant _ f) RFloat = f
+
+newtype BackendConfig = BackendConfig
+    { regConfig :: RegVariant RegConfig
+    }
+    deriving (Show, Eq)
+
+createBackendConfig :: Int -> Int -> BackendConfig
+createBackendConfig iLimit fLimit =
+    BackendConfig $
+        RegVariant
+            { iVariant = RegConfig iLimit
+            , fVariant = RegConfig fLimit
+            }
+
+getRegLimit :: RegType a -> BackendConfig -> Int
+getRegLimit rTy config = regLimit $ selectTy (regConfig config) rTy
 
 data BackendEnv = BackendEnv
     { globals :: GlobalTable

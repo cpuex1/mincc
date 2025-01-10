@@ -2,7 +2,7 @@
 
 module BackEnd.RegisterAlloc (assignRegister) where
 
-import BackEnd.BackendEnv (BackendEnv (generatedFReg, generatedIReg), BackendStateT, RegID)
+import BackEnd.BackendEnv (BackendEnv (generatedFReg, generatedIReg), BackendStateT)
 import BackEnd.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Map (Map, findWithDefault)
@@ -14,6 +14,7 @@ import IR (
   AllowBranch,
   Inst,
   IntermediateCodeBlock (getICBInst),
+  RegID,
   Register (SavedReg, ZeroReg),
   getAllIState,
   replaceFReg,

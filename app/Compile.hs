@@ -17,8 +17,8 @@ module Compile (
 ) where
 
 import BackEnd.BackendEnv (
-    BackendConfig (fRegLimit, iRegLimit),
     BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen),
+    getRegLimit,
     liftB,
  )
 import BackEnd.FunctionCall (saveRegisters)
@@ -57,6 +57,7 @@ import IR (
     CodeBlock,
     IntermediateCodeBlock (getICBInst, getICBLabel),
     RegID,
+    RegType (RFloat, RInt),
     Register (SavedReg),
     exitBlock,
     substIState,
@@ -255,7 +256,7 @@ assignRegisterIO blocks = do
                         <> ", "
                         <> pack (show usedF)
 
-        iLimit <- asks iRegLimit
+        iLimit <- asks (getRegLimit RInt)
         if iLimit < usedI
             then do
                 case iSpillTarget of
@@ -269,7 +270,7 @@ assignRegisterIO blocks = do
                     Nothing -> do
                         throwError $ OtherError "Failed to find a spill target for int registers."
             else do
-                fLimit <- asks fRegLimit
+                fLimit <- asks (getRegLimit RFloat)
                 if fLimit < usedF
                     then do
                         case fSpillTarget of
