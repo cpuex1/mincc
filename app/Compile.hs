@@ -16,14 +16,6 @@ module Compile (
     assignRegisterIO,
 ) where
 
-import BackEnd.Asm (
-    CodeBlock,
-    IntermediateCodeBlock (getICBInst, getICBLabel),
-    RegID,
-    Register (SavedReg),
-    exitBlock,
-    substIState,
- )
 import BackEnd.BackendEnv (
     BackendConfig (fRegLimit, iRegLimit),
     BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen),
@@ -61,6 +53,14 @@ import FrontEnd.KNorm (kNormalize)
 import FrontEnd.NameRes (resolveNames)
 import FrontEnd.Parser (parseExpr, parsePartialExpr)
 import FrontEnd.TypeInferrer (inferType)
+import IR (
+    CodeBlock,
+    IntermediateCodeBlock (getICBInst, getICBLabel),
+    RegID,
+    Register (SavedReg),
+    exitBlock,
+    substIState,
+ )
 import Log (LogLevel (..), printLog, printTextLog)
 import MiddleEnd.Analysis.Identifier (loadTypeEnv)
 import MiddleEnd.Closure (getFunctions)

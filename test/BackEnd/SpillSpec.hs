@@ -2,12 +2,12 @@
 
 module BackEnd.SpillSpec (spec) where
 
-import BackEnd.Asm (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), PrimitiveIntOp (PAdd), RegOrImm (Imm, Reg), Register (SavedReg, StackReg))
 import BackEnd.BackendEnv (BackendConfig (BackendConfig), BackendEnv (generatedFReg, generatedIReg), RegID, runBackendStateT)
 import BackEnd.Spill
 import Control.Monad.Identity (Identity (runIdentity))
 import Control.Monad.State (modify)
 import Error (CompilerError)
+import IR (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), PrimitiveIntOp (PAdd), RegOrImm (Imm, Reg), Register (SavedReg, StackReg))
 import MiddleEnd.Globals (defaultGlobalTable)
 import Syntax (FloatBinOp (FAdd), Loc, dummyLoc)
 import Test.Hspec

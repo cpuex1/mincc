@@ -2,7 +2,8 @@
 
 module BackEnd.Spill (spillI, spillF) where
 
-import BackEnd.Asm (
+import BackEnd.BackendEnv (BackendStateT, genTempFReg, genTempIReg)
+import IR (
     AllowBranch,
     Inst (..),
     IntermediateCodeBlock (getICBInst, localVars),
@@ -11,7 +12,6 @@ import BackEnd.Asm (
     RegOrImm (Reg),
     Register (SavedReg, StackReg),
  )
-import BackEnd.BackendEnv (BackendStateT, genTempFReg, genTempIReg)
 import Syntax (Loc, dummyLoc)
 
 loadNewIReg :: (Monad m) => Int -> RegID -> Register RegID Int -> BackendStateT m (Register RegID Int, [Inst Loc RegID AllowBranch])

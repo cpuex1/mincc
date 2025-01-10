@@ -7,12 +7,12 @@ module BackEnd.Shuffle (
     shuffleRegOrImm,
 ) where
 
-import BackEnd.Asm (RegID, RegOrImm (Reg), Register (ArgsReg, TempReg))
 import Control.Monad (when)
 import Control.Monad.State (State, evalState, gets, modify)
 import Data.List ((\\))
 import Data.Map.Lazy (Map, alter, empty, insert, lookup)
 import Data.Maybe (fromMaybe, mapMaybe)
+import IR (RegID, RegOrImm (Reg), Register (ArgsReg, TempReg))
 import Prelude hiding (lookup)
 
 newtype RegGraph a = RegGraph

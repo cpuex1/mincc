@@ -3,7 +3,11 @@
 
 module BackEnd.Transform (transformCodeBlock, CodeBlockGenStateT) where
 
-import BackEnd.Asm (
+import BackEnd.BackendEnv (BackendEnv (globals), BackendStateT)
+import BackEnd.Shuffle (shuffleRegOrImm, shuffleRegs)
+import Control.Monad.State (MonadTrans (lift), StateT, execStateT, gets, modify)
+import Data.Text (Text, isPrefixOf, pack)
+import IR (
     AllowBranch,
     CodeBlock (..),
     DisallowBranch,
@@ -16,10 +20,6 @@ import BackEnd.Asm (
     RegOrImm (..),
     Register (..),
  )
-import BackEnd.BackendEnv (BackendEnv (globals), BackendStateT)
-import BackEnd.Shuffle (shuffleRegOrImm, shuffleRegs)
-import Control.Monad.State (MonadTrans (lift), StateT, execStateT, gets, modify)
-import Data.Text (Text, isPrefixOf, pack)
 import MiddleEnd.Globals (
     GlobalTable (endAddr),
  )

@@ -19,7 +19,6 @@ module BackEnd.BackendEnv (
     findGlobal,
 ) where
 
-import BackEnd.Asm (RegID, RegOrImm (Imm, Reg), Register (SavedReg))
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
 import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
@@ -29,6 +28,7 @@ import qualified Data.Map as M
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
+import IR (RegID, RegOrImm (Imm, Reg), Register (SavedReg))
 import MiddleEnd.Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
 import Syntax (Ident (ExternalIdent))
 import Prelude hiding (lookup)

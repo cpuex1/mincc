@@ -7,7 +7,6 @@ module BackEnd.Lowering (
     toInstructions,
 ) where
 
-import BackEnd.Asm
 import BackEnd.BackendEnv
 import BackEnd.FunctionCall (saveArgs)
 import Builtin (BuiltinFunction (builtinInst), builtinMakeTuple, findBuiltin)
@@ -18,6 +17,7 @@ import Data.Map (fromList)
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
+import IR
 import MiddleEnd.Analysis.Identifier (IdentEnvT, asConstant, getTyOf)
 import MiddleEnd.Globals (GlobalProp (globalOffset))
 import Syntax

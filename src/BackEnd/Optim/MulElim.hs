@@ -2,7 +2,7 @@
 
 module BackEnd.Optim.MulElim (elimMul) where
 
-import BackEnd.Asm (
+import IR (
     AllowBranch,
     Inst (IBranch, IIntOp),
     IntermediateCodeBlock (getICBInst),

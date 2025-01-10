@@ -4,10 +4,10 @@
 
 module Display (display, Display) where
 
-import BackEnd.Asm
 import BackEnd.Liveness (LivenessLoc (livenessState), LivenessState (fAlive, iAlive))
 import Data.Set (toAscList)
 import Data.Text
+import IR
 import Numeric (showFFloat)
 import Syntax
 import Typing

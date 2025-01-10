@@ -5,12 +5,12 @@ module BackEnd.FunctionCall (
     saveRegisters,
 ) where
 
-import BackEnd.Asm
 import BackEnd.BackendEnv (BackendEnv (fArgsLen), BackendStateT, genTempFReg, genTempIReg, iArgsLen)
 import BackEnd.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
 import Data.Set (toAscList)
+import IR
 import Syntax (Loc, dummyLoc)
 
 -- | Saves arguments on the stack before a function call.
