@@ -2,7 +2,7 @@
 
 module BackEnd.Spill (spillI, spillF) where
 
-import BackEnd.BackendEnv (BackendStateT, genTempFReg, genTempIReg)
+import BackEnd.BackendEnv (BackendStateT, genTempReg)
 import IR (
     AllowBranch,
     Inst (..),
@@ -10,119 +10,114 @@ import IR (
     RawInstRetTy (RIRFloat, RIRInt),
     RegID,
     RegOrImm (Reg),
+    RegType (RFloat, RInt),
     Register (SavedReg, StackReg),
  )
 import Syntax (Loc, dummyLoc)
 
-loadNewIReg :: (Monad m) => Int -> RegID -> Register RegID Int -> BackendStateT m (Register RegID Int, [Inst Loc RegID AllowBranch])
-loadNewIReg vars searching victim =
+loadNewReg :: (Monad m) => RegType a -> Int -> RegID -> Register RegID a -> BackendStateT m (Register RegID a, [Inst Loc RegID AllowBranch])
+loadNewReg RInt vars searching victim =
     if SavedReg searching == victim
         then do
-            newReg <- genTempIReg
+            newReg <- genTempReg RInt
             pure (newReg, [ILoad dummyLoc newReg StackReg vars])
         else pure (victim, [])
-
-loadNewIReg' :: (Monad m) => Int -> RegID -> RegOrImm RegID Int -> BackendStateT m (RegOrImm RegID Int, [Inst Loc RegID AllowBranch])
-loadNewIReg' vars searching victim =
-    if Reg (SavedReg searching) == victim
-        then do
-            newReg <- genTempIReg
-            pure (Reg newReg, [ILoad dummyLoc newReg StackReg vars])
-        else pure (victim, [])
-
-loadNewFReg :: (Monad m) => Int -> RegID -> Register RegID Float -> BackendStateT m (Register RegID Float, [Inst Loc RegID AllowBranch])
-loadNewFReg vars searching victim =
+loadNewReg RFloat vars searching victim =
     if SavedReg searching == victim
         then do
-            newReg <- genTempFReg
+            newReg <- genTempReg RFloat
             pure (newReg, [IFLoad dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
-loadNewFReg' :: (Monad m) => Int -> RegID -> RegOrImm RegID Float -> BackendStateT m (RegOrImm RegID Float, [Inst Loc RegID AllowBranch])
-loadNewFReg' vars searching victim =
+loadNewRegOrImm :: (Monad m) => RegType a -> Int -> RegID -> RegOrImm RegID a -> BackendStateT m (RegOrImm RegID a, [Inst Loc RegID AllowBranch])
+loadNewRegOrImm RInt vars searching victim =
     if Reg (SavedReg searching) == victim
         then do
-            newReg <- genTempFReg
+            newReg <- genTempReg RInt
+            pure (Reg newReg, [ILoad dummyLoc newReg StackReg vars])
+        else pure (victim, [])
+loadNewRegOrImm RFloat vars searching victim =
+    if Reg (SavedReg searching) == victim
+        then do
+            newReg <- genTempReg RFloat
             pure (Reg newReg, [IFLoad dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
-storeNewIReg :: (Monad m) => Int -> RegID -> Register RegID Int -> BackendStateT m (Register RegID Int, [Inst Loc RegID AllowBranch])
-storeNewIReg vars searching victim =
+storeNewReg :: (Monad m) => RegType a -> Int -> RegID -> Register RegID a -> BackendStateT m (Register RegID a, [Inst Loc RegID AllowBranch])
+storeNewReg RInt vars searching victim =
     if SavedReg searching == victim
         then do
-            newReg <- genTempIReg
+            newReg <- genTempReg RInt
             pure (newReg, [IStore dummyLoc newReg StackReg vars])
         else pure (victim, [])
-
-storeNewFReg :: (Monad m) => Int -> RegID -> Register RegID Float -> BackendStateT m (Register RegID Float, [Inst Loc RegID AllowBranch])
-storeNewFReg vars searching victim =
+storeNewReg RFloat vars searching victim =
     if SavedReg searching == victim
         then do
-            newReg <- genTempFReg
+            newReg <- genTempReg RFloat
             pure (newReg, [IFStore dummyLoc newReg StackReg vars])
         else pure (victim, [])
 
 replaceIRegWithMem :: (Monad m) => Int -> RegID -> Inst Loc RegID AllowBranch -> BackendStateT m [Inst Loc RegID AllowBranch]
 replaceIRegWithMem vars reg (ICompOp state op dest src1 src2) = do
-    (src1', inst1) <- loadNewIReg vars reg src1
-    (src2', inst2) <- loadNewIReg' vars reg src2
-    (dest', inst3) <- storeNewIReg vars reg dest
+    (src1', inst1) <- loadNewReg RInt vars reg src1
+    (src2', inst2) <- loadNewRegOrImm RInt vars reg src2
+    (dest', inst3) <- storeNewReg RInt vars reg dest
     pure $ inst1 ++ inst2 ++ [ICompOp state op dest' src1' src2'] ++ inst3
 replaceIRegWithMem _ _ (IFCompOp state op dest src1 src2) =
     pure [IFCompOp state op dest src1 src2]
 replaceIRegWithMem vars reg (IIntOp state op dest src1 src2) = do
-    (src1', inst1) <- loadNewIReg vars reg src1
-    (src2', inst2) <- loadNewIReg' vars reg src2
-    (dest', inst3) <- storeNewIReg vars reg dest
+    (src1', inst1) <- loadNewReg RInt vars reg src1
+    (src2', inst2) <- loadNewRegOrImm RInt vars reg src2
+    (dest', inst3) <- storeNewReg RInt vars reg dest
     pure $ inst1 ++ inst2 ++ [IIntOp state op dest' src1' src2'] ++ inst3
 replaceIRegWithMem _ _ (IFOp state op dest src1 src2) =
     pure [IFOp state op dest src1 src2]
 replaceIRegWithMem vars reg (IMov state dest src) = do
-    (src', inst1) <- loadNewIReg' vars reg src
-    (dest', inst2) <- storeNewIReg vars reg dest
+    (src', inst1) <- loadNewRegOrImm RInt vars reg src
+    (dest', inst2) <- storeNewReg RInt vars reg dest
     pure $ inst1 ++ [IMov state dest' src'] ++ inst2
 replaceIRegWithMem _ _ (IFMov state dest src) = do
     pure [IFMov state dest src]
 replaceIRegWithMem vars reg (IRichCall state label iArgs fArgs) = do
-    iArgs' <- mapM (loadNewIReg' vars reg) iArgs
+    iArgs' <- mapM (loadNewRegOrImm RInt vars reg) iArgs
     let inst = concatMap snd iArgs'
     pure $ inst ++ [IRichCall state label (map fst iArgs') fArgs]
 replaceIRegWithMem vars reg (IClosureCall state cl iArgs fArgs) = do
-    (cl', inst1) <- loadNewIReg vars reg cl
-    iArgs' <- mapM (loadNewIReg' vars reg) iArgs
+    (cl', inst1) <- loadNewReg RInt vars reg cl
+    iArgs' <- mapM (loadNewRegOrImm RInt vars reg) iArgs
     let inst2 = concatMap snd iArgs'
     pure $ inst1 ++ inst2 ++ [IClosureCall state cl' (map fst iArgs') fArgs]
 replaceIRegWithMem vars reg (IMakeClosure state dest label iArgs fArgs) = do
-    iArgs' <- mapM (loadNewIReg' vars reg) iArgs
+    iArgs' <- mapM (loadNewRegOrImm RInt vars reg) iArgs
     let inst = concatMap snd iArgs'
-    (dest', inst') <- storeNewIReg vars reg dest
+    (dest', inst') <- storeNewReg RInt vars reg dest
     pure $ inst ++ [IMakeClosure state dest' label (map fst iArgs') fArgs] ++ inst'
 replaceIRegWithMem vars reg (ILoad state dest src offset) = do
-    (src', inst) <- loadNewIReg vars reg src
-    (dest', inst') <- storeNewIReg vars reg dest
+    (src', inst) <- loadNewReg RInt vars reg src
+    (dest', inst') <- storeNewReg RInt vars reg dest
     pure $ inst ++ [ILoad state dest' src' offset] ++ inst'
 replaceIRegWithMem vars reg (IStore state src dest offset) = do
-    (src', inst) <- loadNewIReg vars reg src
-    (dest', inst') <- loadNewIReg vars reg dest
+    (src', inst) <- loadNewReg RInt vars reg src
+    (dest', inst') <- loadNewReg RInt vars reg dest
     pure $ inst ++ inst' ++ [IStore state src' dest' offset]
 replaceIRegWithMem vars reg (IFLoad state dest src offset) = do
-    (src', inst) <- loadNewIReg vars reg src
+    (src', inst) <- loadNewReg RInt vars reg src
     pure $ inst ++ [IFLoad state dest src' offset]
 replaceIRegWithMem vars reg (IFStore state dest src offset) = do
-    (src', inst) <- loadNewIReg vars reg src
+    (src', inst) <- loadNewReg RInt vars reg src
     pure $ inst ++ [IFStore state dest src' offset]
 replaceIRegWithMem vars reg (IRawInst state inst (RIRInt dest) iArgs fArgs) = do
-    iArgs' <- mapM (loadNewIReg' vars reg) iArgs
+    iArgs' <- mapM (loadNewRegOrImm RInt vars reg) iArgs
     let inst' = concatMap snd iArgs'
-    (dest', inst'') <- storeNewIReg vars reg dest
+    (dest', inst'') <- storeNewReg RInt vars reg dest
     pure $ inst' ++ [IRawInst state inst (RIRInt dest') (map fst iArgs') fArgs] ++ inst''
 replaceIRegWithMem vars reg (IRawInst state inst dest iArgs fArgs) = do
-    iArgs' <- mapM (loadNewIReg' vars reg) iArgs
+    iArgs' <- mapM (loadNewRegOrImm RInt vars reg) iArgs
     let inst' = concatMap snd iArgs'
     pure $ inst' ++ [IRawInst state inst dest (map fst iArgs') fArgs]
 replaceIRegWithMem vars reg (IBranch state op src1 src2 inst1 inst2) = do
-    (src1', inst1') <- loadNewIReg vars reg src1
-    (src2', inst2') <- loadNewIReg vars reg src2
+    (src1', inst1') <- loadNewReg RInt vars reg src1
+    (src2', inst2') <- loadNewReg RInt vars reg src2
     inst3 <- mapM (replaceIRegWithMem vars reg) inst1
     let inst3' = concat inst3
     inst4 <- mapM (replaceIRegWithMem vars reg) inst2
@@ -133,32 +128,32 @@ replaceFRegWithMem :: (Monad m) => Int -> RegID -> Inst Loc RegID AllowBranch ->
 replaceFRegWithMem _ _ (ICompOp state op dest src1 src2) =
     pure [ICompOp state op dest src1 src2]
 replaceFRegWithMem vars reg (IFCompOp state op dest src1 src2) = do
-    (src1', inst1) <- loadNewFReg vars reg src1
-    (src2', inst2) <- loadNewFReg vars reg src2
+    (src1', inst1) <- loadNewReg RFloat vars reg src1
+    (src2', inst2) <- loadNewReg RFloat vars reg src2
     pure $ inst1 ++ inst2 ++ [IFCompOp state op dest src1' src2']
 replaceFRegWithMem _ _ (IIntOp state op dest src1 src2) =
     pure [IIntOp state op dest src1 src2]
 replaceFRegWithMem vars reg (IFOp state op dest src1 src2) = do
-    (src1', inst1) <- loadNewFReg vars reg src1
-    (src2', inst2) <- loadNewFReg vars reg src2
-    (dest', inst3) <- storeNewFReg vars reg dest
+    (src1', inst1) <- loadNewReg RFloat vars reg src1
+    (src2', inst2) <- loadNewReg RFloat vars reg src2
+    (dest', inst3) <- storeNewReg RFloat vars reg dest
     pure $ inst1 ++ inst2 ++ [IFOp state op dest' src1' src2'] ++ inst3
 replaceFRegWithMem _ _ (IMov state dest src) =
     pure [IMov state dest src]
 replaceFRegWithMem vars reg (IFMov state dest src) = do
-    (src', inst1) <- loadNewFReg' vars reg src
-    (dest', inst2) <- storeNewFReg vars reg dest
+    (src', inst1) <- loadNewRegOrImm RFloat vars reg src
+    (dest', inst2) <- storeNewReg RFloat vars reg dest
     pure $ inst1 ++ [IFMov state dest' src'] ++ inst2
 replaceFRegWithMem vars reg (IRichCall state label iArgs fArgs) = do
-    fArgs' <- mapM (loadNewFReg vars reg) fArgs
+    fArgs' <- mapM (loadNewReg RFloat vars reg) fArgs
     let inst = concatMap snd fArgs'
     pure $ inst ++ [IRichCall state label iArgs (map fst fArgs')]
 replaceFRegWithMem vars reg (IClosureCall state cl iArgs fArgs) = do
-    fArgs' <- mapM (loadNewFReg vars reg) fArgs
+    fArgs' <- mapM (loadNewReg RFloat vars reg) fArgs
     let inst = concatMap snd fArgs'
     pure $ inst ++ [IClosureCall state cl iArgs (map fst fArgs')]
 replaceFRegWithMem vars reg (IMakeClosure state dest label iArgs fArgs) = do
-    fArgs' <- mapM (loadNewFReg vars reg) fArgs
+    fArgs' <- mapM (loadNewReg RFloat vars reg) fArgs
     let inst = concatMap snd fArgs'
     pure $ inst ++ [IMakeClosure state dest label iArgs (map fst fArgs')]
 replaceFRegWithMem _ _ (ILoad state dest src offset) =
@@ -166,18 +161,18 @@ replaceFRegWithMem _ _ (ILoad state dest src offset) =
 replaceFRegWithMem _ _ (IStore state dest src offset) =
     pure [IStore state dest src offset]
 replaceFRegWithMem vars reg (IFLoad state dest src offset) = do
-    (dest', inst) <- storeNewFReg vars reg dest
+    (dest', inst) <- storeNewReg RFloat vars reg dest
     pure $ IFLoad state dest' src offset : inst
 replaceFRegWithMem vars reg (IFStore state dest src offset) = do
-    (dest', inst') <- loadNewFReg vars reg dest
+    (dest', inst') <- loadNewReg RFloat vars reg dest
     pure $ inst' ++ [IFStore state dest' src offset]
 replaceFRegWithMem vars reg (IRawInst state inst (RIRFloat dest) iArgs fArgs) = do
-    fArgs' <- mapM (loadNewFReg vars reg) fArgs
+    fArgs' <- mapM (loadNewReg RFloat vars reg) fArgs
     let inst' = concatMap snd fArgs'
-    (dest', inst'') <- storeNewFReg vars reg dest
+    (dest', inst'') <- storeNewReg RFloat vars reg dest
     pure $ inst' ++ [IRawInst state inst (RIRFloat dest') iArgs (map fst fArgs')] ++ inst''
 replaceFRegWithMem vars reg (IRawInst state inst dest iArgs fArgs) = do
-    fArgs' <- mapM (loadNewFReg vars reg) fArgs
+    fArgs' <- mapM (loadNewReg RFloat vars reg) fArgs
     let inst' = concatMap snd fArgs'
     pure $ inst' ++ [IRawInst state inst dest iArgs (map fst fArgs')]
 replaceFRegWithMem vars reg (IBranch state op src1 src2 inst1 inst2) = do

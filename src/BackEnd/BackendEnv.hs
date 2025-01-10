@@ -8,7 +8,8 @@ module BackEnd.BackendEnv (
     RegContext (..),
     RegVariant,
     selectTy,
-    getRegLimit,
+    chooseTy,
+    updateVariant,
     BackendConfig (..),
     BackendEnv (..),
     createBackendConfig,
@@ -17,19 +18,16 @@ module BackEnd.BackendEnv (
     BackendStateT,
     liftB,
     runBackendStateT,
-    genTempIReg,
-    genTempFReg,
-    genIReg,
-    genFReg,
-    findI,
-    findI',
-    findF,
+    genReg,
+    genTempReg,
+    findReg,
+    findRegOrImm,
     findGlobal,
 ) where
 
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader (MonadTrans (lift), ReaderT (runReaderT))
-import Control.Monad.State (MonadState (get), StateT, evalStateT, gets, modify)
+import Control.Monad.State (StateT, evalStateT, gets, modify)
 import Data.Functor.Identity (Identity)
 import Data.Map (Map, insert, lookup)
 import qualified Data.Map as M
@@ -48,10 +46,20 @@ newtype RegConfig ty
 data RegContext ty
     = RegContext
     { generatedReg :: Int
+    , argsLength :: Int
     , registerMap :: Map Ident (Register RegID ty)
     , usedRegLen :: Int
     }
     deriving (Show, Eq)
+
+defaultRegContext :: RegContext ty
+defaultRegContext =
+    RegContext
+        { generatedReg = 0
+        , argsLength = 0
+        , registerMap = M.empty
+        , usedRegLen = 0
+        }
 
 data RegVariant f
     = RegVariant
@@ -66,6 +74,13 @@ selectTy :: RegVariant f -> RegType a -> f a
 selectTy (RegVariant i _) RInt = i
 selectTy (RegVariant _ f) RFloat = f
 
+chooseTy :: RegType a -> (f a -> b) -> RegVariant f -> b
+chooseTy rTy func variant = func $ selectTy variant rTy
+
+updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
+updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}
+updateVariant RFloat func variant = variant{fVariant = func $ fVariant variant}
+
 newtype BackendConfig = BackendConfig
     { regConfig :: RegVariant RegConfig
     }
@@ -79,19 +94,9 @@ createBackendConfig iLimit fLimit =
             , fVariant = RegConfig fLimit
             }
 
-getRegLimit :: RegType a -> BackendConfig -> Int
-getRegLimit rTy config = regLimit $ selectTy (regConfig config) rTy
-
 data BackendEnv = BackendEnv
     { globals :: GlobalTable
-    , generatedIReg :: Int
-    , generatedFReg :: Int
-    , iArgsLen :: Int
-    , fArgsLen :: Int
-    , iMap :: Map Ident (Register RegID Int)
-    , fMap :: Map Ident (Register RegID Float)
-    , usedIRegLen :: Int
-    , usedFRegLen :: Int
+    , regContext :: RegVariant RegContext
     }
     deriving (Show, Eq)
 
@@ -99,14 +104,11 @@ defaultBackendEnv :: GlobalTable -> BackendEnv
 defaultBackendEnv table =
     BackendEnv
         { globals = table
-        , generatedIReg = 0
-        , generatedFReg = 0
-        , iArgsLen = 0
-        , fArgsLen = 0
-        , iMap = M.empty
-        , fMap = M.empty
-        , usedIRegLen = 0
-        , usedFRegLen = 0
+        , regContext =
+            RegVariant
+                { iVariant = defaultRegContext
+                , fVariant = defaultRegContext
+                }
         }
 
 type BackendStateT m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv m))
@@ -119,56 +121,52 @@ runBackendStateT s config table =
 liftB :: (Monad m) => m a -> BackendStateT m a
 liftB = lift . lift . lift
 
-genTempIReg :: (Monad m) => BackendStateT m (Register RegID Int)
-genTempIReg = do
-    env <- get
-    modify $ \e -> e{generatedIReg = generatedIReg e + 1}
-    return $ SavedReg $ generatedIReg env
+genTempReg :: (Monad m) => RegType a -> BackendStateT m (Register RegID a)
+genTempReg rTy = do
+    ctx <- gets regContext
+    modify $ \ctx' ->
+        ctx'
+            { regContext =
+                updateVariant
+                    rTy
+                    ( \ctx'' ->
+                        ctx''
+                            { generatedReg = generatedReg ctx'' + 1
+                            }
+                    )
+                    $ regContext ctx'
+            }
+    pure $ SavedReg $ chooseTy rTy generatedReg ctx
 
-genTempFReg :: (Monad m) => BackendStateT m (Register RegID Float)
-genTempFReg = do
-    env <- get
-    modify $ \e -> e{generatedFReg = generatedFReg e + 1}
-    return $ SavedReg $ generatedFReg env
-
-genIReg :: (Monad m) => Ident -> BackendStateT m (Register RegID Int)
-genIReg ident = do
-    reg <- genTempIReg
-    modify $ \e ->
-        e
-            { iMap = insert ident reg $ iMap e
+genReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
+genReg rTy ident = do
+    reg <- genTempReg rTy
+    modify $ \ctx ->
+        ctx
+            { regContext =
+                updateVariant
+                    rTy
+                    ( \ctx' ->
+                        ctx'
+                            { registerMap = insert ident reg $ registerMap ctx'
+                            }
+                    )
+                    $ regContext ctx
             }
     pure reg
 
-genFReg :: (Monad m) => Ident -> BackendStateT m (Register RegID Float)
-genFReg ident = do
-    reg <- genTempFReg
-    modify $ \e ->
-        e
-            { fMap = insert ident reg $ fMap e
-            }
-    pure reg
-
-findI :: (Monad m) => Ident -> BackendStateT m (Register RegID Int)
-findI ident = do
-    regID <- gets (lookup ident . iMap)
+findReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
+findReg rTy ident = do
+    regID <- gets (chooseTy rTy (lookup ident . registerMap) . regContext)
     case regID of
         Just actual -> pure actual
         Nothing -> do
-            throwError $ OtherError $ "Detected an unknown non-float identifier named " <> display ident <> "."
+            throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
 
-findI' :: (Monad m) => Ident -> BackendStateT m (RegOrImm RegID Int)
-findI' (ExternalIdent ident) = do
-    Imm . globalOffset <$> findGlobal ident
-findI' ident = Reg <$> findI ident
-
-findF :: (Monad m) => Ident -> BackendStateT m (Register RegID Float)
-findF ident = do
-    regID <- gets (lookup ident . fMap)
-    case regID of
-        Just actual -> pure actual
-        Nothing -> do
-            throwError $ OtherError $ "Detected an unknown float identifier named " <> display ident <> "."
+findRegOrImm :: (Monad m) => RegType a -> Ident -> BackendStateT m (RegOrImm RegID a)
+findRegOrImm RInt (ExternalIdent ext) =
+    Imm . globalOffset <$> findGlobal ext
+findRegOrImm rTy ident = Reg <$> findReg rTy ident
 
 -- | Finds a global variable by its name.
 findGlobal :: (Monad m) => Text -> BackendStateT m GlobalProp

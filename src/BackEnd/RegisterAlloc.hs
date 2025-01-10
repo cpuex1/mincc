@@ -2,7 +2,7 @@
 
 module BackEnd.RegisterAlloc (assignRegister) where
 
-import BackEnd.BackendEnv (BackendEnv (generatedFReg, generatedIReg), BackendStateT)
+import BackEnd.BackendEnv (BackendEnv (regContext), BackendStateT, RegContext (generatedReg), chooseTy)
 import BackEnd.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Map (Map, findWithDefault)
@@ -15,6 +15,7 @@ import IR (
   Inst,
   IntermediateCodeBlock (getICBInst),
   RegID,
+  RegType (RFloat, RInt),
   Register (SavedReg, ZeroReg),
   getAllIState,
   replaceFReg,
@@ -77,8 +78,8 @@ assignRegister block = do
   let (iMap, fMap) = registerAlloc (LivenessGraph iGraph fGraph)
   let usedI = (+ 1) $ foldl max (-1) $ M.elems iMap
   let usedF = (+ 1) $ foldl max (-1) $ M.elems fMap
-  genI <- gets generatedIReg
-  genF <- gets generatedFReg
+  genI <- gets (chooseTy RInt generatedReg . regContext)
+  genF <- gets (chooseTy RFloat generatedReg . regContext)
 
   let iSpillTarget = selectSpilt iGraph
   let fSpillTarget = selectSpilt fGraph

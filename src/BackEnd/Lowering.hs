@@ -42,8 +42,8 @@ resolveArgs args = do
             )
             args
     -- TODO: Supports global variables.
-    iArgs' <- mapM findI' iArgs
-    fArgs' <- mapM findF fArgs
+    iArgs' <- mapM (findRegOrImm RInt) iArgs
+    fArgs' <- mapM (findReg RFloat) fArgs
     pure (iArgs', fArgs')
 
 expandExprToInst ::
@@ -61,44 +61,44 @@ expandExprToInst iReg _ (Const state (LBool b)) = do
 expandExprToInst _ fReg (Const state (LFloat f)) = do
     pure [IFMov (getLoc state) fReg (Imm f)]
 expandExprToInst iReg _ (Unary state Not operand) = do
-    operand' <- findI operand
+    operand' <- findReg RInt operand
     pure [ICompOp (getLoc state) Eq iReg ZeroReg (Reg operand')]
 expandExprToInst iReg _ (Unary state Neg operand) = do
-    operand' <- findI operand
+    operand' <- findReg RInt operand
     pure [IIntOp (getLoc state) PSub iReg ZeroReg (Reg operand')]
 expandExprToInst _ fReg (Unary state FNeg operand) = do
-    operand' <- findF operand
+    operand' <- findReg RFloat operand
     pure [IFOp (getLoc state) FSub fReg ZeroReg operand']
 expandExprToInst iReg _ (Binary state (RelationOp op) operand1 operand2) = do
     ty <- liftB $ getTyOf operand1
     case ty of
         TFloat -> do
-            operand1' <- findF operand1
-            operand2' <- findF operand2
+            operand1' <- findReg RFloat operand1
+            operand2' <- findReg RFloat operand2
             pure [IFCompOp (getLoc state) op iReg operand1' operand2']
         _ -> do
-            operand1' <- findI operand1
-            operand2' <- findI operand2
+            operand1' <- findReg RInt operand1
+            operand2' <- findReg RInt operand2
             pure [ICompOp (getLoc state) op iReg operand1' (Reg operand2')]
 expandExprToInst iReg _ (Binary state (IntOp op) operand1 operand2) = do
     const2 <- liftB $ asConstant operand2
     case (const2, op) of
         (Just (LInt i), Sub) -> do
-            operand1' <- findI operand1
+            operand1' <- findReg RInt operand1
             pure [IIntOp (getLoc state) PAdd iReg operand1' (Imm $ -i)]
         (Just (LInt i), _) -> do
-            operand1' <- findI operand1
+            operand1' <- findReg RInt operand1
             pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Imm i)]
         _ -> do
-            operand1' <- findI operand1
-            operand2' <- findI operand2
+            operand1' <- findReg RInt operand1
+            operand2' <- findReg RInt operand2
             pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Reg operand2')]
 expandExprToInst _ fReg (Binary state (FloatOp op) operand1 operand2) = do
-    operand1' <- findF operand1
-    operand2' <- findF operand2
+    operand1' <- findReg RFloat operand1
+    operand2' <- findReg RFloat operand2
     pure [IFOp (getLoc state) op fReg operand1' operand2']
 expandExprToInst iReg fReg (If state (CIdentity cond) thenExpr elseExpr) = do
-    cond' <- findI cond
+    cond' <- findReg RInt cond
 
     thenExpr' <- expandExprToInst iReg fReg thenExpr
     elseExpr' <- expandExprToInst iReg fReg elseExpr
@@ -111,17 +111,17 @@ expandExprToInst iReg fReg (If state (CComp op lhs rhs) thenExpr elseExpr) = do
     lhsTy <- liftB $ getTyOf lhs
     case lhsTy of
         TFloat -> do
-            lhs' <- findF lhs
-            rhs' <- findF rhs
-            cond <- genTempIReg
+            lhs' <- findReg RFloat lhs
+            rhs' <- findReg RFloat rhs
+            cond <- genTempReg RInt
 
             pure
                 [ IFCompOp (getLoc state) op cond lhs' rhs'
                 , IBranch (getLoc state) Ne cond ZeroReg thenExpr' elseExpr'
                 ]
         _ -> do
-            lhs' <- findI lhs
-            rhs' <- findI rhs
+            lhs' <- findReg RInt lhs
+            rhs' <- findReg RInt rhs
 
             pure [IBranch (getLoc state) op lhs' rhs' thenExpr' elseExpr']
 expandExprToInst _ _ (Let _ (PRec _ _) _ _) =
@@ -134,17 +134,17 @@ expandExprToInst iReg fReg (Let _ (PVar v) expr body) = do
     vTy <- liftB $ getTyOf v
     case vTy of
         TFloat -> do
-            v' <- genFReg v
+            v' <- genReg RFloat v
             expr' <- expandExprToInst iReg v' expr
             body' <- expandExprToInst iReg fReg body
             pure $ expr' ++ body'
         _ -> do
-            v' <- genIReg v
+            v' <- genReg RInt v
             expr' <- expandExprToInst v' fReg expr
             body' <- expandExprToInst iReg fReg body
             pure $ expr' ++ body'
 expandExprToInst iReg fReg (Let state (PTuple vals) expr body) = do
-    tuple <- genTempIReg
+    tuple <- genTempReg RInt
     expr' <- expandExprToInst tuple fReg expr
     store <-
         mapM
@@ -152,10 +152,10 @@ expandExprToInst iReg fReg (Let state (PTuple vals) expr body) = do
                 ty <- liftB $ getTyOf val
                 case ty of
                     TFloat -> do
-                        val' <- genFReg val
+                        val' <- genReg RFloat val
                         pure $ IFLoad (getLoc state) val' tuple idx
                     _ -> do
-                        val' <- genIReg val
+                        val' <- genReg RInt val
                         pure $ ILoad (getLoc state) val' tuple idx
             )
             $ zip [0 ..] vals
@@ -172,12 +172,12 @@ expandExprToInst iReg fReg (Var state ident) = do
         TUnit -> do
             pure []
         TFloat -> do
-            regID <- findF ident
+            regID <- findReg RFloat ident
             if fReg /= regID
                 then pure [IFMov (getLoc state) fReg (Reg regID)]
                 else pure []
         _ -> do
-            regID <- findI ident
+            regID <- findReg RInt ident
             if iReg /= regID
                 then pure [IMov (getLoc state) iReg (Reg regID)]
                 else pure []
@@ -189,7 +189,7 @@ expandExprToInst iReg _ (Tuple state vars) = do
                     case var of
                         ExternalIdent ext -> do
                             -- An element of the tuple can be a global variable.
-                            temp <- genTempIReg
+                            temp <- genTempReg RInt
                             prop <- findGlobal ext
                             let offset = globalOffset prop
                             pure
@@ -200,10 +200,10 @@ expandExprToInst iReg _ (Tuple state vars) = do
                             varTy <- liftB $ getTyOf var
                             case varTy of
                                 TFloat -> do
-                                    var' <- findF var
+                                    var' <- findReg RFloat var
                                     pure [IFStore (getLoc state) var' HeapReg index]
                                 _ -> do
-                                    var' <- findI var
+                                    var' <- findReg RInt var
                                     pure [IStore (getLoc state) var' HeapReg index]
                 )
                 (zip [0 ..] vars)
@@ -213,7 +213,7 @@ expandExprToInst iReg _ (Tuple state vars) = do
                , IIntOp (getLoc state) PAdd HeapReg HeapReg (Imm $ length vars)
                ]
 expandExprToInst iReg _ (ArrayCreate state size _) = do
-    size' <- findI size
+    size' <- findReg RInt size
     pure
         [ IMov (getLoc state) iReg (Reg HeapReg)
         , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg size')
@@ -222,9 +222,9 @@ expandExprToInst iReg fReg (Get state array index) = do
     array' <- case array of
         ExternalIdent arrayName ->
             Imm . globalOffset <$> findGlobal arrayName
-        _ -> Reg <$> findI array
-    index' <- findI index
-    addr <- genTempIReg
+        _ -> Reg <$> findReg RInt array
+    index' <- findReg RInt index
+    addr <- genTempReg RInt
     let ty = getType state
     case ty of
         TFloat ->
@@ -238,15 +238,15 @@ expandExprToInst iReg fReg (Get state array index) = do
                 , ILoad (getLoc state) iReg addr 0
                 ]
 expandExprToInst _ _ (Put state dest idx src) = do
-    dest' <- findI' dest
-    idx' <- findI idx
+    dest' <- findRegOrImm RInt dest
+    idx' <- findReg RInt idx
     srcTy <- liftB $ getTyOf src
     case src of
         ExternalIdent src' -> do
             -- It can be a global variable.
             src'' <- globalOffset <$> findGlobal src'
-            temp <- genTempIReg
-            offset <- genTempIReg
+            temp <- genTempReg RInt
+            offset <- genTempReg RInt
             pure
                 [ IIntOp (getLoc state) PAdd offset idx' dest'
                 , IMov (getLoc state) temp (Imm src'')
@@ -255,15 +255,15 @@ expandExprToInst _ _ (Put state dest idx src) = do
         _ ->
             case srcTy of
                 TFloat -> do
-                    src' <- findF src
-                    offset <- genTempIReg
+                    src' <- findReg RFloat src
+                    offset <- genTempReg RInt
                     pure
                         [ IIntOp (getLoc state) PAdd offset idx' dest'
                         , IFStore (getLoc state) src' offset 0
                         ]
                 _ -> do
-                    src' <- findI src
-                    offset <- genTempIReg
+                    src' <- findReg RInt src
+                    offset <- genTempReg RInt
                     pure
                         [ IIntOp (getLoc state) PAdd offset idx' dest'
                         , IStore (getLoc state) src' offset 0
@@ -284,8 +284,8 @@ expandExprToInst iReg _ (MakeClosure state func freeV) = do
             )
             freeV
     -- Need to proof iFreeV and fFreeV don't contain any global variables.
-    iFreeV' <- mapM findI' iFreeV
-    fFreeV' <- mapM findF fFreeV
+    iFreeV' <- mapM (findRegOrImm RInt) iFreeV
+    fFreeV' <- mapM (findReg RFloat) fFreeV
     pure [IMakeClosure (getLoc state) iReg (display func) iFreeV' fFreeV']
 expandExprToInst iReg fReg (DirectApp state func args) = do
     case args of
@@ -307,15 +307,15 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
                     ty <- liftB $ getTyOf val
                     case ty of
                         TFloat -> do
-                            reg <- findF val
+                            reg <- findReg RFloat val
                             pure [IFStore (getLoc state) reg ZeroReg (offset + idx)]
                         _ -> do
-                            reg <- findI' val
+                            reg <- findRegOrImm RInt val
                             case reg of
                                 Reg reg' -> do
                                     pure [IStore (getLoc state) reg' ZeroReg (offset + idx)]
                                 Imm imm -> do
-                                    temp' <- genTempIReg
+                                    temp' <- genTempReg RInt
                                     pure
                                         [ IMov (getLoc state) temp' (Imm imm)
                                         , IStore (getLoc state) temp' ZeroReg (offset + idx)
@@ -357,7 +357,7 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
                             , IMov (getLoc state) iReg (Reg RetReg)
                             ]
 expandExprToInst iReg fReg (ClosureApp state func args) = do
-    func' <- findI func
+    func' <- findReg RInt func
     (iArgs', fArgs') <- resolveArgs args
     case getType state of
         TUnit -> do
@@ -423,24 +423,43 @@ toInstructions function = do
         iFreeVarsReg <-
             mapM
                 ( \(v, i) -> do
-                    reg <- genIReg v
+                    reg <- genReg RInt v
                     pure (ILoad dummyLoc reg closureArg i, (v, reg))
                 )
                 $ zip iFreeVars [0 ..]
         fFreeVarsReg <-
             mapM
                 ( \(v, i) -> do
-                    reg <- genFReg v
+                    reg <- genReg RFloat v
                     pure (IFLoad dummyLoc reg closureArg i, (v, reg))
                 )
                 $ zip fFreeVars [length iFreeVars ..]
 
         modify $ \env ->
             env
-                { iArgsLen = length iBoundedReg
-                , fArgsLen = length fBoundedReg
-                , iMap = fromList $ iBoundedReg ++ map snd iFreeVarsReg
-                , fMap = fromList $ fBoundedReg ++ map snd fFreeVarsReg
+                { regContext =
+                    updateVariant
+                        RInt
+                        ( \ctx ->
+                            ctx
+                                { argsLength = length iBoundedReg
+                                , registerMap = fromList $ iBoundedReg ++ map snd iFreeVarsReg
+                                }
+                        )
+                        $ regContext env
+                }
+        modify $ \env ->
+            env
+                { regContext =
+                    updateVariant
+                        RFloat
+                        ( \ctx ->
+                            ctx
+                                { argsLength = length fBoundedReg
+                                , registerMap = fromList $ fBoundedReg ++ map snd fFreeVarsReg
+                                }
+                        )
+                        $ regContext env
                 }
         inst <- expandExprToInst RetReg RetReg body
         pure $ map fst iFreeVarsReg ++ map fst fFreeVarsReg ++ inst

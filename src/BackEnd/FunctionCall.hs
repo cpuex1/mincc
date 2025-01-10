@@ -5,7 +5,7 @@ module BackEnd.FunctionCall (
     saveRegisters,
 ) where
 
-import BackEnd.BackendEnv (BackendEnv (fArgsLen), BackendStateT, genTempFReg, genTempIReg, iArgsLen)
+import BackEnd.BackendEnv (BackendEnv (regContext), BackendStateT, RegContext (argsLength), chooseTy, genTempReg)
 import BackEnd.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
 import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
@@ -21,13 +21,13 @@ saveArgs block = do
   where
     saveArgs' :: (Monad m) => [Inst stateTy RegID AllowBranch] -> BackendStateT m [Inst stateTy RegID AllowBranch]
     saveArgs' inst'' = do
-        iLen <- gets iArgsLen
+        iLen <- gets (chooseTy RInt argsLength . regContext)
         modInst <-
             foldlM
                 ( \inst' arg -> do
                     if evalState (isUsedAfterCallI arg inst') False
                         then do
-                            reg <- genTempIReg
+                            reg <- genTempReg RInt
                             -- The instructions must not be empty.
                             case inst' of
                                 [] -> error "panic!"
@@ -39,12 +39,12 @@ saveArgs block = do
                 inst''
                 [0 .. iLen - 1]
 
-        fLen <- gets fArgsLen
+        fLen <- gets (chooseTy RFloat argsLength . regContext)
         foldlM
             ( \inst' arg -> do
                 if evalState (isUsedAfterCallF (ArgsReg arg) inst') False
                     then do
-                        reg <- genTempFReg
+                        reg <- genTempReg RFloat
                         -- The instructions must not be empty.
                         case inst' of
                             [] -> error "panic!"

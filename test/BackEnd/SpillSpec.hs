@@ -2,12 +2,26 @@
 
 module BackEnd.SpillSpec (spec) where
 
-import BackEnd.BackendEnv (BackendConfig (BackendConfig), BackendEnv (generatedFReg, generatedIReg), RegID, runBackendStateT)
+import BackEnd.BackendEnv (
+    BackendEnv (regContext),
+    RegContext (generatedReg),
+    createBackendConfig,
+    runBackendStateT,
+    updateVariant,
+ )
 import BackEnd.Spill
 import Control.Monad.Identity (Identity (runIdentity))
 import Control.Monad.State (modify)
 import Error (CompilerError)
-import IR (Inst (IFLoad, IFMov, IFOp, IFStore, IIntOp, ILoad, IMov, IStore), IntermediateCodeBlock (IntermediateCodeBlock), PrimitiveIntOp (PAdd), RegOrImm (Imm, Reg), Register (SavedReg, StackReg))
+import IR (
+    Inst (..),
+    IntermediateCodeBlock (IntermediateCodeBlock),
+    PrimitiveIntOp (PAdd),
+    RegID,
+    RegOrImm (Imm, Reg),
+    RegType (RFloat, RInt),
+    Register (SavedReg, StackReg),
+ )
 import MiddleEnd.Globals (defaultGlobalTable)
 import Syntax (FloatBinOp (FAdd), Loc, dummyLoc)
 import Test.Hspec
@@ -17,10 +31,11 @@ doSpillI generatedI generatedF var block =
     runIdentity
         ( runBackendStateT
             ( do
-                modify (\env -> env{generatedIReg = generatedI, generatedFReg = generatedF})
+                modify (\env -> env{regContext = updateVariant RInt (\ctx -> ctx{generatedReg = generatedI}) $ regContext env})
+                modify (\env -> env{regContext = updateVariant RFloat (\ctx -> ctx{generatedReg = generatedF}) $ regContext env})
                 spillI var block
             )
-            (BackendConfig 10 10)
+            (createBackendConfig 10 10)
             defaultGlobalTable
         )
 
@@ -29,10 +44,11 @@ doSpillF generatedI generatedF var block =
     runIdentity
         ( runBackendStateT
             ( do
-                modify (\env -> env{generatedIReg = generatedI, generatedFReg = generatedF})
+                modify (\env -> env{regContext = updateVariant RInt (\ctx -> ctx{generatedReg = generatedI}) $ regContext env})
+                modify (\env -> env{regContext = updateVariant RFloat (\ctx -> ctx{generatedReg = generatedF}) $ regContext env})
                 spillF var block
             )
-            (BackendConfig 10 10)
+            (createBackendConfig 10 10)
             defaultGlobalTable
         )
 

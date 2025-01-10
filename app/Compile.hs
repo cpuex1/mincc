@@ -17,9 +17,13 @@ module Compile (
 ) where
 
 import BackEnd.BackendEnv (
-    BackendEnv (generatedFReg, generatedIReg, usedFRegLen, usedIRegLen),
-    getRegLimit,
+    BackendConfig (regConfig),
+    BackendEnv (regContext),
+    RegConfig (regLimit),
+    RegContext (generatedReg, usedRegLen),
+    chooseTy,
     liftB,
+    updateVariant,
  )
 import BackEnd.FunctionCall (saveRegisters)
 import BackEnd.Liveness (LivenessLoc (livenessLoc), liveness)
@@ -217,8 +221,8 @@ livenessIO = mapM livenessIO'
 assignRegisterIO :: [IntermediateCodeBlock LivenessLoc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
 assignRegisterIO blocks = do
     -- Report used registers.
-    usedIRegLen' <- gets generatedIReg
-    usedFRegLen' <- gets generatedFReg
+    usedIRegLen' <- gets (chooseTy RInt generatedReg . regContext)
+    usedFRegLen' <- gets (chooseTy RFloat generatedReg . regContext)
     liftB $ lift $ printLog Debug $ "Before: int: " <> show usedIRegLen' <> ", float: " <> show usedFRegLen'
 
     blocks' <-
@@ -234,8 +238,8 @@ assignRegisterIO blocks = do
             blocks
 
     -- Report used registers.
-    usedIRegLen'' <- gets usedIRegLen
-    usedFRegLen'' <- gets usedFRegLen
+    usedIRegLen'' <- gets (chooseTy RInt generatedReg . regContext)
+    usedFRegLen'' <- gets (chooseTy RFloat generatedReg . regContext)
     liftB $ lift $ printLog Debug $ "After: int: " <> show usedIRegLen'' <> ", float: " <> show usedFRegLen''
 
     -- Perform register saving.
@@ -256,7 +260,7 @@ assignRegisterIO blocks = do
                         <> ", "
                         <> pack (show usedF)
 
-        iLimit <- asks (getRegLimit RInt)
+        iLimit <- asks (chooseTy RInt regLimit . regConfig)
         if iLimit < usedI
             then do
                 case iSpillTarget of
@@ -270,7 +274,7 @@ assignRegisterIO blocks = do
                     Nothing -> do
                         throwError $ OtherError "Failed to find a spill target for int registers."
             else do
-                fLimit <- asks (getRegLimit RFloat)
+                fLimit <- asks (chooseTy RFloat regLimit . regConfig)
                 if fLimit < usedF
                     then do
                         case fSpillTarget of
@@ -286,7 +290,10 @@ assignRegisterIO blocks = do
                     else do
                         modify $ \env ->
                             env
-                                { usedIRegLen = max usedI (usedIRegLen env)
-                                , usedFRegLen = max usedF (usedFRegLen env)
+                                { regContext = updateVariant RInt (\ctx -> ctx{usedRegLen = max usedI (usedRegLen ctx)}) $ regContext env
+                                }
+                        modify $ \env ->
+                            env
+                                { regContext = updateVariant RFloat (\ctx -> ctx{usedRegLen = max usedF (usedRegLen ctx)}) $ regContext env
                                 }
                         pure block'
