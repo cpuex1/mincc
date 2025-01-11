@@ -13,7 +13,6 @@ import Builtin (BuiltinFunction (builtinInst), builtinMakeTuple, findBuiltin)
 import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (modify)
-import Data.Map (fromList)
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
@@ -23,7 +22,8 @@ import MiddleEnd.Globals (GlobalProp (globalOffset))
 import Registers (
     RegOrImm (Imm, Reg),
     RegType (RFloat, RInt),
-    Register,
+    Register (Register),
+    RegisterKind (DCReg),
     argsReg,
     heapReg,
     retReg,
@@ -143,6 +143,12 @@ expandExprToInst iReg fReg (Let _ PUnit expr body) = do
 expandExprToInst iReg fReg (Let _ (PVar v) expr body) = do
     vTy <- liftB $ getTyOf v
     case vTy of
+        TUnit -> do
+            let v' = Register RInt DCReg
+            registerReg v v'
+            expr' <- expandExprToInst v' fReg expr
+            body' <- expandExprToInst iReg fReg body
+            pure $ expr' ++ body'
         TFloat -> do
             v' <- genReg RFloat v
             expr' <- expandExprToInst iReg v' expr
@@ -445,6 +451,11 @@ toInstructions function = do
                 )
                 $ zip fFreeVars [length iFreeVars ..]
 
+        mapM_ (uncurry registerReg) iBoundedReg
+        mapM_ (\(_, (ident, reg)) -> registerReg ident reg) iFreeVarsReg
+        mapM_ (uncurry registerReg) fBoundedReg
+        mapM_ (\(_, (ident, reg)) -> registerReg ident reg) fFreeVarsReg
+
         modify $ \env ->
             env
                 { regContext =
@@ -453,7 +464,6 @@ toInstructions function = do
                         ( \ctx ->
                             ctx
                                 { argsLength = length iBoundedReg
-                                , registerMap = fromList $ iBoundedReg ++ map snd iFreeVarsReg
                                 }
                         )
                         $ regContext env
@@ -466,7 +476,6 @@ toInstructions function = do
                         ( \ctx ->
                             ctx
                                 { argsLength = length fBoundedReg
-                                , registerMap = fromList $ fBoundedReg ++ map snd fFreeVarsReg
                                 }
                         )
                         $ regContext env

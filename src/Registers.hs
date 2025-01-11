@@ -57,7 +57,8 @@ data RegisterKind idTy ty where
     TempReg :: idTy -> RegisterKind idTy ty
     SavedReg :: idTy -> RegisterKind idTy ty
     GeneralReg :: idTy -> RegisterKind idTy ty
-    DummyReg :: RegisterKind idTy ()
+    -- | Used for marking it as a "don't care" register.
+    DCReg :: RegisterKind idTy ty
 
 deriving instance (Show idTy, Show ty) => Show (RegisterKind idTy ty)
 deriving instance (Eq idTy, Eq ty) => Eq (RegisterKind idTy ty)

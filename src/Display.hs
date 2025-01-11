@@ -234,6 +234,8 @@ instance Display (Register Int a) where
     display (Register RFloat (SavedReg idTy)) = "fs" <> pack (show idTy)
     display (Register RInt (GeneralReg idTy)) = "r" <> pack (show idTy)
     display (Register RFloat (GeneralReg idTy)) = "fr" <> pack (show idTy)
+    display (Register RInt DCReg) = "zero" -- Don't care
+    display (Register RFloat DCReg) = "fzero" -- Don't care
 
 instance Display (RegOrImm RegID Int) where
     display (Reg reg) = display reg

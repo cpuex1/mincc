@@ -15,6 +15,7 @@ module BackEnd.BackendEnv (
     genReg,
     genTempReg,
     findReg,
+    registerReg,
     findRegOrImm,
     findGlobal,
 ) where
@@ -150,6 +151,21 @@ findRegOrImm :: (Monad m) => RegType a -> Ident -> BackendStateT m (RegOrImm Reg
 findRegOrImm RInt (ExternalIdent ext) =
     Imm . globalOffset <$> findGlobal ext
 findRegOrImm rTy ident = Reg <$> findReg rTy ident
+
+registerReg :: (Monad m) => Ident -> Register RegID a -> BackendStateT m ()
+registerReg ident (Register rTy kind) = do
+    modify $ \ctx ->
+        ctx
+            { regContext =
+                updateVariant
+                    rTy
+                    ( \ctx' ->
+                        ctx'
+                            { registerMap = insert ident (Register rTy kind) $ registerMap ctx'
+                            }
+                    )
+                    $ regContext ctx
+            }
 
 -- | Finds a global variable by its name.
 findGlobal :: (Monad m) => Text -> BackendStateT m GlobalProp
