@@ -9,52 +9,50 @@ import IR (
     IntermediateCodeBlock (getICBInst, localVars),
     RawInstRetTy (RIRFloat, RIRInt),
     RegID,
-    RegOrImm (Reg),
-    RegType (RFloat, RInt),
-    Register (SavedReg, StackReg),
  )
+import Registers (RegOrImm (Reg), RegType (RFloat, RInt), Register, savedReg, stackReg)
 import Syntax (Loc, dummyLoc)
 
 loadNewReg :: (Monad m) => RegType a -> Int -> RegID -> Register RegID a -> BackendStateT m (Register RegID a, [Inst Loc RegID AllowBranch])
 loadNewReg RInt vars searching victim =
-    if SavedReg searching == victim
+    if savedReg RInt searching == victim
         then do
             newReg <- genTempReg RInt
-            pure (newReg, [ILoad dummyLoc newReg StackReg vars])
+            pure (newReg, [ILoad dummyLoc newReg stackReg vars])
         else pure (victim, [])
 loadNewReg RFloat vars searching victim =
-    if SavedReg searching == victim
+    if savedReg RFloat searching == victim
         then do
             newReg <- genTempReg RFloat
-            pure (newReg, [IFLoad dummyLoc newReg StackReg vars])
+            pure (newReg, [IFLoad dummyLoc newReg stackReg vars])
         else pure (victim, [])
 
 loadNewRegOrImm :: (Monad m) => RegType a -> Int -> RegID -> RegOrImm RegID a -> BackendStateT m (RegOrImm RegID a, [Inst Loc RegID AllowBranch])
 loadNewRegOrImm RInt vars searching victim =
-    if Reg (SavedReg searching) == victim
+    if Reg (savedReg RInt searching) == victim
         then do
             newReg <- genTempReg RInt
-            pure (Reg newReg, [ILoad dummyLoc newReg StackReg vars])
+            pure (Reg newReg, [ILoad dummyLoc newReg stackReg vars])
         else pure (victim, [])
 loadNewRegOrImm RFloat vars searching victim =
-    if Reg (SavedReg searching) == victim
+    if Reg (savedReg RFloat searching) == victim
         then do
             newReg <- genTempReg RFloat
-            pure (Reg newReg, [IFLoad dummyLoc newReg StackReg vars])
+            pure (Reg newReg, [IFLoad dummyLoc newReg stackReg vars])
         else pure (victim, [])
 
 storeNewReg :: (Monad m) => RegType a -> Int -> RegID -> Register RegID a -> BackendStateT m (Register RegID a, [Inst Loc RegID AllowBranch])
 storeNewReg RInt vars searching victim =
-    if SavedReg searching == victim
+    if savedReg RInt searching == victim
         then do
             newReg <- genTempReg RInt
-            pure (newReg, [IStore dummyLoc newReg StackReg vars])
+            pure (newReg, [IStore dummyLoc newReg stackReg vars])
         else pure (victim, [])
 storeNewReg RFloat vars searching victim =
-    if SavedReg searching == victim
+    if savedReg RFloat searching == victim
         then do
             newReg <- genTempReg RFloat
-            pure (newReg, [IFStore dummyLoc newReg StackReg vars])
+            pure (newReg, [IFStore dummyLoc newReg stackReg vars])
         else pure (victim, [])
 
 replaceIRegWithMem :: (Monad m) => Int -> RegID -> Inst Loc RegID AllowBranch -> BackendStateT m [Inst Loc RegID AllowBranch]

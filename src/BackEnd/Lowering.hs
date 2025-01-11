@@ -20,6 +20,16 @@ import Error (CompilerError (OtherError))
 import IR
 import MiddleEnd.Analysis.Identifier (IdentEnvT, asConstant, getTyOf)
 import MiddleEnd.Globals (GlobalProp (globalOffset))
+import Registers (
+    RegOrImm (Imm, Reg),
+    RegType (RFloat, RInt),
+    Register,
+    argsReg,
+    heapReg,
+    retReg,
+    updateVariant,
+    zeroReg,
+ )
 import Syntax
 import Typing (TypeKind (TFloat, TUnit))
 
@@ -62,13 +72,13 @@ expandExprToInst _ fReg (Const state (LFloat f)) = do
     pure [IFMov (getLoc state) fReg (Imm f)]
 expandExprToInst iReg _ (Unary state Not operand) = do
     operand' <- findReg RInt operand
-    pure [ICompOp (getLoc state) Eq iReg ZeroReg (Reg operand')]
+    pure [ICompOp (getLoc state) Eq iReg (zeroReg RInt) (Reg operand')]
 expandExprToInst iReg _ (Unary state Neg operand) = do
     operand' <- findReg RInt operand
-    pure [IIntOp (getLoc state) PSub iReg ZeroReg (Reg operand')]
+    pure [IIntOp (getLoc state) PSub iReg (zeroReg RInt) (Reg operand')]
 expandExprToInst _ fReg (Unary state FNeg operand) = do
     operand' <- findReg RFloat operand
-    pure [IFOp (getLoc state) FSub fReg ZeroReg operand']
+    pure [IFOp (getLoc state) FSub fReg (zeroReg RFloat) operand']
 expandExprToInst iReg _ (Binary state (RelationOp op) operand1 operand2) = do
     ty <- liftB $ getTyOf operand1
     case ty of
@@ -103,7 +113,7 @@ expandExprToInst iReg fReg (If state (CIdentity cond) thenExpr elseExpr) = do
     thenExpr' <- expandExprToInst iReg fReg thenExpr
     elseExpr' <- expandExprToInst iReg fReg elseExpr
 
-    pure [IBranch (getLoc state) Ne cond' ZeroReg thenExpr' elseExpr']
+    pure [IBranch (getLoc state) Ne cond' (zeroReg RInt) thenExpr' elseExpr']
 expandExprToInst iReg fReg (If state (CComp op lhs rhs) thenExpr elseExpr) = do
     thenExpr' <- expandExprToInst iReg fReg thenExpr
     elseExpr' <- expandExprToInst iReg fReg elseExpr
@@ -117,7 +127,7 @@ expandExprToInst iReg fReg (If state (CComp op lhs rhs) thenExpr elseExpr) = do
 
             pure
                 [ IFCompOp (getLoc state) op cond lhs' rhs'
-                , IBranch (getLoc state) Ne cond ZeroReg thenExpr' elseExpr'
+                , IBranch (getLoc state) Ne cond (zeroReg RInt) thenExpr' elseExpr'
                 ]
         _ -> do
             lhs' <- findReg RInt lhs
@@ -194,29 +204,29 @@ expandExprToInst iReg _ (Tuple state vars) = do
                             let offset = globalOffset prop
                             pure
                                 [ IMov (getLoc state) temp (Imm offset)
-                                , IStore (getLoc state) temp HeapReg index
+                                , IStore (getLoc state) temp heapReg index
                                 ]
                         _ -> do
                             varTy <- liftB $ getTyOf var
                             case varTy of
                                 TFloat -> do
                                     var' <- findReg RFloat var
-                                    pure [IFStore (getLoc state) var' HeapReg index]
+                                    pure [IFStore (getLoc state) var' heapReg index]
                                 _ -> do
                                     var' <- findReg RInt var
-                                    pure [IStore (getLoc state) var' HeapReg index]
+                                    pure [IStore (getLoc state) var' heapReg index]
                 )
                 (zip [0 ..] vars)
     pure $
         inst
-            ++ [ IMov (getLoc state) iReg (Reg HeapReg)
-               , IIntOp (getLoc state) PAdd HeapReg HeapReg (Imm $ length vars)
+            ++ [ IMov (getLoc state) iReg (Reg heapReg)
+               , IIntOp (getLoc state) PAdd heapReg heapReg (Imm $ length vars)
                ]
 expandExprToInst iReg _ (ArrayCreate state size _) = do
     size' <- findReg RInt size
     pure
-        [ IMov (getLoc state) iReg (Reg HeapReg)
-        , IIntOp (getLoc state) PAdd HeapReg HeapReg (Reg size')
+        [ IMov (getLoc state) iReg (Reg heapReg)
+        , IIntOp (getLoc state) PAdd heapReg heapReg (Reg size')
         ]
 expandExprToInst iReg fReg (Get state array index) = do
     array' <- case array of
@@ -308,17 +318,17 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
                     case ty of
                         TFloat -> do
                             reg <- findReg RFloat val
-                            pure [IFStore (getLoc state) reg ZeroReg (offset + idx)]
+                            pure [IFStore (getLoc state) reg (zeroReg RInt) (offset + idx)]
                         _ -> do
                             reg <- findRegOrImm RInt val
                             case reg of
                                 Reg reg' -> do
-                                    pure [IStore (getLoc state) reg' ZeroReg (offset + idx)]
+                                    pure [IStore (getLoc state) reg' (zeroReg RInt) (offset + idx)]
                                 Imm imm -> do
                                     temp' <- genTempReg RInt
                                     pure
                                         [ IMov (getLoc state) temp' (Imm imm)
-                                        , IStore (getLoc state) temp' ZeroReg (offset + idx)
+                                        , IStore (getLoc state) temp' (zeroReg RInt) (offset + idx)
                                         ]
                 )
                 ( zip
@@ -345,7 +355,7 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
                     Nothing -> do
                         pure
                             [ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                            , IFMov (getLoc state) fReg (Reg RetReg)
+                            , IFMov (getLoc state) fReg (Reg $ retReg RFloat)
                             ]
             _ -> do
                 case findBuiltin func of
@@ -354,7 +364,7 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
                     Nothing -> do
                         pure
                             [ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                            , IMov (getLoc state) iReg (Reg RetReg)
+                            , IMov (getLoc state) iReg (Reg $ retReg RInt)
                             ]
 expandExprToInst iReg fReg (ClosureApp state func args) = do
     func' <- findReg RInt func
@@ -365,12 +375,12 @@ expandExprToInst iReg fReg (ClosureApp state func args) = do
         TFloat -> do
             pure
                 [ IClosureCall (getLoc state) func' iArgs' fArgs'
-                , IFMov (getLoc state) fReg (Reg RetReg)
+                , IFMov (getLoc state) fReg (Reg $ retReg RFloat)
                 ]
         _ -> do
             pure
                 [ IClosureCall (getLoc state) func' iArgs' fArgs'
-                , IMov (getLoc state) iReg (Reg RetReg)
+                , IMov (getLoc state) iReg (Reg $ retReg RInt)
                 ]
 
 toInstructions :: (Monad m) => Function -> BackendIdentState m (IntermediateCodeBlock Loc RegID)
@@ -411,15 +421,15 @@ toInstructions function = do
 
         let iBoundedReg =
                 zipWith
-                    (\v i -> (v, ArgsReg i))
+                    (\v i -> (v, argsReg RInt i))
                     iBoundedArgs
                     [0 ..]
         let fBoundedReg =
                 zipWith
-                    (\v i -> (v, ArgsReg i))
+                    (\v i -> (v, argsReg RFloat i))
                     fBoundedArgs
                     [0 ..]
-        let closureArg = ArgsReg $ length iBoundedReg
+        let closureArg = argsReg RInt $ length iBoundedReg
         iFreeVarsReg <-
             mapM
                 ( \(v, i) -> do
@@ -461,5 +471,5 @@ toInstructions function = do
                         )
                         $ regContext env
                 }
-        inst <- expandExprToInst RetReg RetReg body
+        inst <- expandExprToInst (retReg RInt) (retReg RFloat) body
         pure $ map fst iFreeVarsReg ++ map fst fFreeVarsReg ++ inst

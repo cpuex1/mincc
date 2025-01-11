@@ -59,6 +59,7 @@ library
       MiddleEnd.Optim.UnusedElim
       MiddleEnd.Optim.VarMerging
       MiddleEnd.Validator
+      Registers
       Syntax
       Typing
   other-modules:

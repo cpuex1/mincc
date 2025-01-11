@@ -11,6 +11,7 @@ import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
 import Data.Foldable (foldlM)
 import Data.Set (toAscList)
 import IR
+import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register), RegisterKind (ArgsReg), argsReg, savedReg, selectVariant, stackReg)
 import Syntax (Loc, dummyLoc)
 
 -- | Saves arguments on the stack before a function call.
@@ -32,7 +33,9 @@ saveArgs block = do
                             case inst' of
                                 [] -> error "panic!"
                                 (f : _) ->
-                                    pure $ IMov (getIState f) reg (Reg (ArgsReg arg)) : map (replaceIReg (ArgsReg arg) reg) inst'
+                                    pure $
+                                        IMov (getIState f) reg (Reg (Register RInt (ArgsReg arg)))
+                                            : map (replaceIReg (Register RInt (ArgsReg arg)) reg) inst'
                         else
                             pure inst'
                 )
@@ -42,14 +45,16 @@ saveArgs block = do
         fLen <- gets (argsLength . selectVariant RFloat . regContext)
         foldlM
             ( \inst' arg -> do
-                if evalState (isUsedAfterCallF (ArgsReg arg) inst') False
+                if evalState (isUsedAfterCallF (Register RFloat (ArgsReg arg)) inst') False
                     then do
                         reg <- genTempReg RFloat
                         -- The instructions must not be empty.
                         case inst' of
                             [] -> error "panic!"
                             (f : _) ->
-                                pure $ IFMov (getIState f) reg (Reg (ArgsReg arg)) : map (replaceFReg (ArgsReg arg) reg) inst'
+                                pure $
+                                    IFMov (getIState f) reg (Reg (Register RFloat (ArgsReg arg)))
+                                        : map (replaceFReg (Register RFloat (ArgsReg arg)) reg) inst'
                     else
                         pure inst'
             )
@@ -61,18 +66,18 @@ saveArgs block = do
     isUsedAfterCallI reg (ICompOp _ _ _ left right : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (ArgsReg reg == left || Reg (ArgsReg reg) == right)) || rest'
+        pure $ (called && (argsReg RInt reg == left || Reg (argsReg RInt reg) == right)) || rest'
     isUsedAfterCallI reg (IIntOp _ _ _ left right : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (ArgsReg reg == left || Reg (ArgsReg reg) == right)) || rest'
+        pure $ (called && (argsReg RInt reg == left || Reg (argsReg RInt reg) == right)) || rest'
     isUsedAfterCallI reg (IMov _ _ (Reg reg') : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (ArgsReg reg == reg')) || rest'
+        pure $ (called && (argsReg RInt reg == reg')) || rest'
     isUsedAfterCallI reg (IRichCall _ _ args _ : rest) = do
         called <- get
-        if called && elem (Reg $ ArgsReg reg) args
+        if called && elem (Reg $ argsReg RInt reg) args
             then
                 pure True
             else do
@@ -80,7 +85,7 @@ saveArgs block = do
                 isUsedAfterCallI reg rest
     isUsedAfterCallI reg (IClosureCall _ _ args _ : rest) = do
         called <- get
-        if called && elem (Reg $ ArgsReg reg) args
+        if called && elem (Reg $ argsReg RInt reg) args
             then
                 pure True
             else do
@@ -89,30 +94,30 @@ saveArgs block = do
     isUsedAfterCallI reg (IMakeClosure _ _ _ args _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && elem (Reg $ ArgsReg reg) args) || rest'
+        pure $ (called && elem (Reg $ argsReg RInt reg) args) || rest'
     isUsedAfterCallI reg (ILoad _ _ reg' _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (ArgsReg reg == reg')) || rest'
+        pure $ (called && (argsReg RInt reg == reg')) || rest'
     isUsedAfterCallI reg (IStore _ reg1 reg2 _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (ArgsReg reg == reg1 || ArgsReg reg == reg2)) || rest'
+        pure $ (called && (argsReg RInt reg == reg1 || argsReg RInt reg == reg2)) || rest'
     isUsedAfterCallI reg (IFLoad _ _ reg' _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (ArgsReg reg == reg')) || rest'
+        pure $ (called && (argsReg RInt reg == reg')) || rest'
     isUsedAfterCallI reg (IFStore _ _ reg' _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && ArgsReg reg == reg') || rest'
+        pure $ (called && argsReg RInt reg == reg') || rest'
     isUsedAfterCallI reg (IRawInst _ _ _ iArgs _ : rest) = do
         called <- get
         rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (Reg (ArgsReg reg) `elem` iArgs)) || rest'
+        pure $ (called && (Reg (argsReg RInt reg) `elem` iArgs)) || rest'
     isUsedAfterCallI reg (IBranch _ _ left right thenBlock elseBlock : rest) = do
         called <- get
-        if called && (ArgsReg reg == left || ArgsReg reg == right)
+        if called && (argsReg RInt reg == left || argsReg RInt reg == right)
             then
                 pure True
             else do
@@ -199,15 +204,15 @@ saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) lab
             then
                 []
             else
-                IIntOp dummyLoc PAdd StackReg StackReg (Imm $ -(length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
+                IIntOp dummyLoc PAdd stackReg stackReg (Imm $ -(length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
-            (\i arg -> IStore dummyLoc (SavedReg arg) StackReg i)
+            (\i arg -> IStore dummyLoc (savedReg RInt arg) stackReg i)
             [0 ..]
             $ toAscList iToBeSaved
     fPrologue =
         zipWith
-            (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg i)
+            (\i arg -> IFStore dummyLoc (savedReg RFloat arg) stackReg i)
             [length iToBeSaved ..]
             $ toAscList fToBeSaved
 
@@ -216,15 +221,15 @@ saveRegBeyondCall (IRichCall (LivenessLoc loc (LivenessState iArgs' fArgs')) lab
             then
                 []
             else
-                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd StackReg StackReg (Imm $ length iToBeSaved + length fToBeSaved)]
+                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd stackReg stackReg (Imm $ length iToBeSaved + length fToBeSaved)]
     iEpilogue =
         zipWith
-            (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg i)
+            (\i arg -> ILoad dummyLoc (savedReg RInt arg) stackReg i)
             [0 ..]
             $ toAscList iToBeSaved
     fEpilogue =
         zipWith
-            (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg i)
+            (\i arg -> IFLoad dummyLoc (savedReg RFloat arg) stackReg i)
             [length iToBeSaved ..]
             $ toAscList fToBeSaved
 saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) cl iArgs fArgs) =
@@ -238,15 +243,15 @@ saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) 
             then
                 []
             else
-                IIntOp dummyLoc PAdd StackReg StackReg (Imm $ -(length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
+                IIntOp dummyLoc PAdd stackReg stackReg (Imm $ -(length iToBeSaved + length fToBeSaved)) : (iPrologue ++ fPrologue)
     iPrologue =
         zipWith
-            (\i arg -> IStore dummyLoc (SavedReg arg) StackReg i)
+            (\i arg -> IStore dummyLoc (savedReg RInt arg) stackReg i)
             [0 ..]
             $ toAscList iToBeSaved
     fPrologue =
         zipWith
-            (\i arg -> IFStore dummyLoc (SavedReg arg) StackReg i)
+            (\i arg -> IFStore dummyLoc (savedReg RFloat arg) stackReg i)
             [length iToBeSaved ..]
             $ toAscList fToBeSaved
 
@@ -255,15 +260,15 @@ saveRegBeyondCall (IClosureCall (LivenessLoc loc (LivenessState iArgs' fArgs')) 
             then
                 []
             else
-                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd StackReg StackReg (Imm $ length iToBeSaved + length fToBeSaved)]
+                iEpilogue ++ fEpilogue ++ [IIntOp dummyLoc PAdd stackReg stackReg (Imm $ length iToBeSaved + length fToBeSaved)]
     iEpilogue =
         zipWith
-            (\i arg -> ILoad dummyLoc (SavedReg arg) StackReg i)
+            (\i arg -> ILoad dummyLoc (savedReg RInt arg) stackReg i)
             [0 ..]
             $ toAscList iToBeSaved
     fEpilogue =
         zipWith
-            (\i arg -> IFLoad dummyLoc (SavedReg arg) StackReg i)
+            (\i arg -> IFLoad dummyLoc (savedReg RFloat arg) stackReg i)
             [length iToBeSaved ..]
             $ toAscList fToBeSaved
 saveRegBeyondCall (IBranch state op left right thenBlock elseBlock) =

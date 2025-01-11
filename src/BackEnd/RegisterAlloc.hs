@@ -15,14 +15,12 @@ import IR (
   Inst,
   IntermediateCodeBlock (getICBInst),
   RegID,
-  RegType (RFloat, RInt),
-  Register (SavedReg, ZeroReg),
   getAllIState,
   replaceFReg,
   replaceIReg,
-  selectVariant,
   substIState,
  )
+import Registers (RegType (RFloat, RInt), savedReg, selectVariant, zeroReg)
 import Syntax (Loc)
 
 newtype RegAllocEnv = RegAllocEnv
@@ -87,18 +85,18 @@ assignRegister block = do
 
   -- Accept the register allocation.
   -- Replace SavedReg with TempReg.
-  let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (SavedReg a) (SavedReg (-b - 1)) i') i $ M.toList iMap) inst
-  let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (SavedReg a) (SavedReg (-b - 1)) i') i $ M.toList fMap) inst'
+  let inst' = map (\i -> foldl (\i' (a, b) -> replaceIReg (savedReg RInt a) (savedReg RInt (-b - 1)) i') i $ M.toList iMap) inst
+  let inst'' = map (\i -> foldl (\i' (a, b) -> replaceFReg (savedReg RFloat a) (savedReg RFloat (-b - 1)) i') i $ M.toList fMap) inst'
 
   -- Ground unallocated registers.
-  let inst''' = map (\i -> foldl (\i' a -> replaceIReg (SavedReg a) ZeroReg i') i [0 .. genI - 1]) inst''
-  let inst'''' = map (\i -> foldl (\i' a -> replaceFReg (SavedReg a) ZeroReg i') i [0 .. genF - 1]) inst'''
+  let inst''' = map (\i -> foldl (\i' a -> replaceIReg (savedReg RInt a) (zeroReg RInt) i') i [0 .. genI - 1]) inst''
+  let inst'''' = map (\i -> foldl (\i' a -> replaceFReg (savedReg RFloat a) (zeroReg RFloat) i') i [0 .. genF - 1]) inst'''
 
   -- To avoid the replacement of SavedReg occurring more than once,
   -- we need to proceed replacements via negative register IDs.
   -- Do not forget s0 and fs0, which have non-positive ones.
-  let inst''''' = map (\i -> foldl (\i' a -> replaceIReg (SavedReg (-a - 1)) (SavedReg a) i') i [0 .. usedI - 1]) inst''''
-  let inst'''''' = map (\i -> foldl (\i' a -> replaceFReg (SavedReg (-a - 1)) (SavedReg a) i') i [0 .. usedF - 1]) inst'''''
+  let inst''''' = map (\i -> foldl (\i' a -> replaceIReg (savedReg RInt (-a - 1)) (savedReg RInt a) i') i [0 .. usedI - 1]) inst''''
+  let inst'''''' = map (\i -> foldl (\i' a -> replaceFReg (savedReg RFloat (-a - 1)) (savedReg RFloat a) i') i [0 .. usedF - 1]) inst'''''
 
   pure (usedI, usedF, iSpillTarget, fSpillTarget, block{getICBInst = map (substIState livenessLoc) inst''''''})
  where

@@ -7,8 +7,8 @@ import IR (
     Inst (IBranch, IIntOp),
     IntermediateCodeBlock (getICBInst),
     PrimitiveIntOp (PDiv, PMul, PShiftL, PShiftR),
-    RegOrImm (Imm),
  )
+import Registers (RegOrImm (Imm))
 
 log2 :: Int -> Maybe Int
 log2 1 = Just 0

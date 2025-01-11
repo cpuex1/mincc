@@ -6,12 +6,6 @@
 module IR (
     RegID,
     InstLabel,
-    RegType (..),
-    RegVariant (..),
-    selectVariant,
-    updateVariant,
-    Register (..),
-    RegOrImm (Reg, Imm),
     PrimitiveIntOp (..),
     fromIntBinOp,
     IntermediateCodeBlock (..),
@@ -30,57 +24,11 @@ module IR (
 ) where
 
 import Data.Text (Text)
+import Registers (RegOrImm (Reg), Register)
 import Syntax (FloatBinOp, IntBinOp (..), Loc, RelationBinOp)
 
 type RegID = Int
 type InstLabel = Text
-
--- | Holds the type of a register.
-data RegType ty where
-    RInt :: RegType Int
-    RFloat :: RegType Float
-
-deriving instance (Show ty) => Show (RegType ty)
-deriving instance (Eq ty) => Eq (RegType ty)
-
-data RegVariant f
-    = RegVariant
-    { iVariant :: f Int
-    , fVariant :: f Float
-    }
-
-deriving instance (Show (f Int), Show (f Float)) => Show (RegVariant f)
-deriving instance (Eq (f Int), Eq (f Float)) => Eq (RegVariant f)
-
-selectVariant :: RegType a -> RegVariant f -> f a
-selectVariant RInt (RegVariant i _) = i
-selectVariant RFloat (RegVariant _ f) = f
-
-updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
-updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}
-updateVariant RFloat func variant = variant{fVariant = func $ fVariant variant}
-
-data Register idTy ty where
-    ZeroReg :: Register idTy ty
-    ReturnReg :: Register idTy Int
-    RetReg :: Register idTy ty
-    HeapReg :: Register idTy Int
-    StackReg :: Register idTy Int
-    ArgsReg :: idTy -> Register idTy ty
-    TempReg :: idTy -> Register idTy ty
-    SavedReg :: idTy -> Register idTy ty
-    GeneralReg :: idTy -> Register idTy ty
-    DummyReg :: Register idTy ()
-
-deriving instance (Show idTy, Show ty) => Show (Register idTy ty)
-deriving instance (Eq idTy, Eq ty) => Eq (Register idTy ty)
-
-data RegOrImm idTy ty where
-    Reg :: Register idTy ty -> RegOrImm idTy ty
-    Imm :: ty -> RegOrImm idTy ty
-
-deriving instance (Show idTy, Show ty) => Show (RegOrImm idTy ty)
-deriving instance (Eq idTy, Eq ty) => Eq (RegOrImm idTy ty)
 
 data PrimitiveIntOp
     = PAdd

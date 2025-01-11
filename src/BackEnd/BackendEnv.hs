@@ -28,8 +28,17 @@ import qualified Data.Map as M
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
-import IR (RegID, RegOrImm (Imm, Reg), RegType (RInt), RegVariant (..), Register (SavedReg), selectVariant, updateVariant)
+import IR (RegID)
 import MiddleEnd.Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
+import Registers (
+    RegOrImm (Imm, Reg),
+    RegType (RInt),
+    RegVariant (..),
+    Register (Register),
+    RegisterKind (SavedReg),
+    selectVariant,
+    updateVariant,
+ )
 import Syntax (Ident (ExternalIdent))
 import Prelude hiding (lookup)
 
@@ -110,7 +119,7 @@ genTempReg rTy = do
                     )
                     $ regContext ctx'
             }
-    pure $ SavedReg $ generatedReg $ selectVariant rTy ctx
+    pure $ Register rTy $ SavedReg $ generatedReg $ selectVariant rTy ctx
 
 genReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
 genReg rTy ident = do

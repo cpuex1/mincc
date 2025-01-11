@@ -12,7 +12,15 @@ import Control.Monad.State (State, evalState, gets, modify)
 import Data.List ((\\))
 import Data.Map.Lazy (Map, alter, empty, insert, lookup)
 import Data.Maybe (fromMaybe, mapMaybe)
-import IR (RegID, RegOrImm (Reg), Register (ArgsReg, TempReg))
+import IR (RegID)
+import Registers (
+    RegOrImm (Reg),
+    RegType,
+    Register (Register),
+    RegisterKind (ArgsReg),
+    argsReg,
+    tempReg,
+ )
 import Prelude hiding (lookup)
 
 newtype RegGraph a = RegGraph
@@ -80,12 +88,12 @@ shuffle temp assign =
     resolve_in_loops = concat loops
     simple_args = args' \\ resolve_in_loops
 
-shuffleRegs :: [(Register RegID a, Register RegID a)] -> [(Register RegID a, Register RegID a)]
-shuffleRegs assign =
+shuffleRegs :: RegType a -> [(Register RegID a, Register RegID a)] -> [(Register RegID a, Register RegID a)]
+shuffleRegs rTy assign =
     map
         ( \(r1, r2) ->
-            let r1' = if r1 == tempRegID then TempReg 0 else ArgsReg r1
-             in let r2' = if r2 == tempRegID then TempReg 0 else ArgsReg r2
+            let r1' = if r1 == tempRegID then tempReg rTy 0 else argsReg rTy r1
+             in let r2' = if r2 == tempRegID then tempReg rTy 0 else argsReg rTy r2
                  in (r1', r2')
         )
         (shuffle tempRegID assignArgs)
@@ -97,7 +105,7 @@ shuffleRegs assign =
         mapMaybe
             ( \(r1, r2) ->
                 case (r1, r2) of
-                    (ArgsReg i1, ArgsReg i2) -> Just (i1, i2)
+                    (Register _ (ArgsReg i1), Register _ (ArgsReg i2)) -> Just (i1, i2)
                     _ -> Nothing
             )
             assign
@@ -105,17 +113,17 @@ shuffleRegs assign =
         filter
             ( \(r1, r2) ->
                 case (r1, r2) of
-                    (ArgsReg _, ArgsReg _) -> False
+                    (Register _ (ArgsReg _), Register _ (ArgsReg _)) -> False
                     _ -> True
             )
             assign
 
-shuffleRegOrImm :: [(Register RegID a, RegOrImm RegID a)] -> [(Register RegID a, RegOrImm RegID a)]
-shuffleRegOrImm assign =
+shuffleRegOrImm :: RegType a -> [(Register RegID a, RegOrImm RegID a)] -> [(Register RegID a, RegOrImm RegID a)]
+shuffleRegOrImm rTy assign =
     map
         ( \(r1, r2) ->
-            let r1' = if r1 == tempRegID then TempReg 0 else ArgsReg r1
-             in let r2' = if r2 == tempRegID then TempReg 0 else ArgsReg r2
+            let r1' = if r1 == tempRegID then tempReg rTy 0 else argsReg rTy r1
+             in let r2' = if r2 == tempRegID then tempReg rTy 0 else argsReg rTy r2
                  in (r1', Reg r2')
         )
         (shuffle tempRegID assignArgs)
@@ -127,7 +135,7 @@ shuffleRegOrImm assign =
         mapMaybe
             ( \(r1, r2) ->
                 case (r1, r2) of
-                    (ArgsReg i1, Reg (ArgsReg i2)) -> Just (i1, i2)
+                    (Register _ (ArgsReg i1), Reg (Register _ (ArgsReg i2))) -> Just (i1, i2)
                     _ -> Nothing
             )
             assign
@@ -135,7 +143,7 @@ shuffleRegOrImm assign =
         filter
             ( \(r1, r2) ->
                 case (r1, r2) of
-                    (ArgsReg _, Reg (ArgsReg _)) -> False
+                    (Register _ (ArgsReg _), Reg (Register _ (ArgsReg _))) -> False
                     _ -> True
             )
             assign

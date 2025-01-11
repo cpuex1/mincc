@@ -9,6 +9,7 @@ import Data.Set (toAscList)
 import Data.Text
 import IR
 import Numeric (showFFloat)
+import Registers
 import Syntax
 import Typing
 
@@ -217,28 +218,26 @@ instance Display (TypeKind a) where
         display value <> " array"
     display (TVar tId) = "__t" <> pack (show tId)
 
-instance Display (Register Int Int) where
-    display ZeroReg = "zero"
-    display ReturnReg = "ra"
-    display RetReg = "a0"
-    display HeapReg = "hp"
-    display StackReg = "sp"
-    display (ArgsReg idTy) = "a" <> pack (show idTy)
-    display (TempReg idTy) = "t" <> pack (show idTy)
-    display (SavedReg idTy) = "s" <> pack (show idTy)
-    display (GeneralReg idTy) = "r" <> pack (show idTy)
+instance Display (Register Int a) where
+    display (Register RInt ZeroReg) = "zero"
+    display (Register RFloat ZeroReg) = "fzero"
+    display (Register _ ReturnReg) = "ra"
+    display (Register RInt RetReg) = "a0"
+    display (Register RFloat RetReg) = "fa0"
+    display (Register _ HeapReg) = "hp"
+    display (Register _ StackReg) = "sp"
+    display (Register RInt (ArgsReg idTy)) = "a" <> pack (show idTy)
+    display (Register RFloat (ArgsReg idTy)) = "fa" <> pack (show idTy)
+    display (Register RInt (TempReg idTy)) = "t" <> pack (show idTy)
+    display (Register RFloat (TempReg idTy)) = "ft" <> pack (show idTy)
+    display (Register RInt (SavedReg idTy)) = "s" <> pack (show idTy)
+    display (Register RFloat (SavedReg idTy)) = "fs" <> pack (show idTy)
+    display (Register RInt (GeneralReg idTy)) = "r" <> pack (show idTy)
+    display (Register RFloat (GeneralReg idTy)) = "fr" <> pack (show idTy)
 
 instance Display (RegOrImm RegID Int) where
     display (Reg reg) = display reg
     display (Imm imm) = pack (show imm)
-
-instance Display (Register Int Float) where
-    display ZeroReg = "fzero"
-    display RetReg = "fa0"
-    display (ArgsReg idTy) = "fa" <> pack (show idTy)
-    display (TempReg idTy) = "ft" <> pack (show idTy)
-    display (SavedReg idTy) = "fs" <> pack (show idTy)
-    display (GeneralReg idTy) = "fr" <> pack (show idTy)
 
 instance Display (RegOrImm RegID Float) where
     display (Reg reg) = display reg
@@ -398,9 +397,9 @@ instance Display (InstTerm stateTy Int) where
 instance Display LivenessState where
     display state =
         "["
-            <> Data.Text.intercalate "," (Prelude.map (\i -> display (SavedReg i :: Register RegID Int)) (toAscList $ iAlive state))
+            <> Data.Text.intercalate "," (Prelude.map (\i -> display $ Register RInt (SavedReg i)) (toAscList $ iAlive state))
             <> "], ["
-            <> Data.Text.intercalate "," (Prelude.map (\i -> display (SavedReg i :: Register RegID Float)) (toAscList $ fAlive state))
+            <> Data.Text.intercalate "," (Prelude.map (\i -> display $ Register RFloat (SavedReg i)) (toAscList $ fAlive state))
             <> "]"
 
 instance Display LivenessLoc where

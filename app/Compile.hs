@@ -59,12 +59,8 @@ import IR (
     CodeBlock,
     IntermediateCodeBlock (getICBInst, getICBLabel),
     RegID,
-    RegType (RFloat, RInt),
-    Register (SavedReg),
     exitBlock,
-    selectVariant,
     substIState,
-    updateVariant,
  )
 import Log (LogLevel (..), printLog, printTextLog)
 import MiddleEnd.Analysis.Identifier (loadTypeEnv)
@@ -78,6 +74,7 @@ import MiddleEnd.Optim.Common (
  )
 import MiddleEnd.Validator (validate)
 import Path (changeExt)
+import Registers (RegType (RFloat, RInt), savedReg, selectVariant, updateVariant)
 import Syntax (
     Function,
     KExpr,
@@ -268,7 +265,7 @@ assignRegisterIO blocks = do
                         let livenessRemoved = map (substIState livenessLoc) $ getICBInst block
                         spilt <- spillI target block{getICBInst = livenessRemoved}
 
-                        liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (SavedReg target :: Register RegID Int)
+                        liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (savedReg RInt target)
 
                         assignRegisterLoop spilt{getICBInst = liveness $ getICBInst spilt}
                     Nothing -> do
@@ -282,7 +279,7 @@ assignRegisterIO blocks = do
                                 let livenessRemoved = map (substIState livenessLoc) $ getICBInst block
                                 spilt <- spillF target block{getICBInst = livenessRemoved}
 
-                                liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (SavedReg target :: Register RegID Float)
+                                liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (savedReg RFloat target)
 
                                 assignRegisterLoop spilt{getICBInst = liveness $ getICBInst spilt}
                             Nothing -> do
