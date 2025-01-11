@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -19,12 +20,11 @@ module IR (
     getIState,
     getAllIState,
     substIState,
-    replaceIReg,
-    replaceFReg,
+    replaceReg,
 ) where
 
 import Data.Text (Text)
-import Registers (RegOrImm (Reg), Register)
+import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register))
 import Syntax (FloatBinOp, IntBinOp (..), Loc, RelationBinOp)
 
 type RegID = Int
@@ -258,163 +258,83 @@ substIState f (IBranch state op left right thenExpr elseExpr) =
             elseExpr
         )
 
-substReg :: (Eq idTy, Eq ty) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
-substReg beforeReg afterReg victim =
+weakSubstReg :: (Eq idTy, Eq ty) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
+weakSubstReg beforeReg afterReg victim =
     if victim == beforeReg then afterReg else victim
 
-substImmReg :: (Eq idTy, Eq ty) => Register idTy ty -> Register idTy ty -> RegOrImm idTy ty -> RegOrImm idTy ty
-substImmReg beforeReg afterReg victim =
-    if victim == Reg beforeReg then Reg afterReg else victim
+substReg :: (Eq idTy) => Register idTy ty1 -> Register idTy ty1 -> Register idTy ty2 -> Register idTy ty2
+substReg (Register RInt before) afterReg (Register RInt victim) =
+    weakSubstReg (Register RInt before) afterReg (Register RInt victim)
+substReg (Register RFloat before) afterReg (Register RFloat victim) =
+    weakSubstReg (Register RFloat before) afterReg (Register RFloat victim)
+substReg _ _ victim = victim
 
-replaceIReg ::
+substImmReg :: (Eq idTy) => Register idTy ty1 -> Register idTy ty1 -> RegOrImm idTy ty2 -> RegOrImm idTy ty2
+substImmReg _ _ (Imm imm) = Imm imm
+substImmReg beforeReg afterReg (Reg victim) =
+    Reg $ substReg beforeReg afterReg victim
+
+replaceReg ::
     (Eq idTy) =>
-    Register idTy Int ->
-    Register idTy Int ->
+    Register idTy regTy ->
+    Register idTy regTy ->
     Inst stateTy idTy branchTy ->
     Inst stateTy idTy branchTy
-replaceIReg beforeReg afterReg (ICompOp state op dest left right) =
-    ICompOp state op (substReg' dest) (substReg' left) (substImmReg' right)
+replaceReg before after = replaceRegSubst (substReg before after) (substImmReg before after)
   where
-    substReg' = substReg beforeReg afterReg
-    substImmReg' = substImmReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IFCompOp state op dest left right) =
-    IFCompOp state op (substReg' dest) left right
-  where
-    substReg' = substReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IIntOp state op dest left right) =
-    IIntOp state op (substReg' dest) (substReg' left) (substImmReg' right)
-  where
-    substReg' = substReg beforeReg afterReg
-    substImmReg' = substImmReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IMov state dest src) =
-    IMov state (substReg' dest) (substImmReg' src)
-  where
-    substReg' = substReg beforeReg afterReg
-    substImmReg' = substImmReg beforeReg afterReg
-replaceIReg beforeReg afterReg (ILMov state dest src) =
-    ILMov state (substReg' dest) src
-  where
-    substReg' = substReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IRichCall state label iArgs fArgs) =
-    IRichCall state label (map substImmReg' iArgs) fArgs
-  where
-    substImmReg' = substImmReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IClosureCall state dest iArgs fArgs) =
-    IClosureCall state (substReg' dest) (map substImmReg' iArgs) fArgs
-  where
-    substReg' = substReg beforeReg afterReg
-    substImmReg' = substImmReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IMakeClosure state dest label iArgs fArgs) =
-    IMakeClosure state (substReg' dest) label (map substImmReg' iArgs) fArgs
-  where
-    substReg' = substReg beforeReg afterReg
-    substImmReg' = substImmReg beforeReg afterReg
-replaceIReg beforeReg afterReg (ICallReg state reg) =
-    ICallReg state (substReg' reg)
-  where
-    substReg' = substReg beforeReg afterReg
-replaceIReg beforeReg afterReg (ILoad state dest src offset) =
-    ILoad state (substReg' dest) (substReg' src) offset
-  where
-    substReg' = substReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IFLoad state dest src offset) =
-    IFLoad state dest (substReg' src) offset
-  where
-    substReg' = substReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IStore state dest src offset) =
-    IStore state (substReg' dest) (substReg' src) offset
-  where
-    substReg' = substReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IFStore state dest src offset) =
-    IFStore state dest (substReg' src) offset
-  where
-    substReg' = substReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IRawInst state inst retTy iArgs fArgs) =
-    case retTy of
-        RIRUnit -> IRawInst state inst retTy (map substImmReg' iArgs) fArgs
-        RIRInt reg -> IRawInst state inst (RIRInt (substReg' reg)) (map substImmReg' iArgs) fArgs
-        RIRFloat reg -> IRawInst state inst (RIRFloat reg) (map substImmReg' iArgs) fArgs
-  where
-    substReg' = substReg beforeReg afterReg
-    substImmReg' = substImmReg beforeReg afterReg
-replaceIReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =
-    IBranch
-        state
-        op
-        (substReg' left)
-        (substReg' right)
-        ( map
-            (replaceIReg beforeReg afterReg)
-            thenExpr
-        )
-        ( map
-            (replaceIReg beforeReg afterReg)
-            elseExpr
-        )
-  where
-    substReg' = substReg beforeReg afterReg
-replaceIReg _ _ (IFOp state op dest left right) = IFOp state op dest left right
-replaceIReg _ _ (IFMov state dest src) = IFMov state dest src
-replaceIReg _ _ (ICall state label) = ICall state label
-
-replaceFReg ::
-    (Eq idTy) =>
-    Register idTy Float ->
-    Register idTy Float ->
-    Inst stateTy idTy branchTy ->
-    Inst stateTy idTy branchTy
-replaceFReg beforeReg afterReg (IFCompOp state op dest left right) =
-    IFCompOp state op dest (substReg' left) (substReg' right)
-  where
-    substReg' = substReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IFOp state op dest left right) =
-    IFOp state op (substReg' dest) (substReg' left) (substReg' right)
-  where
-    substReg' = substReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IFMov state dest src) =
-    IFMov state (substReg' dest) (substImmReg' src)
-  where
-    substReg' = substReg beforeReg afterReg
-    substImmReg' = substImmReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IRichCall state label iArgs fArgs) =
-    IRichCall state label iArgs (map substReg' fArgs)
-  where
-    substReg' = substReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IClosureCall state dest iArgs fArgs) =
-    IClosureCall state dest iArgs (map substReg' fArgs)
-  where
-    substReg' = substReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IMakeClosure state dest label iArgs fArgs) =
-    IMakeClosure state dest label iArgs (map substReg' fArgs)
-  where
-    substReg' = substReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IFLoad state dest src offset) =
-    IFLoad state (substReg' dest) src offset
-  where
-    substReg' = substReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IFStore state dest src offset) =
-    IFStore state (substReg' dest) src offset
-  where
-    substReg' = substReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IRawInst state inst retTy iArgs fArgs) =
-    case retTy of
-        RIRUnit -> IRawInst state inst retTy iArgs (map substReg' fArgs)
-        RIRInt reg -> IRawInst state inst (RIRInt reg) iArgs (map substReg' fArgs)
-        RIRFloat reg -> IRawInst state inst (RIRFloat (substReg' reg)) iArgs (map substReg' fArgs)
-  where
-    substReg' = substReg beforeReg afterReg
-replaceFReg beforeReg afterReg (IBranch state op left right thenExpr elseExpr) =
-    IBranch
-        state
-        op
-        left
-        right
-        ( map
-            (replaceFReg beforeReg afterReg)
-            thenExpr
-        )
-        ( map
-            (replaceFReg beforeReg afterReg)
-            elseExpr
-        )
-replaceFReg _ _ inst = inst
+    replaceRegSubst ::
+        (forall regTy1. Register idTy regTy1 -> Register idTy regTy1) ->
+        (forall regTy2. RegOrImm idTy regTy2 -> RegOrImm idTy regTy2) ->
+        Inst stateTy idTy branchTy ->
+        Inst stateTy idTy branchTy
+    replaceRegSubst substR substImmR (ICompOp state op dest left right) =
+        ICompOp state op (substR dest) (substR left) (substImmR right)
+    replaceRegSubst substR _ (IFCompOp state op dest left right) =
+        IFCompOp state op (substR dest) (substR left) (substR right)
+    replaceRegSubst substR substImmR (IIntOp state op dest left right) =
+        IIntOp state op (substR dest) (substR left) (substImmR right)
+    replaceRegSubst substR _ (IFOp state op dest left right) =
+        IFOp state op (substR dest) (substR left) (substR right)
+    replaceRegSubst substR substImmR (IMov state dest src) =
+        IMov state (substR dest) (substImmR src)
+    replaceRegSubst substR substImmR (IFMov state dest src) =
+        IFMov state (substR dest) (substImmR src)
+    replaceRegSubst substR _ (ILMov state dest src) =
+        ILMov state (substR dest) src
+    replaceRegSubst substR substImmR (IRichCall state label iArgs fArgs) =
+        IRichCall state label (map substImmR iArgs) (map substR fArgs)
+    replaceRegSubst substR substImmR (IClosureCall state dest iArgs fArgs) =
+        IClosureCall state (substR dest) (map substImmR iArgs) (map substR fArgs)
+    replaceRegSubst substR substImmR (IMakeClosure state dest label iArgs fArgs) =
+        IMakeClosure state (substR dest) label (map substImmR iArgs) (map substR fArgs)
+    replaceRegSubst _ _ (ICall state label) =
+        ICall state label
+    replaceRegSubst substR _ (ICallReg state reg) =
+        ICallReg state (substR reg)
+    replaceRegSubst substR _ (ILoad state dest src offset) =
+        ILoad state (substR dest) (substR src) offset
+    replaceRegSubst substR _ (IFLoad state dest src offset) =
+        IFLoad state (substR dest) (substR src) offset
+    replaceRegSubst substR _ (IStore state dest src offset) =
+        IStore state (substR dest) (substR src) offset
+    replaceRegSubst substR _ (IFStore state dest src offset) =
+        IFStore state (substR dest) (substR src) offset
+    replaceRegSubst substR substImmR (IRawInst state inst retTy iArgs fArgs) =
+        case retTy of
+            RIRUnit -> IRawInst state inst retTy (map substImmR iArgs) (map substR fArgs)
+            RIRInt reg -> IRawInst state inst (RIRInt (substR reg)) (map substImmR iArgs) (map substR fArgs)
+            RIRFloat reg -> IRawInst state inst (RIRFloat (substR reg)) (map substImmR iArgs) (map substR fArgs)
+    replaceRegSubst substR substImmR (IBranch state op left right thenExpr elseExpr) =
+        IBranch
+            state
+            op
+            (substR left)
+            (substR right)
+            ( map
+                (replaceRegSubst substR substImmR)
+                thenExpr
+            )
+            ( map
+                (replaceRegSubst substR substImmR)
+                elseExpr
+            )

@@ -35,7 +35,7 @@ saveArgs block = do
                                 (f : _) ->
                                     pure $
                                         IMov (getIState f) reg (Reg (Register RInt (ArgsReg arg)))
-                                            : map (replaceIReg (Register RInt (ArgsReg arg)) reg) inst'
+                                            : map (replaceReg (Register RInt (ArgsReg arg)) reg) inst'
                         else
                             pure inst'
                 )
@@ -54,7 +54,7 @@ saveArgs block = do
                             (f : _) ->
                                 pure $
                                     IFMov (getIState f) reg (Reg (Register RFloat (ArgsReg arg)))
-                                        : map (replaceFReg (Register RFloat (ArgsReg arg)) reg) inst'
+                                        : map (replaceReg (Register RFloat (ArgsReg arg)) reg) inst'
                     else
                         pure inst'
             )

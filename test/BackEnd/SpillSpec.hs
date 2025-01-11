@@ -17,12 +17,15 @@ import IR (
     IntermediateCodeBlock (IntermediateCodeBlock),
     PrimitiveIntOp (PAdd),
     RegID,
-    RegOrImm (Imm, Reg),
-    RegType (RFloat, RInt),
-    Register (SavedReg, StackReg),
-    updateVariant,
  )
 import MiddleEnd.Globals (defaultGlobalTable)
+import Registers (
+    RegOrImm (Imm, Reg),
+    RegType (RFloat, RInt),
+    savedReg,
+    stackReg,
+    updateVariant,
+ )
 import Syntax (FloatBinOp (FAdd), Loc, dummyLoc)
 import Test.Hspec
 
@@ -63,25 +66,25 @@ spec = do
                 ( IntermediateCodeBlock
                     "test"
                     0
-                    [ IMov dummyLoc (SavedReg 0) (Imm 0)
-                    , IMov dummyLoc (SavedReg 1) (Imm 1)
-                    , IMov dummyLoc (SavedReg 2) (Imm 2)
-                    , IIntOp dummyLoc PAdd (SavedReg 1) (SavedReg 1) (Reg (SavedReg 2))
-                    , IIntOp dummyLoc PAdd (SavedReg 0) (SavedReg 0) (Reg (SavedReg 1))
+                    [ IMov dummyLoc (savedReg RInt 0) (Imm 0)
+                    , IMov dummyLoc (savedReg RInt 1) (Imm 1)
+                    , IMov dummyLoc (savedReg RInt 2) (Imm 2)
+                    , IIntOp dummyLoc PAdd (savedReg RInt 1) (savedReg RInt 1) (Reg (savedReg RInt 2))
+                    , IIntOp dummyLoc PAdd (savedReg RInt 0) (savedReg RInt 0) (Reg (savedReg RInt 1))
                     ]
                 )
                 `shouldBe` Right
                     ( IntermediateCodeBlock
                         "test"
                         1
-                        [ IMov dummyLoc (SavedReg 3) (Imm 0)
-                        , IStore dummyLoc (SavedReg 3) StackReg 0
-                        , IMov dummyLoc (SavedReg 1) (Imm 1)
-                        , IMov dummyLoc (SavedReg 2) (Imm 2)
-                        , IIntOp dummyLoc PAdd (SavedReg 1) (SavedReg 1) (Reg (SavedReg 2))
-                        , ILoad dummyLoc (SavedReg 4) StackReg 0
-                        , IIntOp dummyLoc PAdd (SavedReg 5) (SavedReg 4) (Reg (SavedReg 1))
-                        , IStore dummyLoc (SavedReg 5) StackReg 0
+                        [ IMov dummyLoc (savedReg RInt 3) (Imm 0)
+                        , IStore dummyLoc (savedReg RInt 3) stackReg 0
+                        , IMov dummyLoc (savedReg RInt 1) (Imm 1)
+                        , IMov dummyLoc (savedReg RInt 2) (Imm 2)
+                        , IIntOp dummyLoc PAdd (savedReg RInt 1) (savedReg RInt 1) (Reg (savedReg RInt 2))
+                        , ILoad dummyLoc (savedReg RInt 4) stackReg 0
+                        , IIntOp dummyLoc PAdd (savedReg RInt 5) (savedReg RInt 4) (Reg (savedReg RInt 1))
+                        , IStore dummyLoc (savedReg RInt 5) stackReg 0
                         ]
                     )
         it "test2" $ do
@@ -92,24 +95,24 @@ spec = do
                 ( IntermediateCodeBlock
                     "test"
                     0
-                    [ IFMov dummyLoc (SavedReg 0) (Imm 0)
-                    , IFMov dummyLoc (SavedReg 1) (Imm 1)
-                    , IFMov dummyLoc (SavedReg 2) (Imm 2)
-                    , IFOp dummyLoc FAdd (SavedReg 1) (SavedReg 1) (SavedReg 2)
-                    , IFOp dummyLoc FAdd (SavedReg 0) (SavedReg 0) (SavedReg 1)
+                    [ IFMov dummyLoc (savedReg RFloat 0) (Imm 0)
+                    , IFMov dummyLoc (savedReg RFloat 1) (Imm 1)
+                    , IFMov dummyLoc (savedReg RFloat 2) (Imm 2)
+                    , IFOp dummyLoc FAdd (savedReg RFloat 1) (savedReg RFloat 1) (savedReg RFloat 2)
+                    , IFOp dummyLoc FAdd (savedReg RFloat 0) (savedReg RFloat 0) (savedReg RFloat 1)
                     ]
                 )
                 `shouldBe` Right
                     ( IntermediateCodeBlock
                         "test"
                         1
-                        [ IFMov dummyLoc (SavedReg 3) (Imm 0)
-                        , IFStore dummyLoc (SavedReg 3) StackReg 0
-                        , IFMov dummyLoc (SavedReg 1) (Imm 1)
-                        , IFMov dummyLoc (SavedReg 2) (Imm 2)
-                        , IFOp dummyLoc FAdd (SavedReg 1) (SavedReg 1) (SavedReg 2)
-                        , IFLoad dummyLoc (SavedReg 4) StackReg 0
-                        , IFOp dummyLoc FAdd (SavedReg 5) (SavedReg 4) (SavedReg 1)
-                        , IFStore dummyLoc (SavedReg 5) StackReg 0
+                        [ IFMov dummyLoc (savedReg RFloat 3) (Imm 0)
+                        , IFStore dummyLoc (savedReg RFloat 3) stackReg 0
+                        , IFMov dummyLoc (savedReg RFloat 1) (Imm 1)
+                        , IFMov dummyLoc (savedReg RFloat 2) (Imm 2)
+                        , IFOp dummyLoc FAdd (savedReg RFloat 1) (savedReg RFloat 1) (savedReg RFloat 2)
+                        , IFLoad dummyLoc (savedReg RFloat 4) stackReg 0
+                        , IFOp dummyLoc FAdd (savedReg RFloat 5) (savedReg RFloat 4) (savedReg RFloat 1)
+                        , IFStore dummyLoc (savedReg RFloat 5) stackReg 0
                         ]
                     )
