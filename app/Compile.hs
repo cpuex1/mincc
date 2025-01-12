@@ -63,6 +63,7 @@ import IR (
     substIState,
  )
 import Log (LogLevel (..), printLog, printTextLog)
+import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (loadTypeEnv)
 import MiddleEnd.Closure (getFunctions)
 import MiddleEnd.Desugar (expandArrayCreate)
@@ -147,6 +148,9 @@ optimIO path expr = do
         case validationResult of
             Left err -> throwError err
             Right _ -> pure ()
+
+        -- Register constants.
+        lift $ registerConstants beforeExpr
 
         -- Get activated optimizations.
         optimizations <- asks cActivatedOptim

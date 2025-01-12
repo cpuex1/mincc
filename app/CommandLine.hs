@@ -55,6 +55,7 @@ data CommandLineArg = CommandLineArg
     , inliningSize :: Int
     , recInliningSize :: Int
     , maxInlining :: Int
+    , disableFloatFold :: Bool
     , optCompMerging :: Bool
     , optVarMerging :: Bool
     , optConstFold :: Bool
@@ -118,6 +119,10 @@ parseArg =
                 <> showDefault
                 <> value defaultMaxInlining
                 <> metavar "ROUND"
+            )
+        <*> switch
+            ( long "disable-float-fold"
+                <> help "Disable constant folding for floating-point numbers"
             )
         <*> switch
             ( long "opt-comp-merging"
@@ -234,6 +239,7 @@ toCompilerConfig arg = do
         insertIf (optimize arg || optCompMerging arg) CompMerging
             . insertIf (optimize arg || optVarMerging arg) VarMerging
             . insertIf (optimize arg || optConstFold arg) ConstFold
+            . insertIf ((optimize arg || optConstFold arg) && not (disableFloatFold arg)) ConstFoldFloat
             . insertIf (optimize arg || optInlining arg) Inlining
             . insertIf (optimize arg || optUnusedElim arg) UnusedElim
             $ mempty
