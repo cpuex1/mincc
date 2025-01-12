@@ -8,11 +8,10 @@ module BackEnd.Lowering (
 ) where
 
 import BackEnd.BackendEnv
-import BackEnd.FunctionCall (saveArgs)
 import Builtin (BuiltinFunction (builtinInst), builtinMakeTuple, findBuiltin)
 import Control.Monad (filterM)
 import Control.Monad.Except (MonadError (throwError))
-import Control.Monad.State (modify)
+import Control.Monad.State (gets)
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
@@ -27,13 +26,63 @@ import Registers (
     argsReg,
     heapReg,
     retReg,
-    updateVariant,
+    selectVariant,
     zeroReg,
  )
-import Syntax
+import Syntax (
+    BinaryOp (FloatOp, IntOp, RelationOp),
+    ClosureExpr,
+    Cond (CComp, CIdentity),
+    Expr (
+        ArrayCreate,
+        Binary,
+        ClosureApp,
+        Const,
+        DirectApp,
+        Get,
+        If,
+        Let,
+        MakeClosure,
+        Put,
+        Tuple,
+        Unary,
+        Var
+    ),
+    FloatBinOp (FSub),
+    Function (Function, funcName),
+    Ident (ExternalIdent),
+    IntBinOp (Sub),
+    Literal (LBool, LFloat, LInt, LUnit),
+    Loc,
+    Pattern (PRec, PTuple, PUnit, PVar),
+    RelationBinOp (Eq, Ne),
+    TypedState (getLoc, getType),
+    UnaryOp (FNeg, Neg, Not),
+    dummyLoc,
+ )
 import Typing (TypeKind (TFloat, TUnit))
 
 type BackendIdentState m = BackendStateT (IdentEnvT m)
+
+filterVars :: (Monad m) => RegType rTy -> [Ident] -> BackendIdentState m [Ident]
+filterVars RFloat vars = do
+    filterM
+        ( \v -> do
+            ty' <- liftB $ getTyOf v
+            pure $ ty' == TFloat
+        )
+        vars
+filterVars RInt vars = do
+    filterM
+        ( \v -> do
+            ty' <- liftB $ getTyOf v
+            pure $ ty' /= TFloat
+        )
+        vars
+genRegisters :: (Monad m) => RegType rTy -> [Ident] -> BackendIdentState m [Register RegID rTy]
+genRegisters rTy vars = do
+    filtered <- filterVars rTy vars
+    mapM (genReg rTy) filtered
 
 resolveArgs :: (Monad m) => [Ident] -> BackendIdentState m ([RegOrImm RegID Int], [Register RegID Float])
 resolveArgs args = do
@@ -389,96 +438,57 @@ expandExprToInst iReg fReg (ClosureApp state func args) = do
                 , IMov (getLoc state) iReg (Reg $ retReg RInt)
                 ]
 
+extractFreeVars :: (Monad m) => Int -> [Ident] -> BackendIdentState m [Inst Loc RegID AllowBranch]
+extractFreeVars closureArg freeVars = do
+    iFreeRegisters <- genRegisters RInt freeVars
+    fFreeRegisters <- genRegisters RFloat freeVars
+    iLoadInst <-
+        mapM
+            ( \(num, reg) ->
+                pure $ ILoad dummyLoc reg argReg num
+            )
+            $ zip [0 ..] iFreeRegisters
+    fLoadInst <-
+        mapM
+            ( \(num, reg) ->
+                pure $ IFLoad dummyLoc reg argReg num
+            )
+            $ zip [length iFreeRegisters ..] fFreeRegisters
+
+    pure $ iLoadInst ++ fLoadInst
+  where
+    argReg = argsReg RInt closureArg
+
+extractBoundedVars :: (Monad m) => RegType rTy -> [Ident] -> BackendIdentState m [Inst Loc RegID AllowBranch]
+extractBoundedVars RInt boundedVars = do
+    boundedRegisters <- genRegisters RInt boundedVars
+    updateRegContext RInt $ \ctx -> ctx{argsLength = length boundedRegisters}
+    mapM
+        ( \(num, reg) ->
+            pure $ IMov dummyLoc reg (Reg (argsReg RInt num))
+        )
+        $ zip [0 ..] boundedRegisters
+extractBoundedVars RFloat boundedVars = do
+    boundedRegisters <- genRegisters RFloat boundedVars
+    updateRegContext RFloat $ \ctx -> ctx{argsLength = length boundedRegisters}
+    mapM
+        ( \(num, reg) ->
+            pure $ IFMov dummyLoc reg (Reg (argsReg RFloat num))
+        )
+        $ zip [0 ..] boundedRegisters
+
 toInstructions :: (Monad m) => Function -> BackendIdentState m (IntermediateCodeBlock Loc RegID)
 toInstructions function = do
     inst <- toInstructions' function
-    saveArgs (IntermediateCodeBlock (display $ funcName function) 0 inst)
+    pure $ IntermediateCodeBlock (display $ funcName function) 0 inst
   where
     toInstructions' :: (Monad m) => Function -> BackendIdentState m [Inst Loc RegID AllowBranch]
-    toInstructions' (Function _ _ _ freeVars' boundedArgs' body) = do
-        iBoundedArgs <-
-            filterM
-                ( \v -> do
-                    ty <- liftB $ getTyOf v
-                    pure $ ty /= TFloat
-                )
-                boundedArgs'
-        fBoundedArgs <-
-            filterM
-                ( \v -> do
-                    ty <- liftB $ getTyOf v
-                    pure $ ty == TFloat
-                )
-                boundedArgs'
-        iFreeVars <-
-            filterM
-                ( \v -> do
-                    ty <- liftB $ getTyOf v
-                    pure $ ty /= TFloat
-                )
-                freeVars'
-        fFreeVars <-
-            filterM
-                ( \v -> do
-                    ty <- liftB $ getTyOf v
-                    pure $ ty == TFloat
-                )
-                freeVars'
+    toInstructions' (Function _ _ _ freeVars boundedArgs body) = do
+        iBoundedInst <- extractBoundedVars RInt boundedArgs
+        fBoundedInst <- extractBoundedVars RFloat boundedArgs
 
-        let iBoundedReg =
-                zipWith
-                    (\v i -> (v, argsReg RInt i))
-                    iBoundedArgs
-                    [0 ..]
-        let fBoundedReg =
-                zipWith
-                    (\v i -> (v, argsReg RFloat i))
-                    fBoundedArgs
-                    [0 ..]
-        let closureArg = argsReg RInt $ length iBoundedReg
-        iFreeVarsReg <-
-            mapM
-                ( \(v, i) -> do
-                    reg <- genReg RInt v
-                    pure (ILoad dummyLoc reg closureArg i, (v, reg))
-                )
-                $ zip iFreeVars [0 ..]
-        fFreeVarsReg <-
-            mapM
-                ( \(v, i) -> do
-                    reg <- genReg RFloat v
-                    pure (IFLoad dummyLoc reg closureArg i, (v, reg))
-                )
-                $ zip fFreeVars [length iFreeVars ..]
+        iArgsLength <- gets (argsLength . selectVariant RInt . regContext)
+        freeInst <- extractFreeVars iArgsLength freeVars
 
-        mapM_ (uncurry registerReg) iBoundedReg
-        mapM_ (\(_, (ident, reg)) -> registerReg ident reg) iFreeVarsReg
-        mapM_ (uncurry registerReg) fBoundedReg
-        mapM_ (\(_, (ident, reg)) -> registerReg ident reg) fFreeVarsReg
-
-        modify $ \env ->
-            env
-                { regContext =
-                    updateVariant
-                        RInt
-                        ( \ctx ->
-                            ctx
-                                { argsLength = length iBoundedReg
-                                }
-                        )
-                        $ regContext env
-                }
-        modify $ \env ->
-            env
-                { regContext =
-                    updateVariant
-                        RFloat
-                        ( \ctx ->
-                            ctx
-                                { argsLength = length fBoundedReg
-                                }
-                        )
-                        $ regContext env
-                }
         inst <- expandExprToInst (retReg RInt) (retReg RFloat) body
-        pure $ map fst iFreeVarsReg ++ map fst fFreeVarsReg ++ inst
+        pure $ iBoundedInst ++ fBoundedInst ++ freeInst ++ inst

@@ -17,6 +17,7 @@ module BackEnd.BackendEnv (
     findReg,
     registerReg,
     findRegOrImm,
+    updateRegContext,
     findGlobal,
 ) where
 
@@ -165,6 +166,15 @@ registerReg ident (Register rTy kind) = do
                             }
                     )
                     $ regContext ctx
+            }
+
+-- | Updates the register context.
+updateRegContext :: (Monad m) => RegType a -> (RegContext a -> RegContext a) -> BackendStateT m ()
+updateRegContext rTy f = do
+    modify $ \ctx ->
+        ctx
+            { regContext =
+                updateVariant rTy f $ regContext ctx
             }
 
 -- | Finds a global variable by its name.

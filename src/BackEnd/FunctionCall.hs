@@ -1,195 +1,30 @@
 {-# LANGUAGE GADTs #-}
 
 module BackEnd.FunctionCall (
-    saveArgs,
     saveRegisters,
 ) where
 
-import BackEnd.BackendEnv (BackendEnv (regContext), BackendStateT, RegContext (argsLength), genTempReg)
 import BackEnd.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
-import Control.Monad.State.Lazy (MonadState (get, put), State, evalState, gets)
-import Data.Foldable (foldlM)
 import Data.Set (toAscList)
-import IR
-import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register), RegisterKind (ArgsReg), argsReg, savedReg, selectVariant, stackReg)
+import IR (
+    AllowBranch,
+    Inst (
+        IBranch,
+        IClosureCall,
+        IFLoad,
+        IFStore,
+        IIntOp,
+        ILoad,
+        IRichCall,
+        IStore
+    ),
+    IntermediateCodeBlock (getICBInst),
+    PrimitiveIntOp (PAdd),
+    RegID,
+    substIState,
+ )
+import Registers (RegOrImm (Imm), RegType (RFloat, RInt), savedReg, stackReg)
 import Syntax (Loc, dummyLoc)
-
--- | Saves arguments on the stack before a function call.
-saveArgs :: (Monad m) => IntermediateCodeBlock stateTy RegID -> BackendStateT m (IntermediateCodeBlock stateTy RegID)
-saveArgs block = do
-    inst' <- saveArgs' $ getICBInst block
-    pure $ block{getICBInst = inst'}
-  where
-    saveArgs' :: (Monad m) => [Inst stateTy RegID AllowBranch] -> BackendStateT m [Inst stateTy RegID AllowBranch]
-    saveArgs' inst'' = do
-        iLen <- gets (argsLength . selectVariant RInt . regContext)
-        modInst <-
-            foldlM
-                ( \inst' arg -> do
-                    if evalState (isUsedAfterCallI arg inst') False
-                        then do
-                            reg <- genTempReg RInt
-                            -- The instructions must not be empty.
-                            case inst' of
-                                [] -> error "panic!"
-                                (f : _) ->
-                                    pure $
-                                        IMov (getIState f) reg (Reg (Register RInt (ArgsReg arg)))
-                                            : map (replaceReg (Register RInt (ArgsReg arg)) reg) inst'
-                        else
-                            pure inst'
-                )
-                inst''
-                [0 .. iLen - 1]
-
-        fLen <- gets (argsLength . selectVariant RFloat . regContext)
-        foldlM
-            ( \inst' arg -> do
-                if evalState (isUsedAfterCallF (Register RFloat (ArgsReg arg)) inst') False
-                    then do
-                        reg <- genTempReg RFloat
-                        -- The instructions must not be empty.
-                        case inst' of
-                            [] -> error "panic!"
-                            (f : _) ->
-                                pure $
-                                    IFMov (getIState f) reg (Reg (Register RFloat (ArgsReg arg)))
-                                        : map (replaceReg (Register RFloat (ArgsReg arg)) reg) inst'
-                    else
-                        pure inst'
-            )
-            modInst
-            [0 .. fLen - 1]
-
-    isUsedAfterCallI :: Int -> [Inst stateTy RegID AllowBranch] -> State Bool Bool
-    isUsedAfterCallI _ [] = pure False
-    isUsedAfterCallI reg (ICompOp _ _ _ left right : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (argsReg RInt reg == left || Reg (argsReg RInt reg) == right)) || rest'
-    isUsedAfterCallI reg (IIntOp _ _ _ left right : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (argsReg RInt reg == left || Reg (argsReg RInt reg) == right)) || rest'
-    isUsedAfterCallI reg (IMov _ _ (Reg reg') : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (argsReg RInt reg == reg')) || rest'
-    isUsedAfterCallI reg (IRichCall _ _ args _ : rest) = do
-        called <- get
-        if called && elem (Reg $ argsReg RInt reg) args
-            then
-                pure True
-            else do
-                put True
-                isUsedAfterCallI reg rest
-    isUsedAfterCallI reg (IClosureCall _ _ args _ : rest) = do
-        called <- get
-        if called && elem (Reg $ argsReg RInt reg) args
-            then
-                pure True
-            else do
-                put True
-                isUsedAfterCallI reg rest
-    isUsedAfterCallI reg (IMakeClosure _ _ _ args _ : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && elem (Reg $ argsReg RInt reg) args) || rest'
-    isUsedAfterCallI reg (ILoad _ _ reg' _ : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (argsReg RInt reg == reg')) || rest'
-    isUsedAfterCallI reg (IStore _ reg1 reg2 _ : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (argsReg RInt reg == reg1 || argsReg RInt reg == reg2)) || rest'
-    isUsedAfterCallI reg (IFLoad _ _ reg' _ : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (argsReg RInt reg == reg')) || rest'
-    isUsedAfterCallI reg (IFStore _ _ reg' _ : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && argsReg RInt reg == reg') || rest'
-    isUsedAfterCallI reg (IRawInst _ _ _ iArgs _ : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallI reg rest
-        pure $ (called && (Reg (argsReg RInt reg) `elem` iArgs)) || rest'
-    isUsedAfterCallI reg (IBranch _ _ left right thenBlock elseBlock : rest) = do
-        called <- get
-        if called && (argsReg RInt reg == left || argsReg RInt reg == right)
-            then
-                pure True
-            else do
-                thenBlock' <- isUsedAfterCallI reg thenBlock
-                thenCalled <- get
-                put called
-                elseBlock' <- isUsedAfterCallI reg elseBlock
-                elseCalled <- get
-                if thenBlock' || elseBlock'
-                    then
-                        pure True
-                    else do
-                        put $ thenCalled || elseCalled
-                        isUsedAfterCallI reg rest
-    isUsedAfterCallI reg (_ : rest) = isUsedAfterCallI reg rest
-
-    isUsedAfterCallF :: Register RegID Float -> [Inst stateTy RegID AllowBranch] -> State Bool Bool
-    isUsedAfterCallF _ [] = pure False
-    isUsedAfterCallF reg (IFCompOp _ _ _ left right : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallF reg rest
-        pure $ (called && (reg == left || reg == right)) || rest'
-    isUsedAfterCallF reg (IFOp _ _ _ left right : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallF reg rest
-        pure $ (called && (reg == left || reg == right)) || rest'
-    isUsedAfterCallF reg (IFMov _ _ (Reg reg') : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallF reg rest
-        pure $ (called && (reg == reg')) || rest'
-    isUsedAfterCallF reg (IRichCall _ _ _ fArgs : rest) = do
-        called <- get
-        if called && elem reg fArgs
-            then
-                pure True
-            else do
-                put True
-                isUsedAfterCallF reg rest
-    isUsedAfterCallF reg (IClosureCall _ _ _ fArgs : rest) = do
-        called <- get
-        if called && elem reg fArgs
-            then
-                pure True
-            else do
-                put True
-                isUsedAfterCallF reg rest
-    isUsedAfterCallF reg (IMakeClosure _ _ _ _ fArgs : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallF reg rest
-        pure $ (called && elem reg fArgs) || rest'
-    isUsedAfterCallF reg (IFStore _ reg' _ _ : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallF reg rest
-        pure $ (called && reg == reg') || rest'
-    isUsedAfterCallF reg (IRawInst _ _ _ _ fArgs : rest) = do
-        called <- get
-        rest' <- isUsedAfterCallF reg rest
-        pure $ (called && (reg `elem` fArgs)) || rest'
-    isUsedAfterCallF reg (IBranch _ _ _ _ thenBlock elseBlock : rest) = do
-        called <- get
-        thenBlock' <- isUsedAfterCallF reg thenBlock
-        thenCalled <- get
-        put called
-        elseBlock' <- isUsedAfterCallF reg elseBlock
-        elseCalled <- get
-        if thenBlock' || elseBlock'
-            then
-                pure True
-            else do
-                put $ thenCalled || elseCalled
-                isUsedAfterCallF reg rest
-    isUsedAfterCallF reg (_ : rest) = isUsedAfterCallF reg rest
 
 -- | Saves registers on the stack before a function call and restores them after the call.
 saveRegBeyondCall :: Inst LivenessLoc RegID AllowBranch -> [Inst Loc RegID AllowBranch]
