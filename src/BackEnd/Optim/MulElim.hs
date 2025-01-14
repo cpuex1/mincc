@@ -2,6 +2,7 @@
 
 module BackEnd.Optim.MulElim (elimMul) where
 
+import BackEnd.Optim.Common (BackEndOptimStateT)
 import IR (
     AllowBranch,
     Inst (IBranch, IIntOp),
@@ -17,9 +18,9 @@ log2 n
     | n `mod` 2 == 1 = Nothing
     | otherwise = (+ 1) <$> log2 (n `div` 2)
 
-elimMul :: IntermediateCodeBlock stateTy idTy -> IntermediateCodeBlock stateTy idTy
+elimMul :: (Monad m) => IntermediateCodeBlock stateTy idTy -> BackEndOptimStateT m (IntermediateCodeBlock stateTy idTy)
 elimMul block =
-    block{getICBInst = map elimMul' $ getICBInst block}
+    pure $ block{getICBInst = map elimMul' $ getICBInst block}
   where
     elimMul' :: Inst stateTy idTy AllowBranch -> Inst stateTy idTy AllowBranch
     elimMul' (IIntOp state PMul dest src (Imm i)) =

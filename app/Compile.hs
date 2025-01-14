@@ -26,13 +26,14 @@ import BackEnd.BackendEnv (
 import BackEnd.FunctionCall (saveRegisters)
 import BackEnd.Liveness (LivenessLoc (livenessLoc), liveness)
 import BackEnd.Lowering (toInstructions)
-import BackEnd.Optim.MulElim (elimMul)
+import BackEnd.Optim (runBackEndOptim)
+import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndOptimStateT)
 import BackEnd.RegisterAlloc (assignRegister)
 import BackEnd.Spill (spillF, spillI)
 import BackEnd.Transform (transformCodeBlock)
 import CommandLine (
     BackendIdentStateIO,
-    CompilerConfig (cActivatedOptim, cEmitOptim, cInliningSize, cMaxInlining, cRecInliningSize),
+    CompilerConfig (cActivatedBackEndOptim, cActivatedOptim, cEmitOptim, cInliningSize, cMaxInlining, cRecInliningSize),
     ConfigIO,
     IdentEnvIO,
  )
@@ -64,7 +65,7 @@ import IR (
  )
 import Log (LogLevel (..), printLog, printTextLog)
 import MiddleEnd.Analysis.Constant (registerConstants)
-import MiddleEnd.Analysis.Identifier (loadTypeEnv)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, loadTypeEnv)
 import MiddleEnd.Closure (getFunctions)
 import MiddleEnd.Desugar (expandArrayCreate)
 import MiddleEnd.Globals (GlobalTable, defaultGlobalTable, extractGlobals, reportGlobals)
@@ -198,7 +199,34 @@ toInstructionsIO :: [Function] -> BackendIdentStateIO [IntermediateCodeBlock Loc
 toInstructionsIO = mapM toInstructions
 
 optimInstIO :: [IntermediateCodeBlock Loc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc RegID]
-optimInstIO inst = pure $ map elimMul inst
+optimInstIO inst = do
+    evalStateT (mapM (optimInstIOLoop 1) inst) BackEndOptimContext
+  where
+    optimInstIOLoop :: Int -> IntermediateCodeBlock Loc RegID -> BackEndOptimStateT (IdentEnvT ConfigIO) (IntermediateCodeBlock Loc RegID)
+    optimInstIOLoop roundCount beforeInst = do
+        lift $ liftB $ lift $ printTextLog Debug $ "Optimization round " <> pack (show roundCount) <> " started"
+
+        -- Get activated optimizations.
+        optimizations <- lift $ liftB $ asks cActivatedBackEndOptim
+
+        optimInst <-
+            foldM
+                ( \e kind -> do
+                    optimInst <- runBackEndOptim kind e
+                    lift $ liftB $ lift $ printTextLog Info $ display kind <> " performed"
+                    when (optimInst == e) $ do
+                        lift $ liftB $ lift $ printLog Info "Make no change"
+                    pure optimInst
+                )
+                beforeInst
+                optimizations
+        if beforeInst == optimInst
+            then do
+                _ <- lift $ liftB $ lift $ printLog Info "No space for optimization"
+                pure optimInst
+            else do
+                _ <- lift $ liftB $ lift $ printLog Info "Perform more optimization"
+                optimInstIOLoop (roundCount + 1) optimInst
 
 transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [CodeBlock Loc Int]
 transformCodeBlockIO blocks =

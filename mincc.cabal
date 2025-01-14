@@ -29,6 +29,8 @@ library
       BackEnd.FunctionCall
       BackEnd.Liveness
       BackEnd.Lowering
+      BackEnd.Optim
+      BackEnd.Optim.Common
       BackEnd.Optim.MulElim
       BackEnd.RegisterAlloc
       BackEnd.Shuffle

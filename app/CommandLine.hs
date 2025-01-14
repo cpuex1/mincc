@@ -9,6 +9,7 @@ module CommandLine (
 ) where
 
 import BackEnd.Lowering (BackendIdentState)
+import BackEnd.Optim (BackEndOptimKind (MulElim))
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
 import Data.Set (Set, insert)
@@ -35,6 +36,7 @@ data CompilerConfig = CompilerConfig
     , cRecInliningSize :: Threshold
     , cMaxInlining :: Int
     , cActivatedOptim :: Set OptimKind
+    , cActivatedBackEndOptim :: Set BackEndOptimKind
     , cILimit :: Int
     , cFLimit :: Int
     , cANSI :: Bool
@@ -215,6 +217,7 @@ toCompilerConfig arg = do
             , cRecInliningSize = toThreshold $ if recInliningSize' < 0 then Nothing else Just recInliningSize'
             , cMaxInlining = maxInlining arg
             , cActivatedOptim = selectedOptim
+            , cActivatedBackEndOptim = selectedBackEndOptim
             , cILimit = iLimit arg
             , cFLimit = fLimit arg
             , cANSI = ansiSupported
@@ -243,3 +246,6 @@ toCompilerConfig arg = do
             . insertIf (optimize arg || optInlining arg) Inlining
             . insertIf (optimize arg || optUnusedElim arg) UnusedElim
             $ mempty
+
+    selectedBackEndOptim =
+        insert MulElim mempty
