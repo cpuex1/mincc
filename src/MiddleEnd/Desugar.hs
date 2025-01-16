@@ -7,7 +7,8 @@ import Control.Monad (foldM)
 import Control.Monad.State (MonadTrans (lift), StateT (runStateT), modify)
 import Display (Display (display))
 import FrontEnd.Flatten (flattenExpr)
-import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (IdentProp), genNewVar, registerProp)
+import MiddleEnd.Analysis.Constant (registerConstants)
+import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (IdentProp), asConstant, genNewVar, registerProp)
 import Syntax (
     BinaryOp (IntOp),
     Cond (CComp),
@@ -74,6 +75,7 @@ generateInitArrayFunc uniqueId valTy body = do
 
 expandArrayCreate :: (Monad m) => KExpr -> IdentEnvT m KExpr
 expandArrayCreate expr = do
+    registerConstants expr
     (expr', funcGenerators) <- runStateT (expandArrayCreate' expr) []
     flattenExpr <$> foldM (\e gen -> gen e) expr' funcGenerators
   where
@@ -81,25 +83,54 @@ expandArrayCreate expr = do
     expandArrayCreate' (Let state1 (PVar v) (ArrayCreate (TypedState (TArray valTy) loc) size val) body) = do
         body' <- expandArrayCreate' body
 
-        let funcGen = generateInitArrayFunc uniqueId valTy
-        modify $ \ctx -> funcGen : ctx
-        zero <- lift $ genNewVar TInt
-        pure $
-            Let
-                state1
-                (PVar v)
-                (ArrayCreate (TypedState (TArray valTy) loc) size val)
-                ( Let
-                    state1
-                    (PVar zero)
-                    (Const (TypedState TInt loc) (LInt 0))
-                    ( Let
+        size' <- lift $ asConstant size
+        case size' of
+            Just (LInt constSize) -> do
+                assignment <-
+                    lift $
+                        foldM
+                            ( \child idx -> do
+                                idxVar <- genNewVar TInt
+                                pure $
+                                    Let
+                                        state1
+                                        (PVar idxVar)
+                                        (Const (TypedState TInt loc) (LInt idx))
+                                        ( Let
+                                            state1
+                                            PUnit
+                                            (Put (TypedState TUnit loc) v idxVar val)
+                                            child
+                                        )
+                            )
+                            body'
+                            [0 .. constSize - 1]
+                pure $
+                    Let
                         state1
-                        PUnit
-                        (App (TypedState TUnit loc) uniqueId [v, zero, size, val])
-                        body'
-                    )
-                )
+                        (PVar v)
+                        (ArrayCreate (TypedState (TArray valTy) loc) size val)
+                        assignment
+            _ -> do
+                let funcGen = generateInitArrayFunc uniqueId valTy
+                modify $ \ctx -> funcGen : ctx
+                zero <- lift $ genNewVar TInt
+                pure $
+                    Let
+                        state1
+                        (PVar v)
+                        (ArrayCreate (TypedState (TArray valTy) loc) size val)
+                        ( Let
+                            state1
+                            (PVar zero)
+                            (Const (TypedState TInt loc) (LInt 0))
+                            ( Let
+                                state1
+                                PUnit
+                                (App (TypedState TUnit loc) uniqueId [v, zero, size, val])
+                                body'
+                            )
+                        )
       where
         uniqueId = UserDefined dummyLoc $ "Array.create" <> display v
     expandArrayCreate' (Let state pat expr' body) = do
