@@ -288,20 +288,61 @@ expandExprToInst iReg fReg (Get state array index) = do
         ExternalIdent arrayName ->
             Imm . globalOffset <$> findGlobal arrayName
         _ -> Reg <$> findReg RInt array
-    index' <- findReg RInt index
-    addr <- genTempReg RInt
-    let ty = getType state
-    case ty of
-        TFloat ->
-            pure
-                [ IIntOp (getLoc state) PAdd addr index' array'
-                , IFLoad (getLoc state) fReg addr 0
-                ]
-        _ ->
-            pure
-                [ IIntOp (getLoc state) PAdd addr index' array'
-                , ILoad (getLoc state) iReg addr 0
-                ]
+    constIndex <- liftB $ asConstant index
+    case (array', constIndex) of
+        (Imm offset, Just (LInt index')) -> do
+            -- If both of them are constants, we can calculate the address at compile time.
+            let ty = getType state
+            case ty of
+                TFloat ->
+                    pure
+                        [ IFLoad (getLoc state) fReg (zeroReg RInt) (offset + index')
+                        ]
+                _ ->
+                    pure
+                        [ ILoad (getLoc state) iReg (zeroReg RInt) (offset + index')
+                        ]
+        (Imm offset, Nothing) -> do
+            -- If the array is a constant and the index is a variable, we can calculate the address at compile time.
+            index' <- findReg RInt index
+            let ty = getType state
+            case ty of
+                TFloat ->
+                    pure
+                        [ IFLoad (getLoc state) fReg index' offset
+                        ]
+                _ ->
+                    pure
+                        [ ILoad (getLoc state) iReg index' offset
+                        ]
+        (Reg reg, Just (LInt index')) -> do
+            -- If the array is a register and the index is a constant, we can calculate the address at compile time.
+            let ty = getType state
+            case ty of
+                TFloat ->
+                    pure
+                        [ IFLoad (getLoc state) fReg reg index'
+                        ]
+                _ ->
+                    pure
+                        [ ILoad (getLoc state) iReg reg index'
+                        ]
+        _ -> do
+            -- If both of them are variables, we need to calculate the address at runtime.
+            index' <- findReg RInt index
+            addr <- genTempReg RInt
+            let ty = getType state
+            case ty of
+                TFloat ->
+                    pure
+                        [ IIntOp (getLoc state) PAdd addr index' array'
+                        , IFLoad (getLoc state) fReg addr 0
+                        ]
+                _ ->
+                    pure
+                        [ IIntOp (getLoc state) PAdd addr index' array'
+                        , ILoad (getLoc state) iReg addr 0
+                        ]
 expandExprToInst _ _ (Put state dest idx src) = do
     dest' <- findRegOrImm RInt dest
     idx' <- findReg RInt idx
