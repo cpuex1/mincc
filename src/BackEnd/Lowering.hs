@@ -345,13 +345,34 @@ expandExprToInst _ _ (Put state dest idx src) = do
     srcTy <- liftB $ getTyOf src
     case srcTy of
         TFloat -> do
+            constIdx <- liftB $ asConstant idx
             src' <- findReg RFloat src
-            index' <- findReg RInt idx
-            addr <- genTempReg RInt
-            pure
-                [ IIntOp (getLoc state) PAdd addr index' dest'
-                , IFStore (getLoc state) src' addr 0
-                ]
+            case (dest', constIdx) of
+                (Imm offset, Just (LInt index')) -> do
+                    -- If both of them are constants, we can calculate the address at compile time.
+                    pure
+                        [ IFStore (getLoc state) src' (zeroReg RInt) (offset + index')
+                        ]
+                (Imm offset, Nothing) -> do
+                    -- If the array is a constant and the index is a variable, we can calculate the address at compile time.
+                    index' <- findReg RInt idx
+                    pure
+                        [ IFStore (getLoc state) src' index' offset
+                        ]
+                (Reg reg, Just (LInt index')) -> do
+                    -- If the array is a register and the index is a constant, we can calculate the address at compile time.
+                    pure
+                        [ IFStore (getLoc state) src' reg index'
+                        ]
+                (Reg reg, Nothing) -> do
+                    -- If both of them are variables, we need to calculate the address at runtime.
+                    index' <- findReg RInt idx
+                    addr <- genTempReg RInt
+                    pure
+                        [ IIntOp (getLoc state) PAdd addr reg (Reg index')
+                        , IFStore (getLoc state) src' addr 0
+                        ]
+                _ -> throwError $ OtherError "The index should be integer."
         _ -> do
             -- Create a new register if the source is external.
             src' <- findRegOrImm RInt src
