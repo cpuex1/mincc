@@ -189,6 +189,12 @@ expandExprToInst iReg fReg (Let _ PUnit expr body) = do
     expr' <- expandExprToInst iReg fReg expr
     body' <- expandExprToInst iReg fReg body
     pure $ expr' ++ body'
+expandExprToInst iReg fReg (Let _ (PVar v) (Const _ (LInt 0)) body) = do
+    registerReg v (zeroReg RInt)
+    expandExprToInst iReg fReg body
+expandExprToInst iReg fReg (Let _ (PVar v) (Const _ (LFloat 0)) body) = do
+    registerReg v (zeroReg RFloat)
+    expandExprToInst iReg fReg body
 expandExprToInst iReg fReg (Let _ (PVar v) expr body) = do
     vTy <- liftB $ getTyOf v
     case vTy of
