@@ -300,6 +300,8 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
             $ zip fFreeV [1 + length iFreeV ..]
         insertBuf $ IMov state dest (Reg heapReg)
         insertBuf $ IIntOp state PAdd heapReg heapReg (Imm $ 1 + length iFreeV + length fFreeV)
+    transformInst (ILoad _ (Register RInt ZeroReg) _ _) =
+        pure ()
     transformInst (ILoad state dest src offset) =
         insertBuf $ ILoad state dest src offset
     transformInst (IStore state dest src offset) =
