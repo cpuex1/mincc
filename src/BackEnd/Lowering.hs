@@ -284,10 +284,7 @@ expandExprToInst iReg _ (ArrayCreate state size _) = do
         , IIntOp (getLoc state) PAdd heapReg heapReg (Reg size')
         ]
 expandExprToInst iReg fReg (Get state array index) = do
-    array' <- case array of
-        ExternalIdent arrayName ->
-            Imm . globalOffset <$> findGlobal arrayName
-        _ -> Reg <$> findReg RInt array
+    array' <- findRegOrImm RInt array
     constIndex <- liftB $ asConstant index
     case (array', constIndex) of
         (Imm offset, Just (LInt index')) -> do
@@ -345,35 +342,32 @@ expandExprToInst iReg fReg (Get state array index) = do
                         ]
 expandExprToInst _ _ (Put state dest idx src) = do
     dest' <- findRegOrImm RInt dest
-    idx' <- findReg RInt idx
     srcTy <- liftB $ getTyOf src
-    case src of
-        ExternalIdent src' -> do
-            -- It can be a global variable.
-            src'' <- globalOffset <$> findGlobal src'
-            temp <- genTempReg RInt
-            offset <- genTempReg RInt
+    case srcTy of
+        TFloat -> do
+            src' <- findReg RFloat src
+            index' <- findReg RInt idx
+            addr <- genTempReg RInt
             pure
-                [ IIntOp (getLoc state) PAdd offset idx' dest'
-                , IMov (getLoc state) temp (Imm src'')
-                , IStore (getLoc state) temp offset 0
+                [ IIntOp (getLoc state) PAdd addr index' dest'
+                , IFStore (getLoc state) src' addr 0
                 ]
-        _ ->
-            case srcTy of
-                TFloat -> do
-                    src' <- findReg RFloat src
-                    offset <- genTempReg RInt
-                    pure
-                        [ IIntOp (getLoc state) PAdd offset idx' dest'
-                        , IFStore (getLoc state) src' offset 0
-                        ]
-                _ -> do
-                    src' <- findReg RInt src
-                    offset <- genTempReg RInt
-                    pure
-                        [ IIntOp (getLoc state) PAdd offset idx' dest'
-                        , IStore (getLoc state) src' offset 0
-                        ]
+        _ -> do
+            -- Create a new register if the source is external.
+            src' <- findRegOrImm RInt src
+            (prologue, srcReg) <- case src' of
+                Reg reg -> pure ([], reg)
+                Imm imm -> do
+                    srcReg <- genTempReg RInt
+                    pure ([IMov (getLoc state) srcReg (Imm imm)], srcReg)
+
+            index' <- findReg RInt idx
+            addr <- genTempReg RInt
+            pure $
+                prologue
+                    ++ [ IIntOp (getLoc state) PAdd addr index' dest'
+                       , IStore (getLoc state) srcReg addr 0
+                       ]
 expandExprToInst iReg _ (MakeClosure state func freeV) = do
     iFreeV <-
         filterM
