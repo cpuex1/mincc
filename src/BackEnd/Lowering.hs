@@ -342,10 +342,11 @@ expandExprToInst iReg fReg (Get state array index) = do
                         ]
 expandExprToInst _ _ (Put state dest idx src) = do
     dest' <- findRegOrImm RInt dest
+    constIdx <- liftB $ asConstant idx
+
     srcTy <- liftB $ getTyOf src
     case srcTy of
         TFloat -> do
-            constIdx <- liftB $ asConstant idx
             src' <- findReg RFloat src
             case (dest', constIdx) of
                 (Imm offset, Just (LInt index')) -> do
@@ -382,13 +383,35 @@ expandExprToInst _ _ (Put state dest idx src) = do
                     srcReg <- genTempReg RInt
                     pure ([IMov (getLoc state) srcReg (Imm imm)], srcReg)
 
-            index' <- findReg RInt idx
-            addr <- genTempReg RInt
-            pure $
-                prologue
-                    ++ [ IIntOp (getLoc state) PAdd addr index' dest'
-                       , IStore (getLoc state) srcReg addr 0
-                       ]
+            case (dest', constIdx) of
+                (Imm offset, Just (LInt index')) -> do
+                    -- If both of them are constants, we can calculate the address at compile time.
+                    pure $
+                        prologue
+                            ++ [ IStore (getLoc state) srcReg (zeroReg RInt) (offset + index')
+                               ]
+                (Imm offset, _) -> do
+                    -- If the array is a constant and the index is a variable, we can calculate the address at compile time.
+                    index' <- findReg RInt idx
+                    pure $
+                        prologue
+                            ++ [ IStore (getLoc state) srcReg index' offset
+                               ]
+                (Reg reg, Just (LInt index')) -> do
+                    -- If the array is a register and the index is a constant, we can calculate the address at compile time.
+                    pure $
+                        prologue
+                            ++ [ IStore (getLoc state) srcReg reg index'
+                               ]
+                (Reg reg, _) -> do
+                    -- If both of them are variables, we need to calculate the address at runtime.
+                    index' <- findReg RInt idx
+                    addr <- genTempReg RInt
+                    pure $
+                        prologue
+                            ++ [ IIntOp (getLoc state) PAdd addr reg (Reg index')
+                               , IStore (getLoc state) srcReg addr 0
+                               ]
 expandExprToInst iReg _ (MakeClosure state func freeV) = do
     iFreeV <-
         filterM
