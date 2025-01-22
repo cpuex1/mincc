@@ -2,7 +2,7 @@
 
 module BackEnd.RegisterAlloc (assignRegister) where
 
-import BackEnd.BackendEnv (BackendEnv (regContext), BackendStateT, RegContext (generatedReg))
+import BackEnd.BackendEnv (BackendStateT)
 import BackEnd.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Map (Map, findWithDefault)
@@ -16,10 +16,10 @@ import IR (
     IntermediateCodeBlock (getICBInst),
     RegID,
     getAllIState,
-    replaceReg,
+    mapReg,
     substIState,
  )
-import Registers (RegType (RFloat, RInt), savedReg, selectVariant, zeroReg)
+import Registers (RegType (RFloat, RInt), Register (Register), RegisterKind (SavedReg), savedReg, zeroReg)
 import Syntax (Loc)
 
 newtype RegAllocEnv = RegAllocEnv
@@ -76,28 +76,29 @@ assignRegister block = do
     let (iMap, fMap) = registerAlloc (LivenessGraph iGraph fGraph)
     let usedI = (+ 1) $ foldl max (-1) $ M.elems iMap
     let usedF = (+ 1) $ foldl max (-1) $ M.elems fMap
-    genI <- gets (generatedReg . selectVariant RInt . regContext)
-    genF <- gets (generatedReg . selectVariant RFloat . regContext)
 
     let iSpillTarget = selectSpilt iGraph
     let fSpillTarget = selectSpilt fGraph
 
     -- Accept the register allocation.
-    -- Replace SavedReg with TempReg.
-    let inst' = map (\i -> foldl (\i' (a, b) -> replaceReg (savedReg RInt a) (savedReg RInt (-b - 1)) i') i $ M.toList iMap) inst
-    let inst'' = map (\i -> foldl (\i' (a, b) -> replaceReg (savedReg RFloat a) (savedReg RFloat (-b - 1)) i') i $ M.toList fMap) inst'
+    let inst' =
+            map
+                ( mapReg
+                    ( \reg -> case reg of
+                        Register RInt (SavedReg regId) ->
+                            case M.lookup regId iMap of
+                                Just regId' -> savedReg RInt regId'
+                                Nothing -> zeroReg RInt
+                        Register RFloat (SavedReg regId) ->
+                            case M.lookup regId fMap of
+                                Just regId' -> savedReg RFloat regId'
+                                Nothing -> zeroReg RFloat
+                        _ -> reg
+                    )
+                )
+                inst
 
-    -- Ground unallocated registers.
-    let inst''' = map (\i -> foldl (\i' a -> replaceReg (savedReg RInt a) (zeroReg RInt) i') i [0 .. genI - 1]) inst''
-    let inst'''' = map (\i -> foldl (\i' a -> replaceReg (savedReg RFloat a) (zeroReg RFloat) i') i [0 .. genF - 1]) inst'''
-
-    -- To avoid the replacement of SavedReg occurring more than once,
-    -- we need to proceed replacements via negative register IDs.
-    -- Do not forget s0 and fs0, which have non-positive ones.
-    let inst''''' = map (\i -> foldl (\i' a -> replaceReg (savedReg RInt (-a - 1)) (savedReg RInt a) i') i [0 .. usedI - 1]) inst''''
-    let inst'''''' = map (\i -> foldl (\i' a -> replaceReg (savedReg RFloat (-a - 1)) (savedReg RFloat a) i') i [0 .. usedF - 1]) inst'''''
-
-    pure (usedI, usedF, iSpillTarget, fSpillTarget, block{getICBInst = map (substIState livenessLoc) inst''''''})
+    pure (usedI, usedF, iSpillTarget, fSpillTarget, block{getICBInst = map (substIState livenessLoc) inst'})
   where
     retrieveGraph :: [Inst LivenessLoc RegID AllowBranch] -> LivenessGraph
     retrieveGraph inst' = toGraph $ concatMap (map livenessState . getAllIState) inst'
