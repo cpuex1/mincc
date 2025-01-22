@@ -142,9 +142,9 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
                 <> displayI body depth
                 <> ")"
         withoutState (Let _ (PTuple values) value body) depth =
-            "(let "
+            "(let ("
                 <> Data.Text.unwords (Prelude.map display values)
-                <> " = "
+                <> ") = "
                 <> displayI value depth
                 <> " in\n"
                 <> insertIndent depth
