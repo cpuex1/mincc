@@ -10,9 +10,9 @@ module Typing (
 ) where
 
 data TypeNotResolved = TypeNotResolved
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 data TypeResolved = TypeResolved
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 type TypeId = Int
 
@@ -31,6 +31,7 @@ data TypeKind resolvedTy where
 
 deriving instance (Show a) => Show (TypeKind a)
 deriving instance (Eq a) => Eq (TypeKind a)
+deriving instance (Ord a) => Ord (TypeKind a)
 
 weakenTy :: Ty -> ITy
 weakenTy TUnit = TUnit

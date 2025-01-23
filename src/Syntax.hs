@@ -44,7 +44,7 @@ data Literal
     | LBool Bool
     | LInt Int
     | LFloat Float
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 getLiteralType :: Literal -> Ty
 getLiteralType LUnit = TUnit
@@ -56,16 +56,16 @@ data UnaryOp
     = Not
     | Neg
     | FNeg
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
-data RelationBinOp = Eq | Ne | Lt | Ge deriving (Show, Eq)
-data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq)
-data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq)
+data RelationBinOp = Eq | Ne | Lt | Ge deriving (Show, Eq, Ord)
+data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq, Ord)
+data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq, Ord)
 data BinaryOp
     = RelationOp RelationBinOp
     | IntOp IntBinOp
     | FloatOp FloatBinOp
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data RawIdent
     = RawIdent Loc Text
@@ -94,10 +94,10 @@ data Pattern identTy
     | PVar identTy
     | PRec identTy [identTy]
     | PTuple [identTy]
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data AllowCompBranch = AllowCompBranch
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 -- | A condition of an if-expression.
 data Cond operandTy allowCompTy where
@@ -110,6 +110,10 @@ deriving instance
 deriving instance
     (Eq operandTy, Eq allowCompTy) =>
     Eq (Cond operandTy allowCompTy)
+
+deriving instance
+    (Ord operandTy, Ord allowCompTy) =>
+    Ord (Cond operandTy allowCompTy)
 
 {- | The type of an expression after parsing.
 PGuard is used for avoiding invalid recursive type definition.
@@ -133,7 +137,7 @@ dummyLoc :: Loc
 dummyLoc = Loc "__dummy" 0 0
 
 data TypedState = TypedState {getType :: Ty, getLoc :: Loc}
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 -- | The type of an expression after type inference.
 newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr DisallowClosure ()}
@@ -156,10 +160,10 @@ data Function = Function
     deriving (Show, Eq)
 
 data AllowClosure = AllowClosure
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data DisallowClosure = DisallowClosure
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data Expr state identTy operandTy closureTy branchTy where
     Const ::
@@ -240,6 +244,9 @@ deriving instance
 deriving instance
     (Eq state, Eq identTy, Eq operandTy, Eq closureTy, Eq branchTy) =>
     Eq (Expr state identTy operandTy closureTy branchTy)
+deriving instance
+    (Ord state, Ord identTy, Ord operandTy, Ord closureTy, Ord branchTy) =>
+    Ord (Expr state identTy operandTy closureTy branchTy)
 
 getExprState :: Expr state identTy operandTy closureTy branchTy -> state
 getExprState (Const state _) = state

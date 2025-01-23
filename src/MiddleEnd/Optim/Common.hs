@@ -3,16 +3,27 @@
 module MiddleEnd.Optim.Common (
     genFresh,
     withFreshVars,
+    purge,
     Threshold (..),
     toThreshold,
     OptimContext (..),
     OptimStateT,
 ) where
 
+import Control.Monad.Identity (Identity (runIdentity))
 import Control.Monad.State (StateT)
 import Control.Monad.Trans (lift)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar, getTyOf)
-import Syntax (Expr (..), Ident, KExpr, Pattern (PRec, PTuple, PUnit, PVar), subst)
+import Syntax (
+    Expr (..),
+    Ident,
+    KExpr,
+    Pattern (PRec, PTuple, PUnit, PVar),
+    TypedState (getLoc),
+    dummyLoc,
+    subst,
+    visitExprM,
+ )
 
 -- | Generates a new variable conditionally.
 genFresh :: (Monad m) => Ident -> OptimStateT m Ident
@@ -59,6 +70,17 @@ withFreshVars (If state cond then' else') = do
     else'' <- withFreshVars else'
     pure $ If state cond then'' else''
 withFreshVars expr = pure expr
+
+-- | Purges all location information.
+purge :: KExpr -> KExpr
+purge =
+    runIdentity
+        . visitExprM
+            ( \state ->
+                pure $ state{getLoc = dummyLoc}
+            )
+            pure
+            pure
 
 -- | Threshold for inlining.
 data Threshold
