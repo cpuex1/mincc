@@ -1,12 +1,16 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Registers (
     RegType (..),
     RegVariant (..),
+    RegVariant',
+    VariantItem (..),
     selectVariant,
     updateVariant,
+    mapVariant,
     RegisterKind (..),
     Register (..),
     zeroReg,
@@ -39,6 +43,12 @@ data RegVariant f
 deriving instance (Show (f Int), Show (f Float)) => Show (RegVariant f)
 deriving instance (Eq (f Int), Eq (f Float)) => Eq (RegVariant f)
 
+newtype VariantItem b a
+    = VariantItem {unwrap :: b}
+    deriving (Show, Eq)
+
+type RegVariant' a = RegVariant (VariantItem a)
+
 selectVariant :: RegType a -> RegVariant f -> f a
 selectVariant RInt (RegVariant i _) = i
 selectVariant RFloat (RegVariant _ f) = f
@@ -46,6 +56,15 @@ selectVariant RFloat (RegVariant _ f) = f
 updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
 updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}
 updateVariant RFloat func variant = variant{fVariant = func $ fVariant variant}
+
+mapVariant :: (forall a. f a -> g a) -> RegVariant f -> RegVariant g
+mapVariant f (RegVariant i f') = RegVariant (f i) (f f')
+
+instance (Semigroup (f Int), Semigroup (f Float)) => Semigroup (RegVariant f) where
+    RegVariant i1 f1 <> RegVariant i2 f2 = RegVariant (i1 <> i2) (f1 <> f2)
+
+instance (Monoid (f Int), Monoid (f Float)) => Monoid (RegVariant f) where
+    mempty = RegVariant mempty mempty
 
 data RegisterKind idTy ty where
     ZeroReg :: RegisterKind idTy ty

@@ -76,7 +76,7 @@ import MiddleEnd.Optim.Common (
  )
 import MiddleEnd.Validator (validate)
 import Path (changeExt)
-import Registers (RegType (RFloat, RInt), savedReg, selectVariant, updateVariant)
+import Registers (RegType (RFloat, RInt), RegVariant (RegVariant), VariantItem (VariantItem), savedReg, selectVariant, updateVariant)
 import Syntax (
     Function,
     KExpr,
@@ -279,7 +279,7 @@ assignRegisterIO blocks = do
   where
     assignRegisterLoop :: IntermediateCodeBlock LivenessLoc RegID -> BackendIdentStateIO (IntermediateCodeBlock Loc RegID)
     assignRegisterLoop block = do
-        (usedI, usedF, iSpillTarget, fSpillTarget, block') <- assignRegister block
+        let (RegVariant (VariantItem usedI) (VariantItem usedF), RegVariant (VariantItem iSpillTarget) (VariantItem fSpillTarget), block') = assignRegister block
 
         liftB $
             lift $

@@ -4,13 +4,11 @@ module BackEnd.FunctionCall (
     saveRegisters,
 ) where
 
-import BackEnd.Liveness (LivenessLoc (LivenessLoc, livenessLoc), LivenessState (LivenessState), liveness)
+import BackEnd.Liveness (Liveness (alive), LivenessLoc (LivenessLoc, livenessLoc), liveness)
 import Control.Monad (foldM)
 import Control.Monad.State (MonadState (get, put), State, runState)
 import Data.Foldable (toList)
 import Data.Sequence (Seq, empty, singleton)
-import Data.Set (Set)
-import qualified Data.Set as S
 import IR (
     AllowBranch,
     Inst (
@@ -26,7 +24,7 @@ import IR (
     RegID,
     substIState,
  )
-import Registers (RegType (RFloat, RInt), savedReg, stackReg)
+import Registers (RegType (RFloat, RInt), RegVariant, savedReg, selectVariant, stackReg)
 import Syntax (Loc, dummyLoc)
 
 type FunctionCallState = State Int
@@ -37,12 +35,8 @@ genLocalVar = do
     put $ i + 1
     return i
 
-selectByType :: RegType a -> LivenessState -> Set RegID
-selectByType RInt (LivenessState i _) = i
-selectByType RFloat (LivenessState _ f) = f
-
 dummyLivenessLoc :: LivenessLoc
-dummyLivenessLoc = LivenessLoc dummyLoc (LivenessState S.empty S.empty)
+dummyLivenessLoc = LivenessLoc dummyLoc mempty
 
 store :: RegType a -> RegID -> Int -> Inst LivenessLoc RegID AllowBranch
 store RInt reg local = IStore dummyLivenessLoc (savedReg RInt reg) stackReg local
@@ -52,8 +46,8 @@ load :: RegType a -> RegID -> Int -> Inst LivenessLoc RegID AllowBranch
 load RInt reg local = ILoad dummyLivenessLoc (savedReg RInt reg) stackReg local
 load RFloat reg local = IFLoad dummyLivenessLoc (savedReg RFloat reg) stackReg local
 
-genPrologueAndEpilogue :: RegType a -> LivenessState -> FunctionCallState (Seq (Inst LivenessLoc RegID AllowBranch), Seq (Inst LivenessLoc RegID AllowBranch))
-genPrologueAndEpilogue rTy alive = do
+genPrologueAndEpilogue :: RegType a -> RegVariant Liveness -> FunctionCallState (Seq (Inst LivenessLoc RegID AllowBranch), Seq (Inst LivenessLoc RegID AllowBranch))
+genPrologueAndEpilogue rTy l = do
     foldM
         ( \(prologue, epilogue) reg -> do
             local <- genLocalVar
@@ -69,16 +63,16 @@ genPrologueAndEpilogue rTy alive = do
         (empty, empty)
         toBeSaved
   where
-    toBeSaved = selectByType rTy alive
+    toBeSaved = alive $ selectVariant rTy l
 
 -- | Saves registers on the stack before a function call and restores them after the call.
 saveRegBeyondCall :: RegType a -> Inst LivenessLoc RegID AllowBranch -> FunctionCallState (Seq (Inst LivenessLoc RegID AllowBranch))
-saveRegBeyondCall rTy (IRichCall (LivenessLoc loc alive) label iArgs fArgs) = do
-    (prologue, epilogue) <- genPrologueAndEpilogue rTy alive
-    pure $ prologue <> singleton (IRichCall (LivenessLoc loc alive) label iArgs fArgs) <> epilogue
-saveRegBeyondCall rTy (IClosureCall (LivenessLoc loc alive) cl iArgs fArgs) = do
-    (prologue, epilogue) <- genPrologueAndEpilogue rTy alive
-    pure $ prologue <> singleton (IClosureCall (LivenessLoc loc alive) cl iArgs fArgs) <> epilogue
+saveRegBeyondCall rTy (IRichCall (LivenessLoc loc l) label iArgs fArgs) = do
+    (prologue, epilogue) <- genPrologueAndEpilogue rTy l
+    pure $ prologue <> singleton (IRichCall (LivenessLoc loc l) label iArgs fArgs) <> epilogue
+saveRegBeyondCall rTy (IClosureCall (LivenessLoc loc l) cl iArgs fArgs) = do
+    (prologue, epilogue) <- genPrologueAndEpilogue rTy l
+    pure $ prologue <> singleton (IClosureCall (LivenessLoc loc l) cl iArgs fArgs) <> epilogue
 saveRegBeyondCall rTy (IBranch state op left right thenBlock elseBlock) = do
     thenBlock' <- toList <$> saveRegBeyondCallAll thenBlock
     elseBlock' <- toList <$> saveRegBeyondCallAll elseBlock

@@ -4,7 +4,7 @@
 
 module Display (display, Display) where
 
-import BackEnd.Liveness (LivenessLoc (livenessState), LivenessState (fAlive, iAlive))
+import BackEnd.Liveness (Liveness (Liveness), LivenessLoc (livenessProp))
 import Data.Set (toAscList)
 import Data.Text
 import IR
@@ -396,16 +396,16 @@ instance Display (InstTerm stateTy Int) where
         "blt " <> display lhs <> ", " <> display rhs <> ", " <> label
     display Nop = "nop"
 
-instance Display LivenessState where
-    display state =
+instance Display (RegVariant Liveness) where
+    display (RegVariant (Liveness iAlive) (Liveness fAlive)) =
         "["
-            <> Data.Text.intercalate "," (Prelude.map (\i -> display $ Register RInt (SavedReg i)) (toAscList $ iAlive state))
+            <> Data.Text.intercalate "," (Prelude.map (display . Register RInt . SavedReg) (toAscList iAlive))
             <> "], ["
-            <> Data.Text.intercalate "," (Prelude.map (\i -> display $ Register RFloat (SavedReg i)) (toAscList $ fAlive state))
+            <> Data.Text.intercalate "," (Prelude.map (display . Register RFloat . SavedReg) (toAscList fAlive))
             <> "]"
 
 instance Display LivenessLoc where
-    display loc = display $ livenessState loc
+    display loc = display $ livenessProp loc
 
 instance (Display stateTy) => Display (IntermediateCodeBlock stateTy Int) where
     display (IntermediateCodeBlock label _ inst) =

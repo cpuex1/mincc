@@ -2,10 +2,10 @@
 
 module BackEnd.Liveness (
     liveness,
+    Liveness (..),
     RegGraph (..),
-    LivenessLoc (LivenessLoc, livenessLoc, livenessState),
-    LivenessState (LivenessState, iAlive, fAlive),
-    LivenessGraph (LivenessGraph),
+    LivenessLoc (..),
+    LivenessGraph,
     toGraph,
 ) where
 
@@ -18,68 +18,70 @@ import IR (
     RawInstRetTy (..),
     RegID,
  )
-import Registers (RegOrImm (Reg), RegType (RFloat, RInt), Register (Register), RegisterKind (SavedReg))
+import Registers (
+    RegOrImm (Reg),
+    RegType (RFloat, RInt),
+    RegVariant (RegVariant),
+    Register (Register),
+    RegisterKind (SavedReg),
+    selectVariant,
+    updateVariant,
+ )
 import Syntax (Loc)
 
-data LivenessState = LivenessState
-    { iAlive :: Set RegID
-    , fAlive :: Set RegID
+newtype Liveness a = Liveness
+    { alive :: Set RegID
     }
     deriving (Show, Eq)
+
+instance Semigroup (Liveness a) where
+    Liveness a <> Liveness b = Liveness $ a `union` b
+
+instance Monoid (Liveness a) where
+    mempty = Liveness empty
 
 data LivenessLoc = LivenessLoc
     { livenessLoc :: Loc
-    , livenessState :: LivenessState
+    , livenessProp :: RegVariant Liveness
     }
     deriving (Show, Eq)
 
-type LivenessStateM = State LivenessState
+type LivenessStateM = State (RegVariant Liveness)
 
-data RegGraph = RegGraph
+data RegGraph a = RegGraph
     { vertices :: Set RegID
     , edges :: Map RegID (Set RegID)
     }
     deriving (Show, Eq)
 
-data LivenessGraph = LivenessGraph
-    { iGraph :: RegGraph
-    , fGraph :: RegGraph
-    }
-    deriving (Show, Eq)
+type LivenessGraph = RegVariant RegGraph
 
-toGraph :: [LivenessState] -> LivenessGraph
-toGraph states = LivenessGraph (RegGraph iV iE) (RegGraph fV fE)
+toGraph :: [RegVariant Liveness] -> RegVariant RegGraph
+toGraph l = RegVariant iGraph fGraph
   where
-    iState = map iAlive states
-    fState = map fAlive states
+    iGraph = toGraphEach $ map (selectVariant RInt) l
+    fGraph = toGraphEach $ map (selectVariant RFloat) l
 
-    iV = unions iState
-    fV = unions fState
+    toGraphEach :: [Liveness a] -> RegGraph a
+    toGraphEach states = RegGraph iV iE
+      where
+        iState = map alive states
+        iV = unions iState
+        iE = fromList $ map (\v -> (v, unions (filter (elem v) iState))) (toAscList iV)
 
-    iE = fromList $ map (\v -> (v, unions (filter (elem v) iState))) (toAscList iV)
-    fE = fromList $ map (\v -> (v, unions (filter (elem v) fState))) (toAscList fV)
+markUsed :: Register RegID a -> LivenessStateM ()
+markUsed (Register rTy (SavedReg regId)) = do
+    modify $ updateVariant rTy (Liveness . insert regId . alive)
+markUsed _ = pure ()
 
-markUsed :: RegType a -> Register RegID a -> LivenessStateM ()
-markUsed RInt (Register RInt (SavedReg regId)) = do
-    env <- get
-    put env{iAlive = insert regId $ iAlive env}
-markUsed RFloat (Register RFloat (SavedReg regId)) = do
-    env <- get
-    put env{fAlive = insert regId $ fAlive env}
-markUsed _ _ = pure ()
+markUsedImm :: RegOrImm RegID a -> LivenessStateM ()
+markUsedImm (Reg reg) = markUsed reg
+markUsedImm _ = pure ()
 
-markUsedImm :: RegType a -> RegOrImm RegID a -> LivenessStateM ()
-markUsedImm rTy (Reg reg) = markUsed rTy reg
-markUsedImm _ _ = pure ()
-
-remove :: RegType a -> Register RegID a -> LivenessStateM ()
-remove RInt (Register RInt (SavedReg regId)) = do
-    modify $ \env ->
-        env{iAlive = delete regId $ iAlive env}
-remove RFloat (Register RFloat (SavedReg regId)) = do
-    modify $ \env ->
-        env{fAlive = delete regId $ fAlive env}
-remove _ _ = pure ()
+remove :: Register RegID a -> LivenessStateM ()
+remove (Register rTy (SavedReg regId)) = do
+    modify $ updateVariant rTy (Liveness . delete regId . alive)
+remove _ = pure ()
 
 getState :: Loc -> LivenessStateM LivenessLoc
 getState loc' =
@@ -87,91 +89,91 @@ getState loc' =
 
 -- | Calculates liveness information for each instruction.
 liveness :: [Inst Loc RegID AllowBranch] -> [Inst LivenessLoc RegID AllowBranch]
-liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessState empty empty
+liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ RegVariant (Liveness empty) (Liveness empty)
   where
     liveness' :: Inst Loc RegID AllowBranch -> LivenessStateM (Inst LivenessLoc RegID AllowBranch)
     liveness' (ICompOp state op dest src1 src2) = do
         state' <- getState state
-        remove RInt dest
-        markUsed RInt src1
-        markUsedImm RInt src2
+        remove dest
+        markUsed src1
+        markUsedImm src2
         pure $ ICompOp state' op dest src1 src2
     liveness' (IFCompOp state op dest src1 src2) = do
         state' <- getState state
-        remove RInt dest
-        markUsed RFloat src1
-        markUsed RFloat src2
+        remove dest
+        markUsed src1
+        markUsed src2
         pure $ IFCompOp state' op dest src1 src2
     liveness' (IIntOp state op dest src1 src2) = do
         state' <- getState state
-        remove RInt dest
-        markUsed RInt src1
-        markUsedImm RInt src2
+        remove dest
+        markUsed src1
+        markUsedImm src2
         pure $ IIntOp state' op dest src1 src2
     liveness' (IFOp state op dest src1 src2) = do
         state' <- getState state
-        remove RFloat dest
-        markUsed RFloat src1
-        markUsed RFloat src2
+        remove dest
+        markUsed src1
+        markUsed src2
         pure $ IFOp state' op dest src1 src2
     liveness' (IMov state dest src) = do
         state' <- getState state
-        remove RInt dest
-        markUsedImm RInt src
+        remove dest
+        markUsedImm src
         pure $ IMov state' dest src
     liveness' (IFMov state dest src) = do
         state' <- getState state
-        remove RFloat dest
-        markUsedImm RFloat src
+        remove dest
+        markUsedImm src
         pure $ IFMov state' dest src
     liveness' (IRichCall state label iArgs fArgs) = do
         state' <- getState state
-        mapM_ (markUsedImm RInt) iArgs
-        mapM_ (markUsed RFloat) fArgs
+        mapM_ markUsedImm iArgs
+        mapM_ markUsed fArgs
         pure $ IRichCall state' label iArgs fArgs
     liveness' (IClosureCall state cl iArgs fArgs) = do
         state' <- getState state
-        markUsed RInt cl
-        mapM_ (markUsedImm RInt) iArgs
-        mapM_ (markUsed RFloat) fArgs
+        markUsed cl
+        mapM_ markUsedImm iArgs
+        mapM_ markUsed fArgs
         pure $ IClosureCall state' cl iArgs fArgs
     liveness' (IMakeClosure state dest label iArgs fArgs) = do
         state' <- getState state
-        remove RInt dest
-        mapM_ (markUsedImm RInt) iArgs
-        mapM_ (markUsed RFloat) fArgs
+        remove dest
+        mapM_ markUsedImm iArgs
+        mapM_ markUsed fArgs
         pure $ IMakeClosure state' dest label iArgs fArgs
     liveness' (ILoad state dest src offset) = do
         state' <- getState state
-        remove RInt dest
-        markUsed RInt src
+        remove dest
+        markUsed src
         pure $ ILoad state' dest src offset
     liveness' (IStore state dest src offset) = do
         state' <- getState state
-        markUsed RInt dest
-        markUsed RInt src
+        markUsed dest
+        markUsed src
         pure $ IStore state' dest src offset
     liveness' (IFLoad state dest src offset) = do
         state' <- getState state
-        remove RFloat dest
-        markUsed RInt src
+        remove dest
+        markUsed src
         pure $ IFLoad state' dest src offset
     liveness' (IFStore state dest src offset) = do
         state' <- getState state
-        markUsed RFloat dest
-        markUsed RInt src
+        markUsed dest
+        markUsed src
         pure $ IFStore state' dest src offset
     liveness' (IRawInst state name retTy iArgs fArgs) = do
         state' <- getState state
         removeRet retTy
-        mapM_ (markUsedImm RInt) iArgs
-        mapM_ (markUsed RFloat) fArgs
+        mapM_ markUsedImm iArgs
+        mapM_ markUsed fArgs
         pure $ IRawInst state' name retTy iArgs fArgs
       where
         removeRet :: RawInstRetTy RegID -> LivenessStateM ()
         removeRet RIRUnit = pure ()
-        removeRet (RIRInt reg) = remove RInt reg
-        removeRet (RIRFloat reg) = remove RFloat reg
+        removeRet (RIRInt reg) = remove reg
+        removeRet (RIRFloat reg) = remove reg
     liveness' (IBranch state op left right thenInst elseInst) = do
         env <- get
         thenInst' <- mapM liveness' $ reverse thenInst
@@ -179,10 +181,10 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessSt
         put env
         elseInst' <- mapM liveness' $ reverse elseInst
         elseEnv <- get
-        put $ mergeLivenessState thenEnv elseEnv
+        put $ thenEnv <> elseEnv
         state' <- getState state
-        markUsed RInt left
-        markUsed RInt right
+        markUsed left
+        markUsed right
         pure $
             IBranch
                 state'
@@ -191,7 +193,3 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ LivenessSt
                 right
                 (reverse thenInst')
                 (reverse elseInst')
-      where
-        mergeLivenessState :: LivenessState -> LivenessState -> LivenessState
-        mergeLivenessState (LivenessState iAlive1 fAlive1) (LivenessState iAlive2 fAlive2) =
-            LivenessState (iAlive1 `union` iAlive2) (fAlive1 `union` fAlive2)

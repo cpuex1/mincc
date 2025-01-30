@@ -2,8 +2,7 @@
 
 module BackEnd.RegisterAlloc (assignRegister) where
 
-import BackEnd.BackendEnv (BackendStateT)
-import BackEnd.Liveness (LivenessGraph (LivenessGraph), LivenessLoc (livenessLoc, livenessState), RegGraph (RegGraph, edges), toGraph)
+import BackEnd.Liveness (LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Map (Map, findWithDefault)
 import qualified Data.Map as M
@@ -11,97 +10,84 @@ import Data.Maybe (listToMaybe)
 import Data.Set (Set, notMember, size, toDescList)
 import qualified Data.Set as S
 import IR (
-    AllowBranch,
-    Inst,
     IntermediateCodeBlock (getICBInst),
     RegID,
     getAllIState,
     mapReg,
     substIState,
  )
-import Registers (RegType (RFloat, RInt), Register (Register), RegisterKind (SavedReg), savedReg, zeroReg)
+import Registers (
+    RegVariant',
+    Register (Register),
+    RegisterKind (SavedReg),
+    VariantItem (VariantItem),
+    mapVariant,
+    savedReg,
+    selectVariant,
+    zeroReg,
+ )
 import Syntax (Loc)
 
-newtype RegAllocEnv = RegAllocEnv
+newtype RegAllocEnv a = RegAllocEnv
     { regMap :: Map RegID RegID
     }
     deriving (Show, Eq)
 
-type RegAllocState = State RegAllocEnv
+type RegAllocState a = State (RegAllocEnv a)
 
-mapAll :: Set RegID -> RegAllocState (Set (Maybe RegID))
+mapAll :: Set RegID -> RegAllocState a (Set (Maybe RegID))
 mapAll registers = do
     regMap' <- gets regMap
     pure $ S.map (`M.lookup` regMap') registers
 
-assign :: RegID -> RegID -> RegAllocState ()
+assign :: RegID -> RegID -> RegAllocState a ()
 assign reg1 reg2 = do
     modify $ \env -> env{regMap = M.insert reg1 reg2 $ regMap env}
 
 getMin :: Set (Maybe RegID) -> RegID
 getMin l = until ((`notMember` l) . Just) (+ 1) 0
 
-sortByDegree :: RegGraph -> [RegID]
+sortByDegree :: RegGraph a -> [RegID]
 sortByDegree (RegGraph vertices edges') =
     map snd $ toDescList degreeSet
   where
     degreeMap = M.map size edges'
     degreeSet = S.map (\v -> (findWithDefault 0 v degreeMap, v)) vertices
 
-selectSpilt :: RegGraph -> Maybe RegID
-selectSpilt = listToMaybe . sortByDegree
+selectSpilt :: RegGraph a -> VariantItem (Maybe RegID) a
+selectSpilt = VariantItem . listToMaybe . sortByDegree
 
-registerAlloc :: LivenessGraph -> (Map RegID RegID, Map RegID RegID)
-registerAlloc (LivenessGraph iGraph fGraph) = (iGraph', fGraph')
+runRegisterAlloc :: RegGraph a -> RegAllocEnv a
+runRegisterAlloc graph = execState (registerAlloc graph) (RegAllocEnv M.empty)
   where
-    iGraph' = regMap $ execState (registerAlloc' iGraph) (RegAllocEnv M.empty)
-    fGraph' = regMap $ execState (registerAlloc' fGraph) (RegAllocEnv M.empty)
-
-    registerAlloc' :: RegGraph -> RegAllocState ()
-    registerAlloc' graph =
+    registerAlloc :: RegGraph a -> RegAllocState a ()
+    registerAlloc graph' =
         mapM_
             ( \reg -> do
-                let neighborhood = findWithDefault S.empty reg $ edges graph
+                let neighborhood = findWithDefault S.empty reg $ edges graph'
                 mapped <- mapAll neighborhood
                 let minReg = getMin mapped
                 assign reg minReg
             )
             sorted
       where
-        sorted = sortByDegree graph
+        sorted = sortByDegree graph'
 
-assignRegister :: (Monad m) => IntermediateCodeBlock LivenessLoc RegID -> BackendStateT m (Int, Int, Maybe RegID, Maybe RegID, IntermediateCodeBlock Loc RegID)
-assignRegister block = do
-    let (LivenessGraph iGraph fGraph) = retrieveGraph inst
-    let (iMap, fMap) = registerAlloc (LivenessGraph iGraph fGraph)
-    let usedI = (+ 1) $ foldl max (-1) $ M.elems iMap
-    let usedF = (+ 1) $ foldl max (-1) $ M.elems fMap
-
-    let iSpillTarget = selectSpilt iGraph
-    let fSpillTarget = selectSpilt fGraph
-
+assignRegister :: IntermediateCodeBlock LivenessLoc RegID -> (RegVariant' Int, RegVariant' (Maybe RegID), IntermediateCodeBlock Loc RegID)
+assignRegister block =
     -- Accept the register allocation.
-    let inst' =
-            map
-                ( mapReg
-                    ( \reg -> case reg of
-                        Register RInt (SavedReg regId) ->
-                            case M.lookup regId iMap of
-                                Just regId' -> savedReg RInt regId'
-                                Nothing -> zeroReg RInt
-                        Register RFloat (SavedReg regId) ->
-                            case M.lookup regId fMap of
-                                Just regId' -> savedReg RFloat regId'
-                                Nothing -> zeroReg RFloat
-                        _ -> reg
-                    )
-                )
-                inst
-
-    pure (usedI, usedF, iSpillTarget, fSpillTarget, block{getICBInst = map (substIState livenessLoc) inst'})
+    (used, spillTarget, block{getICBInst = map (substIState livenessLoc) mappedInst})
   where
-    retrieveGraph :: [Inst LivenessLoc RegID AllowBranch] -> LivenessGraph
-    retrieveGraph inst' = toGraph $ concatMap (map livenessState . getAllIState) inst'
+    enforceMapped :: Register RegID a -> Register RegID a
+    enforceMapped (Register rTy (SavedReg regId)) =
+        case M.lookup regId $ regMap $ selectVariant rTy mapped of
+            Just regId' -> savedReg rTy regId'
+            Nothing -> zeroReg rTy
+    enforceMapped reg = reg
 
-    inst :: [Inst LivenessLoc RegID AllowBranch]
     inst = getICBInst block
+    graph = toGraph $ concatMap (map livenessProp . getAllIState) inst
+    mapped = mapVariant runRegisterAlloc graph
+    used = mapVariant (VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap) mapped
+    spillTarget = mapVariant selectSpilt graph
+    mappedInst = map (mapReg enforceMapped) inst
