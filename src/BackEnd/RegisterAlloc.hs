@@ -28,6 +28,7 @@ import Registers (
  )
 import Syntax (Loc)
 
+-- | Holds register mapping.
 newtype RegAllocEnv a = RegAllocEnv
     { regMap :: Map RegID RegID
     }
@@ -35,18 +36,24 @@ newtype RegAllocEnv a = RegAllocEnv
 
 type RegAllocState a = State (RegAllocEnv a)
 
+-- | Maps all registers to their assigned registers.
 mapAll :: Set RegID -> RegAllocState a (Set (Maybe RegID))
 mapAll registers = do
     regMap' <- gets regMap
     pure $ S.map (`M.lookup` regMap') registers
 
+-- | Assigns a register to another register.
 assign :: RegID -> RegID -> RegAllocState a ()
 assign reg1 reg2 = do
     modify $ \env -> env{regMap = M.insert reg1 reg2 $ regMap env}
 
+{- | Gets the minimum register ID that is not used.
+Since register IDs has gaps, we can't just use the maximum register ID.
+-}
 getMin :: Set (Maybe RegID) -> RegID
 getMin l = until ((`notMember` l) . Just) (+ 1) 0
 
+-- | Sorts vertices with degree.
 sortByDegree :: RegGraph a -> [RegID]
 sortByDegree (RegGraph vertices edges') =
     map snd $ toDescList degreeSet
@@ -54,9 +61,11 @@ sortByDegree (RegGraph vertices edges') =
     degreeMap = M.map size edges'
     degreeSet = S.map (\v -> (findWithDefault 0 v degreeMap, v)) vertices
 
+-- | Selects a target to be spilt.
 selectSpilt :: RegGraph a -> VariantItem (Maybe RegID) a
 selectSpilt = VariantItem . listToMaybe . sortByDegree
 
+-- | Runs the register allocation algorithm.
 runRegisterAlloc :: RegGraph a -> RegAllocEnv a
 runRegisterAlloc graph = execState (registerAlloc graph) (RegAllocEnv M.empty)
   where
@@ -73,11 +82,13 @@ runRegisterAlloc graph = execState (registerAlloc graph) (RegAllocEnv M.empty)
       where
         sorted = sortByDegree graph'
 
+-- | Allocates registers.
 assignRegister :: IntermediateCodeBlock LivenessLoc RegID -> (RegVariant' Int, RegVariant' (Maybe RegID), IntermediateCodeBlock Loc RegID)
 assignRegister block =
     -- Accept the register allocation.
     (used, spillTarget, block{getICBInst = map (substIState livenessLoc) mappedInst})
   where
+    -- Enforces the register mapping.
     enforceMapped :: Register RegID a -> Register RegID a
     enforceMapped (Register rTy (SavedReg regId)) =
         case M.lookup regId $ regMap $ selectVariant rTy mapped of
