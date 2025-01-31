@@ -26,8 +26,8 @@ import Registers (
     argsReg,
     heapReg,
     retReg,
-    selectVariant,
     zeroReg,
+    (#!!),
  )
 import Syntax (
     BinaryOp (FloatOp, IntOp, RelationOp),
@@ -572,7 +572,7 @@ toInstructions function = do
         iBoundedInst <- extractBoundedVars RInt boundedArgs
         fBoundedInst <- extractBoundedVars RFloat boundedArgs
 
-        iArgsLength <- gets (argsLength . selectVariant RInt . regContext)
+        iArgsLength <- gets (argsLength . (#!! RInt) . regContext)
         freeInst <- extractFreeVars iArgsLength freeVars
 
         inst <- expandExprToInst (retReg RInt) (retReg RFloat) body

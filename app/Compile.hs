@@ -76,7 +76,14 @@ import MiddleEnd.Optim.Common (
  )
 import MiddleEnd.Validator (validate)
 import Path (changeExt)
-import Registers (RegType (RFloat, RInt), RegVariant (RegVariant), VariantItem (VariantItem), savedReg, selectVariant, updateVariant)
+import Registers (
+    RegType (RFloat, RInt),
+    VariantItem (VariantItem, unwrap),
+    savedReg,
+    updateVariant,
+    (#!!),
+    (#$),
+ )
 import Syntax (
     Function,
     KExpr,
@@ -250,8 +257,8 @@ livenessIO = mapM livenessIO'
 assignRegisterIO :: [IntermediateCodeBlock LivenessLoc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
 assignRegisterIO blocks = do
     -- Report used registers.
-    usedIRegLen' <- gets (generatedReg . selectVariant RInt . regContext)
-    usedFRegLen' <- gets (generatedReg . selectVariant RFloat . regContext)
+    usedIRegLen' <- gets (generatedReg . (#!! RInt) . regContext)
+    usedFRegLen' <- gets (generatedReg . (#!! RFloat) . regContext)
     liftB $ lift $ printLog Debug $ "Before: int: " <> show usedIRegLen' <> ", float: " <> show usedFRegLen'
 
     blocks' <-
@@ -267,9 +274,8 @@ assignRegisterIO blocks = do
             blocks
 
     -- Report used registers.
-    usedIRegLen'' <- gets (generatedReg . selectVariant RInt . regContext)
-    usedFRegLen'' <- gets (generatedReg . selectVariant RFloat . regContext)
-    liftB $ lift $ printLog Debug $ "After: int: " <> show usedIRegLen'' <> ", float: " <> show usedFRegLen''
+    usedRegLen' <- gets ((VariantItem . generatedReg #$) . regContext)
+    liftB $ lift $ printLog Debug $ "After: int: " <> show (usedRegLen' #!! RInt) <> ", float: " <> show (usedRegLen' #!! RFloat)
 
     -- Perform register saving.
     let blocks'' = map saveRegisters blocks'
@@ -279,17 +285,21 @@ assignRegisterIO blocks = do
   where
     assignRegisterLoop :: IntermediateCodeBlock LivenessLoc RegID -> BackendIdentStateIO (IntermediateCodeBlock Loc RegID)
     assignRegisterLoop block = do
-        let (RegVariant (VariantItem usedI) (VariantItem usedF), RegVariant (VariantItem iSpillTarget) (VariantItem fSpillTarget), block') = assignRegister block
+        let ~(used, spillTarget, block') = assignRegister block
+        let usedI = unwrap $ used #!! RInt
+        let usedF = unwrap $ used #!! RFloat
+        let iSpillTarget = unwrap $ spillTarget #!! RInt
+        let fSpillTarget = unwrap $ spillTarget #!! RFloat
 
         liftB $
             lift $
                 printTextLog Debug $
                     "Required registers: "
-                        <> pack (show usedI)
+                        <> pack (show (used #!! RInt))
                         <> ", "
-                        <> pack (show usedF)
+                        <> pack (show (used #!! RFloat))
 
-        iLimit <- asks (regLimit . selectVariant RInt . regConfig)
+        iLimit <- asks (regLimit . (#!! RInt) . regConfig)
         if iLimit < usedI
             then do
                 case iSpillTarget of
@@ -303,7 +313,7 @@ assignRegisterIO blocks = do
                     Nothing -> do
                         throwError $ OtherError "Failed to find a spill target for int registers."
             else do
-                fLimit <- asks (regLimit . selectVariant RFloat . regConfig)
+                fLimit <- asks (regLimit . (#!! RFloat) . regConfig)
                 if fLimit < usedF
                     then do
                         case fSpillTarget of

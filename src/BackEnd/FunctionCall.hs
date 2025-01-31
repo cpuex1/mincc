@@ -24,7 +24,13 @@ import IR (
     RegID,
     substIState,
  )
-import Registers (RegType (RFloat, RInt), RegVariant, savedReg, selectVariant, stackReg)
+import Registers (
+    RegType (RFloat, RInt),
+    RegVariant,
+    savedReg,
+    stackReg,
+    (#!!),
+ )
 import Syntax (Loc, dummyLoc)
 
 type FunctionCallState = State Int
@@ -63,7 +69,7 @@ genPrologueAndEpilogue rTy l = do
         (empty, empty)
         toBeSaved
   where
-    toBeSaved = alive $ selectVariant rTy l
+    toBeSaved = alive $ l #!! rTy
 
 -- | Saves registers on the stack before a function call and restores them after the call.
 saveRegBeyondCall :: RegType a -> Inst LivenessLoc RegID AllowBranch -> FunctionCallState (Seq (Inst LivenessLoc RegID AllowBranch))

@@ -24,8 +24,8 @@ import Registers (
     RegVariant (RegVariant),
     Register (Register),
     RegisterKind (SavedReg),
-    selectVariant,
     updateVariant,
+    (#!!),
  )
 import Syntax (Loc)
 
@@ -59,8 +59,8 @@ type LivenessGraph = RegVariant RegGraph
 toGraph :: [RegVariant Liveness] -> RegVariant RegGraph
 toGraph l = RegVariant iGraph fGraph
   where
-    iGraph = toGraphEach $ map (selectVariant RInt) l
-    fGraph = toGraphEach $ map (selectVariant RFloat) l
+    iGraph = toGraphEach $ map (#!! RInt) l
+    fGraph = toGraphEach $ map (#!! RFloat) l
 
     toGraphEach :: [Liveness a] -> RegGraph a
     toGraphEach states = RegGraph iV iE

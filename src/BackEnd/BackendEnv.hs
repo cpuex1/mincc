@@ -38,8 +38,8 @@ import Registers (
     RegVariant (..),
     Register (Register),
     RegisterKind (SavedReg),
-    selectVariant,
     updateVariant,
+    (#!!),
  )
 import Syntax (Ident (ExternalIdent))
 import Prelude hiding (lookup)
@@ -121,7 +121,7 @@ genTempReg rTy = do
                     )
                     $ regContext ctx'
             }
-    pure $ Register rTy $ SavedReg $ generatedReg $ selectVariant rTy ctx
+    pure $ Register rTy $ SavedReg $ generatedReg $ ctx #!! rTy
 
 genReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
 genReg rTy ident = do
@@ -142,7 +142,7 @@ genReg rTy ident = do
 
 findReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
 findReg rTy ident = do
-    regID <- gets ((lookup ident . registerMap) . selectVariant rTy . regContext)
+    regID <- gets ((lookup ident . registerMap) . (#!! rTy) . regContext)
     case regID of
         Just actual -> pure actual
         Nothing -> do

@@ -21,10 +21,10 @@ import Registers (
     Register (Register),
     RegisterKind (SavedReg),
     VariantItem (VariantItem),
-    mapVariant,
     savedReg,
-    selectVariant,
     zeroReg,
+    (#!!),
+    (#$),
  )
 import Syntax (Loc)
 
@@ -91,14 +91,14 @@ assignRegister block =
     -- Enforces the register mapping.
     enforceMapped :: Register RegID a -> Register RegID a
     enforceMapped (Register rTy (SavedReg regId)) =
-        case M.lookup regId $ regMap $ selectVariant rTy mapped of
+        case M.lookup regId $ regMap $ mapped #!! rTy of
             Just regId' -> savedReg rTy regId'
             Nothing -> zeroReg rTy
     enforceMapped reg = reg
 
     inst = getICBInst block
     graph = toGraph $ concatMap (map livenessProp . getAllIState) inst
-    mapped = mapVariant runRegisterAlloc graph
-    used = mapVariant (VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap) mapped
-    spillTarget = mapVariant selectSpilt graph
+    mapped = runRegisterAlloc #$ graph
+    used = VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap #$ mapped
+    spillTarget = selectSpilt #$ graph
     mappedInst = map (mapReg enforceMapped) inst
