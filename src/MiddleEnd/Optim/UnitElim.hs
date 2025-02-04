@@ -24,7 +24,7 @@ elimUnitArgs (Let state (PRec f args) value body) = do
                 pure value
             else do
                 u <- lift $ genNewVar TUnit
-                let value' = foldl (\e arg -> subst arg u arg u e) value unitArgs
+                let value' = foldl (\e arg -> subst arg u e) value unitArgs
                 pure (Let (TypedState bodyTy dummyLoc) (PVar u) (Const (TypedState TUnit dummyLoc) LUnit) value')
     lift $ updateProp f (\prop -> prop{typeOf = TFun unitRemovedTypes valueTy})
 

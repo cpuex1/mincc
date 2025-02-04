@@ -184,8 +184,6 @@ genFunctions (Let state (PRec func args) expr body) = do
                             subst
                                 ident
                                 newIdent
-                                ident
-                                newIdent
                                 expr'
                         )
                         expr
@@ -201,8 +199,6 @@ genFunctions (Let state (PRec func args) expr body) = do
                             subst
                                 func
                                 newFunc
-                                func
-                                newFunc
                                 expr'
                     updateFunctionExpr func $
                         Let (getExprState expr) (PVar newFunc) (MakeClosure funcState func newFreeVars) replacedExpr'
@@ -213,8 +209,6 @@ genFunctions (Let state (PRec func args) expr body) = do
             newFunc <- lift $ genNewVar funcTy
             let replacedBody =
                     subst
-                        func
-                        newFunc
                         func
                         newFunc
                         body'

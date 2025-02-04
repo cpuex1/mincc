@@ -1,6 +1,8 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Display (display, Display) where
 
@@ -74,10 +76,10 @@ instance Display Loc where
 instance Display TypedState where
     display (TypedState ty _) = ": " <> display ty
 
-instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr state identTy operandTy closureTy branchTy) where
+instance (Display (StateTy kind), Display (IdentTy kind), DisplayI (OperandTy kind)) => DisplayI (Expr kind) where
     displayI expression indentDepth = withoutState expression indentDepth <> " (* " <> display (getExprState expression) <> " *)"
       where
-        withoutState :: (Display state, Display identTy, DisplayI operandTy) => Expr state identTy operandTy closureTy branchTy -> Int -> Text
+        withoutState :: (Display (StateTy kind), Display (IdentTy kind), DisplayI (OperandTy kind)) => Expr kind -> Int -> Text
         withoutState (Const _ lit) _ = display lit
         withoutState (Unary _ op expr) depth =
             "(" <> display op <> " " <> displayI expr depth <> ")"
@@ -168,25 +170,7 @@ instance (Display state, Display identTy, DisplayI operandTy) => DisplayI (Expr 
         withoutState (DirectApp _ func args) depth =
             "(" <> display func <> " " <> Data.Text.unwords (Prelude.map (`displayI` depth) args) <> ")"
 
-instance (Display state, Display identTy, DisplayI operandTy) => Display (Expr state identTy operandTy closureTy branchTy) where
-    display expr = displayI expr 0
-
-instance DisplayI ParsedExpr where
-    displayI (PGuard expr) = displayI expr
-
-instance Display ParsedExpr where
-    display expr = displayI expr 0
-
-instance DisplayI ResolvedExpr where
-    displayI (RGuard expr) = displayI expr
-
-instance Display ResolvedExpr where
-    display expr = displayI expr 0
-
-instance DisplayI TypedExpr where
-    displayI (TGuard expr) = displayI expr
-
-instance Display TypedExpr where
+instance (DisplayI (Expr kind)) => Display (Expr kind) where
     display expr = displayI expr 0
 
 instance DisplayI Function where

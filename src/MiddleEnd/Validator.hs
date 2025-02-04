@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -11,7 +12,6 @@ import Display (Display (display))
 import Error (CompilerError (AssertionError))
 import MiddleEnd.Analysis.Identifier (IdentEnvT, getTyOf)
 import Syntax (
-    AllowCompBranch,
     BinaryOp (FloatOp, IntOp, RelationOp),
     Cond (..),
     Expr (..),
@@ -97,7 +97,7 @@ validateType (If (TypedState ty loc) cond lhs rhs) = do
     lhsTy = getType $ getExprState lhs
     rhsTy = getType $ getExprState rhs
 
-    validateCond :: (Monad m) => Cond Ident AllowCompBranch -> Validator m ()
+    validateCond :: (Monad m) => Cond Ident True -> Validator m ()
     validateCond (CIdentity ident) = do
         identTy <- lift $ getTyOf ident
         checkTy loc TBool identTy "if3"

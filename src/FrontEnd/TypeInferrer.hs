@@ -1,5 +1,7 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module FrontEnd.TypeInferrer (
     genNewId,
@@ -22,11 +24,19 @@ import Syntax
 import Typing
 import Prelude hiding (lookup)
 
-newtype ITypedExpr = ITGuard {iTExp :: Expr (ITy, Loc) Ident ITypedExpr DisallowClosure ()}
-    deriving (Show, Eq)
+data ITypedExprKind
+
+instance ExprKind ITypedExprKind where
+    type StateTy ITypedExprKind = (ITy, Loc)
+    type IdentTy ITypedExprKind = Ident
+    type OperandTy ITypedExprKind = ITypedExpr
+    type ClosureTy ITypedExprKind = False
+    type BranchTy ITypedExprKind = False
+
+type ITypedExpr = Expr ITypedExprKind
 
 getTy :: ITypedExpr -> ITy
-getTy = fst . getExprState . iTExp
+getTy = fst . getExprState
 
 data TypeEnv = TypeEnv
     { assigned :: Int
@@ -65,8 +75,10 @@ registerIdent ident = do
             modify (\e -> e{variables = insert ident tId $ variables e})
 
 registerAll :: ResolvedExpr -> TypingM ()
-registerAll (RGuard expr) =
-    void $ visitExprM pure (\ident -> registerIdent ident >> pure ident) registerAll expr
+registerAll = void . registerAll'
+  where
+    registerAll' :: ResolvedExpr -> TypingM ResolvedExpr
+    registerAll' = visitExprM pure (\ident -> registerIdent ident >> pure ident) registerAll'
 
 getTyOfIdent :: Ident -> TypingM TypeId
 getTyOfIdent ident = do
@@ -125,9 +137,8 @@ applyEnv (TVar tId) = do
             pure TInt
 
 applyEnvE :: ITypedExpr -> TypingM TypedExpr
-applyEnvE (ITGuard expr) = do
-    expr' <- visitExprM fState pure applyEnvE expr
-    return $ TGuard expr'
+applyEnvE expr = do
+    visitExprM fState pure applyEnvE expr
   where
     fState :: (ITy, Loc) -> TypingM TypedState
     fState (ty, pos) = applyEnv ty >>= \ty' -> return (TypedState ty' pos)
@@ -199,111 +210,111 @@ inferE expr = do
     expr' <- inferIE expr
     case getTy expr' of
         TVar tId -> do
-            doUnify (getExprState $ rExp expr) TUnit (TVar tId)
+            doUnify (getExprState expr) TUnit (TVar tId)
             applyEnvE expr'
         TUnit ->
             applyEnvE expr'
         _ ->
             throwError $
-                TypeError (Just $ snd $ getExprState $ iTExp expr') $
+                TypeError (Just $ snd $ getExprState expr') $
                     "A main expression must return unit, not " <> display (getTy expr')
 
 inferIE :: ResolvedExpr -> TypingM ITypedExpr
-inferIE (RGuard (Const pos LUnit)) = pure $ ITGuard $ Const (TUnit, pos) LUnit
-inferIE (RGuard (Const pos (LBool b))) = pure $ ITGuard $ Const (TBool, pos) (LBool b)
-inferIE (RGuard (Const pos (LInt i))) = pure $ ITGuard $ Const (TInt, pos) (LInt i)
-inferIE (RGuard (Const pos (LFloat f))) = pure $ ITGuard $ Const (TFloat, pos) (LFloat f)
-inferIE (RGuard (Unary pos Not expr)) = do
+inferIE (Const pos LUnit) = pure $ Const (TUnit, pos) LUnit
+inferIE (Const pos (LBool b)) = pure $ Const (TBool, pos) (LBool b)
+inferIE (Const pos (LInt i)) = pure $ Const (TInt, pos) (LInt i)
+inferIE (Const pos (LFloat f)) = pure $ Const (TFloat, pos) (LFloat f)
+inferIE (Unary pos Not expr) = do
     expr' <- inferIE expr
-    doUnify (getExprState $ rExp expr) TBool $ getTy expr'
-    pure $ ITGuard $ Unary (TBool, pos) Not expr'
-inferIE (RGuard (Unary pos Neg (RGuard (Const _ (LFloat f))))) =
+    doUnify (getExprState expr) TBool $ getTy expr'
+    pure $ Unary (TBool, pos) Not expr'
+inferIE (Unary pos Neg (Const _ (LFloat f))) =
     -- Negative float literals
-    pure $ ITGuard $ Const (TFloat, pos) (LFloat (-f))
-inferIE (RGuard (Unary pos Neg expr)) = do
+    pure $ Const (TFloat, pos) (LFloat (-f))
+inferIE (Unary pos Neg expr) = do
     expr' <- inferIE expr
-    doUnify (getExprState $ rExp expr) TInt $ getTy expr'
-    pure $ ITGuard $ Unary (TInt, pos) Neg expr'
-inferIE (RGuard (Unary pos FNeg expr)) = do
+    doUnify (getExprState expr) TInt $ getTy expr'
+    pure $ Unary (TInt, pos) Neg expr'
+inferIE (Unary pos FNeg expr) = do
     expr' <- inferIE expr
-    doUnify (getExprState $ rExp expr) TFloat $ getTy expr'
-    pure $ ITGuard $ Unary (TFloat, pos) FNeg expr'
-inferIE (RGuard (Binary pos (RelationOp op) expr1 expr2)) = do
+    doUnify (getExprState expr) TFloat $ getTy expr'
+    pure $ Unary (TFloat, pos) FNeg expr'
+inferIE (Binary pos (RelationOp op) expr1 expr2) = do
     expr1' <- inferIE expr1
     expr2' <- inferIE expr2
-    doUnify (getExprState $ rExp expr2) (getTy expr1') (getTy expr2')
-    pure $ ITGuard $ Binary (TBool, pos) (RelationOp op) expr1' expr2'
-inferIE (RGuard (Binary pos (IntOp op) expr1 expr2)) = do
+    doUnify (getExprState expr2) (getTy expr1') (getTy expr2')
+    pure $ Binary (TBool, pos) (RelationOp op) expr1' expr2'
+inferIE (Binary pos (IntOp op) expr1 expr2) = do
     expr1' <- inferIE expr1
     expr2' <- inferIE expr2
-    doUnify (getExprState $ rExp expr1) TInt (getTy expr1')
-    doUnify (getExprState $ rExp expr2) TInt (getTy expr2')
-    pure $ ITGuard $ Binary (TInt, pos) (IntOp op) expr1' expr2'
-inferIE (RGuard (Binary pos (FloatOp op) expr1 expr2)) = do
+    doUnify (getExprState expr1) TInt (getTy expr1')
+    doUnify (getExprState expr2) TInt (getTy expr2')
+    pure $ Binary (TInt, pos) (IntOp op) expr1' expr2'
+inferIE (Binary pos (FloatOp op) expr1 expr2) = do
     expr1' <- inferIE expr1
     expr2' <- inferIE expr2
-    doUnify (getExprState $ rExp expr1) TFloat (getTy expr1')
-    doUnify (getExprState $ rExp expr2) TFloat (getTy expr2')
-    pure $ ITGuard $ Binary (TFloat, pos) (FloatOp op) expr1' expr2'
-inferIE (RGuard (If pos (CIdentity cond) thenExpr elseExpr)) = do
+    doUnify (getExprState expr1) TFloat (getTy expr1')
+    doUnify (getExprState expr2) TFloat (getTy expr2')
+    pure $ Binary (TFloat, pos) (FloatOp op) expr1' expr2'
+inferIE (If pos (CIdentity cond) thenExpr elseExpr) = do
     cond' <- inferIE cond
-    doUnify (getExprState $ rExp cond) TBool (getTy cond')
-    thenExpr' <- inferIE (RGuard thenExpr)
-    elseExpr' <- inferIE (RGuard elseExpr)
+    doUnify (getExprState cond) TBool (getTy cond')
+    thenExpr' <- inferIE thenExpr
+    elseExpr' <- inferIE elseExpr
     doUnify (getExprState elseExpr) (getTy thenExpr') (getTy elseExpr')
-    pure $ ITGuard $ If (getTy thenExpr', pos) (CIdentity cond') (iTExp thenExpr') (iTExp elseExpr')
-inferIE (RGuard (Let pos PUnit expr body)) = do
-    expr' <- inferIE (RGuard expr)
-    body' <- inferIE (RGuard body)
+    pure $ If (getTy thenExpr', pos) (CIdentity cond') thenExpr' elseExpr'
+inferIE (Let pos PUnit expr body) = do
+    expr' <- inferIE expr
+    body' <- inferIE body
     doUnify (getExprState expr) TUnit (getTy expr')
-    pure $ ITGuard $ Let (getTy body', pos) PUnit (iTExp expr') (iTExp body')
-inferIE (RGuard (Let pos (PVar v) expr body)) = do
-    expr' <- inferIE (RGuard expr)
+    pure $ Let (getTy body', pos) PUnit expr' body'
+inferIE (Let pos (PVar v) expr body) = do
+    expr' <- inferIE expr
     vId <- getTyOfIdent v
     doUnify (getExprState expr) (TVar vId) (getTy expr')
-    body' <- inferIE (RGuard body)
-    pure $ ITGuard $ Let (getTy body', pos) (PVar v) (iTExp expr') (iTExp body')
-inferIE (RGuard (Let pos (PRec func args) expr body)) = do
-    expr' <- inferIE (RGuard expr)
+    body' <- inferIE body
+    pure $ Let (getTy body', pos) (PVar v) expr' body'
+inferIE (Let pos (PRec func args) expr body) = do
+    expr' <- inferIE expr
     funcId <- getTyOfIdent func
     argIds <- mapM getTyOfIdent args
     doUnify (getExprState expr) (TVar funcId) (TFun (map TVar argIds) (getTy expr'))
-    body' <- inferIE (RGuard body)
-    pure $ ITGuard $ Let (getTy body', pos) (PRec func args) (iTExp expr') (iTExp body')
-inferIE (RGuard (Let pos (PTuple values) expr body)) = do
-    expr' <- inferIE (RGuard expr)
+    body' <- inferIE body
+    pure $ Let (getTy body', pos) (PRec func args) expr' body'
+inferIE (Let pos (PTuple values) expr body) = do
+    expr' <- inferIE expr
     valueIds <- mapM getTyOfIdent values
     doUnify (getExprState expr) (TTuple $ map TVar valueIds) (getTy expr')
-    body' <- inferIE (RGuard body)
-    pure $ ITGuard $ Let (getTy body', pos) (PTuple values) (iTExp expr') (iTExp body')
-inferIE (RGuard (Var pos v)) = do
+    body' <- inferIE body
+    pure $ Let (getTy body', pos) (PTuple values) expr' body'
+inferIE (Var pos v) = do
     vId <- getTyOfIdent v
-    pure $ ITGuard $ Var (TVar vId, pos) v
-inferIE (RGuard (App pos func args)) = do
+    pure $ Var (TVar vId, pos) v
+inferIE (App pos func args) = do
     func' <- inferIE func
     args' <- mapM inferIE args
     retId <- genNewId
-    doUnify (getExprState $ rExp func) (TFun (map getTy args') (TVar retId)) (getTy func')
-    pure $ ITGuard $ App (TVar retId, pos) func' args'
-inferIE (RGuard (Tuple pos values)) = do
+    doUnify (getExprState func) (TFun (map getTy args') (TVar retId)) (getTy func')
+    pure $ App (TVar retId, pos) func' args'
+inferIE (Tuple pos values) = do
     values' <- mapM inferIE values
-    pure $ ITGuard $ Tuple (TTuple $ map getTy values', pos) values'
-inferIE (RGuard (ArrayCreate pos size initVal)) = do
+    pure $ Tuple (TTuple $ map getTy values', pos) values'
+inferIE (ArrayCreate pos size initVal) = do
     size' <- inferIE size
-    doUnify (getExprState $ rExp size) TInt (getTy size')
+    doUnify (getExprState size) TInt (getTy size')
     initVal' <- inferIE initVal
-    pure $ ITGuard $ ArrayCreate (TArray $ getTy initVal', pos) size' initVal'
-inferIE (RGuard (Get pos array idx)) = do
+    pure $ ArrayCreate (TArray $ getTy initVal', pos) size' initVal'
+inferIE (Get pos array idx) = do
     array' <- inferIE array
     idx' <- inferIE idx
     retId <- genNewId
-    doUnify (getExprState $ rExp array) (TArray $ TVar retId) (getTy array')
-    doUnify (getExprState $ rExp idx) TInt (getTy idx')
-    pure $ ITGuard $ Get (TVar retId, pos) array' idx'
-inferIE (RGuard (Put pos array idx value)) = do
+    doUnify (getExprState array) (TArray $ TVar retId) (getTy array')
+    doUnify (getExprState idx) TInt (getTy idx')
+    pure $ Get (TVar retId, pos) array' idx'
+inferIE (Put pos array idx value) = do
     array' <- inferIE array
     idx' <- inferIE idx
     value' <- inferIE value
-    doUnify (getExprState $ rExp array) (TArray $ getTy value') (getTy array')
-    doUnify (getExprState $ rExp idx) TInt (getTy idx')
-    pure $ ITGuard $ Put (TUnit, pos) array' idx' value'
+    doUnify (getExprState array) (TArray $ getTy value') (getTy array')
+    doUnify (getExprState idx) TInt (getTy idx')
+    pure $ Put (TUnit, pos) array' idx' value'

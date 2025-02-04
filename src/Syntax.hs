@@ -1,6 +1,11 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Syntax (
     Literal (LUnit, LBool, LInt, LFloat),
@@ -13,21 +18,19 @@ module Syntax (
     Ident (Entry, UserDefined, CompilerGenerated, ExternalIdent),
     Pattern (PUnit, PVar, PRec, PTuple),
     Cond (..),
-    ParsedExpr (PGuard, pExp),
-    ResolvedExpr (RGuard, rExp),
     RawIdent (RawIdent),
     TypedState (TypedState, getType, getLoc),
     fromSourcePos,
     identLoc,
     Loc (Loc, locFileName, locLine, locColumn),
     dummyLoc,
+    ParsedExpr,
+    TypedExpr,
+    ResolvedExpr,
     KExpr,
-    TypedExpr (TGuard, tExp),
     ClosureExpr,
     Function (Function, funcName, isDirect, freeVars, boundedArgs, funcBody),
-    AllowClosure (AllowClosure),
-    DisallowClosure (DisallowClosure),
-    AllowCompBranch (AllowCompBranch),
+    ExprKind (..),
     Expr (..),
     getExprState,
     subst,
@@ -35,6 +38,7 @@ module Syntax (
 ) where
 
 import Control.Monad.Identity (Identity (runIdentity))
+import Data.Kind (Type)
 import Data.Text (Text, pack)
 import Text.Megaparsec.Pos (SourcePos, sourceColumn, sourceLine, sourceName, unPos)
 import Typing (Ty, TypeKind (TBool, TFloat, TInt, TUnit))
@@ -96,36 +100,21 @@ data Pattern identTy
     | PTuple [identTy]
     deriving (Show, Eq, Ord)
 
-data AllowCompBranch = AllowCompBranch
-    deriving (Show, Eq, Ord)
-
 -- | A condition of an if-expression.
-data Cond operandTy allowCompTy where
+data Cond operandTy (allowCompTy :: Bool) where
     CIdentity :: operandTy -> Cond operandTy allowCompTy
-    CComp :: RelationBinOp -> operandTy -> operandTy -> Cond operandTy AllowCompBranch
+    CComp :: RelationBinOp -> operandTy -> operandTy -> Cond operandTy True
 
 deriving instance
-    (Show operandTy, Show allowCompTy) =>
-    Show (Cond operandTy allowCompTy)
+    (Show operandTy) =>
+    Show (Cond operandTy a)
 deriving instance
-    (Eq operandTy, Eq allowCompTy) =>
-    Eq (Cond operandTy allowCompTy)
+    (Eq operandTy) =>
+    Eq (Cond operandTy a)
 
 deriving instance
-    (Ord operandTy, Ord allowCompTy) =>
-    Ord (Cond operandTy allowCompTy)
-
-{- | The type of an expression after parsing.
-PGuard is used for avoiding invalid recursive type definition.
--}
-newtype ParsedExpr = PGuard {pExp :: Expr Loc RawIdent ParsedExpr DisallowClosure ()}
-    deriving (Show, Eq)
-
-{- | The type of an expression after name resolution.
-RGuard is used for avoiding invalid recursive type definition.
--}
-newtype ResolvedExpr = RGuard {rExp :: Expr Loc Ident ResolvedExpr DisallowClosure ()}
-    deriving (Show, Eq)
+    (Ord operandTy) =>
+    Ord (Cond operandTy a)
 
 data Loc = Loc {locFileName :: Text, locLine :: Int, locColumn :: Int}
     deriving (Show, Eq, Ord)
@@ -139,16 +128,6 @@ dummyLoc = Loc "__dummy" 0 0
 data TypedState = TypedState {getType :: Ty, getLoc :: Loc}
     deriving (Show, Eq, Ord)
 
--- | The type of an expression after type inference.
-newtype TypedExpr = TGuard {tExp :: Expr TypedState Ident TypedExpr DisallowClosure ()}
-    deriving (Show, Eq)
-
--- | The type of an expression after K-normalization.
-type KExpr = Expr TypedState Ident Ident DisallowClosure AllowCompBranch
-
--- | The type of an expression after introducing closures.
-type ClosureExpr = Expr TypedState Ident Ident AllowClosure AllowCompBranch
-
 data Function = Function
     { funcState :: TypedState
     , isDirect :: Bool
@@ -159,96 +138,161 @@ data Function = Function
     }
     deriving (Show, Eq)
 
-data AllowClosure = AllowClosure
-    deriving (Show, Eq, Ord)
+-- | The type of an expression.
+class ExprKind ty where
+    type StateTy ty :: Type
+    type IdentTy ty :: Type
+    type OperandTy ty :: Type
+    type ClosureTy ty :: Bool
+    type BranchTy ty :: Bool
 
-data DisallowClosure = DisallowClosure
-    deriving (Show, Eq, Ord)
+data ParsedExprKind
 
-data Expr state identTy operandTy closureTy branchTy where
+instance ExprKind ParsedExprKind where
+    type StateTy ParsedExprKind = Loc
+    type IdentTy ParsedExprKind = RawIdent
+    type OperandTy ParsedExprKind = ParsedExpr
+    type ClosureTy ParsedExprKind = False
+    type BranchTy ParsedExprKind = False
+
+{- | The type of an expression after parsing.
+PGuard is used for avoiding invalid recursive type definition.
+-}
+type ParsedExpr = Expr ParsedExprKind
+
+data ResolvedExprKind
+
+instance ExprKind ResolvedExprKind where
+    type StateTy ResolvedExprKind = Loc
+    type IdentTy ResolvedExprKind = Ident
+    type OperandTy ResolvedExprKind = ResolvedExpr
+    type ClosureTy ResolvedExprKind = False
+    type BranchTy ResolvedExprKind = False
+
+{- | The type of an expression after name resolution.
+RGuard is used for avoiding invalid recursive type definition.
+-}
+type ResolvedExpr = Expr ResolvedExprKind
+
+data TypedExprKind
+
+instance ExprKind TypedExprKind where
+    type StateTy TypedExprKind = TypedState
+    type IdentTy TypedExprKind = Ident
+    type OperandTy TypedExprKind = TypedExpr
+    type ClosureTy TypedExprKind = False
+    type BranchTy TypedExprKind = False
+
+-- | The type of an expression after type inference.
+type TypedExpr = Expr TypedExprKind
+
+data KExprKind
+
+instance ExprKind KExprKind where
+    type StateTy KExprKind = TypedState
+    type IdentTy KExprKind = Ident
+    type OperandTy KExprKind = Ident
+    type ClosureTy KExprKind = False
+    type BranchTy KExprKind = True
+
+-- | The type of an expression after K-normalization.
+type KExpr = Expr KExprKind
+
+data ClosureExprKind
+
+instance ExprKind ClosureExprKind where
+    type StateTy ClosureExprKind = TypedState
+    type IdentTy ClosureExprKind = Ident
+    type OperandTy ClosureExprKind = Ident
+    type ClosureTy ClosureExprKind = True
+    type BranchTy ClosureExprKind = True
+
+-- | The type of an expression after introducing closures.
+type ClosureExpr = Expr ClosureExprKind
+
+-- | An expression.
+data Expr kind where
     Const ::
-        state ->
+        StateTy kind ->
         Literal ->
-        Expr state a b closureTy branchTy
+        Expr kind
     Unary ::
-        state ->
+        StateTy kind ->
         UnaryOp ->
-        operandTy ->
-        Expr state a operandTy closureTy branchTy
+        OperandTy kind ->
+        Expr kind
     Binary ::
-        state ->
+        StateTy kind ->
         BinaryOp ->
-        operandTy ->
-        operandTy ->
-        Expr state a operandTy closureTy branchTy
+        OperandTy kind ->
+        OperandTy kind ->
+        Expr kind
     If ::
-        state ->
-        Cond operandTy branchTy ->
-        Expr state identTy operandTy closureTy branchTy ->
-        Expr state identTy operandTy closureTy branchTy ->
-        Expr state identTy operandTy closureTy branchTy
+        StateTy kind ->
+        Cond (OperandTy kind) (BranchTy kind) ->
+        Expr kind ->
+        Expr kind ->
+        Expr kind
     Let ::
-        state ->
-        Pattern identTy ->
-        Expr state identTy operandTy closureTy branchTy ->
-        Expr state identTy operandTy closureTy branchTy ->
-        Expr state identTy operandTy closureTy branchTy
+        StateTy kind ->
+        Pattern (IdentTy kind) ->
+        Expr kind ->
+        Expr kind ->
+        Expr kind
     Var ::
-        state ->
-        identTy ->
-        Expr state identTy b closureTy branchTy
+        StateTy kind ->
+        IdentTy kind ->
+        Expr kind
     App ::
-        state ->
-        operandTy ->
-        [operandTy] ->
-        Expr state identTy operandTy DisallowClosure branchTy
+        (ClosureTy kind ~ False) =>
+        StateTy kind ->
+        OperandTy kind ->
+        [OperandTy kind] ->
+        Expr kind
     Tuple ::
-        state ->
-        [operandTy] ->
-        Expr state a operandTy closureTy branchTy
+        StateTy kind ->
+        [OperandTy kind] ->
+        Expr kind
     ArrayCreate ::
-        state ->
-        operandTy ->
-        operandTy ->
-        Expr state identTy operandTy closureTy branchTy
+        StateTy kind ->
+        OperandTy kind ->
+        OperandTy kind ->
+        Expr kind
     Get ::
-        state ->
-        operandTy ->
-        operandTy ->
-        Expr state a operandTy closureTy branchTy
+        StateTy kind ->
+        OperandTy kind ->
+        OperandTy kind ->
+        Expr kind
     Put ::
-        state ->
-        operandTy ->
-        operandTy ->
-        operandTy ->
-        Expr state identTy operandTy closureTy branchTy
+        StateTy kind ->
+        OperandTy kind ->
+        OperandTy kind ->
+        OperandTy kind ->
+        Expr kind
     MakeClosure ::
-        state ->
-        identTy ->
-        [operandTy] ->
-        Expr state identTy operandTy AllowClosure branchTy
+        (ClosureTy kind ~ True) =>
+        StateTy kind ->
+        IdentTy kind ->
+        [OperandTy kind] ->
+        Expr kind
     ClosureApp ::
-        state ->
-        identTy ->
-        [operandTy] ->
-        Expr state identTy operandTy AllowClosure branchTy
+        (ClosureTy kind ~ True) =>
+        StateTy kind ->
+        IdentTy kind ->
+        [OperandTy kind] ->
+        Expr kind
     DirectApp ::
-        state ->
-        identTy ->
-        [operandTy] ->
-        Expr state identTy operandTy AllowClosure branchTy
+        (ClosureTy kind ~ True) =>
+        StateTy kind ->
+        IdentTy kind ->
+        [OperandTy kind] ->
+        Expr kind
 
-deriving instance
-    (Show state, Show identTy, Show operandTy, Show closureTy, Show branchTy) =>
-    Show (Expr state identTy operandTy closureTy branchTy)
-deriving instance
-    (Eq state, Eq identTy, Eq operandTy, Eq closureTy, Eq branchTy) =>
-    Eq (Expr state identTy operandTy closureTy branchTy)
-deriving instance
-    (Ord state, Ord identTy, Ord operandTy, Ord closureTy, Ord branchTy) =>
-    Ord (Expr state identTy operandTy closureTy branchTy)
+deriving instance (Show (StateTy kind), Show (IdentTy kind), Show (OperandTy kind)) => Show (Expr kind)
+deriving instance (Eq (StateTy kind), Eq (IdentTy kind), Eq (OperandTy kind)) => Eq (Expr kind)
+deriving instance (Ord (StateTy kind), Ord (IdentTy kind), Ord (OperandTy kind)) => Ord (Expr kind)
 
-getExprState :: Expr state identTy operandTy closureTy branchTy -> state
+getExprState :: Expr kind -> StateTy kind
 getExprState (Const state _) = state
 getExprState (Unary state _ _) = state
 getExprState (Binary state _ _ _) = state
@@ -266,28 +310,26 @@ getExprState (DirectApp state _ _) = state
 
 -- | Substitute identifiers and operands. The identifiers should be unique.
 subst ::
-    (Eq identTy, Eq operandTy) =>
-    identTy ->
-    identTy ->
-    operandTy ->
-    operandTy ->
-    Expr state identTy operandTy closureTy branchTy ->
-    Expr state identTy operandTy closureTy branchTy
-subst iBefore iAfter oBefore oAfter expr =
+    (IdentTy kind ~ OperandTy kind, Eq (IdentTy kind)) =>
+    IdentTy kind ->
+    IdentTy kind ->
+    Expr kind ->
+    Expr kind
+subst before after expr =
     runIdentity $
         visitExprM
             pure
-            (\ident -> pure $ if ident == iBefore then iAfter else ident)
-            (\operand -> pure $ if operand == oBefore then oAfter else operand)
+            (\ident -> pure $ if ident == before then after else ident)
+            (\operand -> pure $ if operand == before then after else operand)
             expr
 
 visitExprM ::
-    (Monad m) =>
-    (state -> m state') ->
-    (identTy -> m identTy') ->
-    (operandTy -> m operandTy') ->
-    Expr state identTy operandTy closureTy branchTy ->
-    m (Expr state' identTy' operandTy' closureTy branchTy)
+    (Monad m, ClosureTy a ~ ClosureTy b, BranchTy a ~ BranchTy b) =>
+    (StateTy a -> m (StateTy b)) ->
+    (IdentTy a -> m (IdentTy b)) ->
+    (OperandTy a -> m (OperandTy b)) ->
+    Expr a ->
+    m (Expr b)
 visitExprM fState _ _ (Const state lit) = do
     state' <- fState state
     pure $ Const state' lit

@@ -38,7 +38,7 @@ withFreshVars :: (Monad m) => KExpr -> OptimStateT m KExpr
 withFreshVars (Let state (PVar ident) expr body) = do
     fresh <- genFresh ident
     expr' <- withFreshVars expr
-    body' <- withFreshVars $ subst ident fresh ident fresh body
+    body' <- withFreshVars $ subst ident fresh body
     pure $ Let state (PVar fresh) expr' body'
 withFreshVars (Let state (PRec func args) expr body) = do
     freshFunc <- genFresh func
@@ -46,10 +46,10 @@ withFreshVars (Let state (PRec func args) expr body) = do
     expr' <-
         withFreshVars
             $ foldl
-                (\e (from, to) -> subst from to from to e)
+                (\e (from, to) -> subst from to e)
                 expr
             $ zip (func : args) (freshFunc : freshArgs)
-    body' <- withFreshVars $ subst func freshFunc func freshFunc body
+    body' <- withFreshVars $ subst func freshFunc body
     pure $ Let state (PRec freshFunc freshArgs) expr' body'
 withFreshVars (Let state (PTuple values) expr body) = do
     freshValues <- mapM genFresh values
@@ -57,7 +57,7 @@ withFreshVars (Let state (PTuple values) expr body) = do
     body' <-
         withFreshVars
             $ foldl
-                (\e (from, to) -> subst from to from to e)
+                (\e (from, to) -> subst from to e)
                 body
             $ zip values freshValues
     pure $ Let state (PTuple freshValues) expr' body'

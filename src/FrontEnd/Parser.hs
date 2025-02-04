@@ -189,12 +189,14 @@ parseSimpleExpr =
                                     (cSymbol '(')
                                     (cSymbol ')')
                                     (sepBy1 parseExpr (cSymbol ','))
-                            pure (PGuard (Tuple pos exprs))
+                            pure (Tuple pos exprs)
                         )
                     -- Const
-                    <|> (PGuard . Const pos <$> parseLiteral)
-                    -- Var
-                    <|> (PGuard . Var pos <$> parseIdent)
+                    <|> Const pos
+                    <$> parseLiteral
+                        -- Var
+                        <|> Var pos
+                    <$> parseIdent
         -- Remaining tokens can be components of Get.
         parseSimpleExpr' expr
     )
@@ -210,7 +212,7 @@ parseSimpleExpr =
                 pos <- getSourceLoc
                 cSymbol '.'
                 expr2 <- between (cSymbol '(') (cSymbol ')') parseExpr
-                parseSimpleExpr' (PGuard (Get pos expr1 expr2))
+                parseSimpleExpr' (Get pos expr1 expr2)
             )
                 -- ... or None
                 <|> return expr1
@@ -226,18 +228,18 @@ parseAppExpr = do
                 -- Can backtrack.
                 func <- parseSimpleExpr
                 args <- some parseSimpleExpr
-                pure $ PGuard (App pos func args)
+                pure $ App pos func args
             )
             <|> ( do
                     -- ArrayCreate
                     parseKeyword "Array.create" <|> parseKeyword "Array.make"
                     firstArg <- parseSimpleExpr
-                    PGuard . ArrayCreate pos firstArg <$> parseSimpleExpr
+                    ArrayCreate pos firstArg <$> parseSimpleExpr
                 )
             <|> ( do
                     -- Not
                     parseKeyword "not"
-                    PGuard . Unary pos Not <$> parseSimpleExpr
+                    Unary pos Not <$> parseSimpleExpr
                 )
             -- A simple expression
             <|> parseSimpleExpr
@@ -256,13 +258,13 @@ parseOperatorExpr = do
                     ( do
                         pos <- getSourceLoc
                         symbol "-."
-                        pure $ PGuard . Unary pos FNeg
+                        pure $ Unary pos FNeg
                     )
                 , Prefix
                     ( do
                         pos <- getSourceLoc
                         symbol "-"
-                        pure $ PGuard . Unary pos Neg
+                        pure $ Unary pos Neg
                     )
                 ]
             , -- FactorOp
@@ -270,8 +272,7 @@ parseOperatorExpr = do
                 [ InfixL
                     ( do
                         pos <- getSourceLoc
-                        op <- parseFactorOp
-                        pure (\left right -> PGuard (Binary pos op left right))
+                        Binary pos <$> parseFactorOp
                     )
                 ]
             , -- TermOp
@@ -279,8 +280,7 @@ parseOperatorExpr = do
                 [ InfixL
                     ( do
                         pos <- getSourceLoc
-                        op <- parseTermOp
-                        pure (\left right -> PGuard (Binary pos op left right))
+                        Binary pos <$> parseTermOp
                     )
                 ]
             , -- RelationBinOp
@@ -291,9 +291,9 @@ parseOperatorExpr = do
                         (flipped, op) <- parseRelationBinOp
                         if flipped
                             then
-                                pure (\left right -> PGuard (Binary pos op right left))
+                                pure (flip (Binary pos op))
                             else
-                                pure (\left right -> PGuard (Binary pos op left right))
+                                pure (Binary pos op)
                     )
                 ]
             ]
@@ -312,17 +312,17 @@ parseThenExpr =
                 parseKeyword "then"
                 then' <- parseExpr'
                 parseKeyword "else"
-                PGuard . If pos (CIdentity cond) (pExp then') . pExp <$> parseExpr'
+                If pos (CIdentity cond) then' <$> parseExpr'
           )
             <|> ( do
                     pos <- getSourceLoc
                     expr <- parseOperatorExpr
                     case expr of
-                        PGuard (Get _ array idx) ->
+                        (Get _ array idx) ->
                             ( do
                                 -- Put
                                 symbol "<-"
-                                PGuard . Put pos array idx <$> parseExpr'
+                                Put pos array idx <$> parseExpr'
                             )
                                 <|>
                                 -- An expression related to operators
@@ -349,7 +349,7 @@ parseLetHeader = do
 parseLetExpr :: Parser ParsedExpr
 parseLetExpr = do
     (pos, pat, value) <- parseLetHeader
-    PGuard . Let pos pat (pExp value) . pExp <$> parseExpr
+    Let pos pat value <$> parseExpr
 
 -- | Parses a general expression without ";" at the top.
 parseExpr' :: Parser ParsedExpr
@@ -369,7 +369,7 @@ parseExpr =
                         ( do
                                 -- Then
                                 cSymbol ';'
-                                PGuard . Let pos PUnit (pExp expr) . pExp
+                                Let pos PUnit expr
                                     <$> parseExpr
                             )
                             <|>
@@ -391,5 +391,5 @@ parsePartialExpr body =
                 body' <-
                     parsePartialExpr body
                         <|> pure body
-                pure $ PGuard (Let pos pat (pExp value) (pExp body'))
+                pure $ Let pos pat value body'
             )

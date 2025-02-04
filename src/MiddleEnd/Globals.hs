@@ -72,7 +72,7 @@ extractGlobals (Let state1 (PVar v) (ArrayCreate state2 idx initVal) body) = do
             -- Replace it with an external identifier.
             let newV = ExternalIdent name
             lift $ registerProp newV $ IdentProp ty Nothing False
-            let body' = subst v newV v newV body
+            let body' = subst v newV body
             extractGlobals body'
         _ -> do
             -- The size of it cannot be determined at compile time.
@@ -87,7 +87,7 @@ extractGlobals (Let state1 (PVar v) (Tuple _ values) body) = do
     -- Substitute a global variable for a tuple inside bodies.
     let newV = ExternalIdent name
     lift $ registerProp newV $ IdentProp ty Nothing False
-    let body' = subst v newV v newV body
+    let body' = subst v newV body
 
     -- Replace it with builtin_mk_tuple.
     let makingTuple = App (TypedState TUnit dummyLoc) builtinMakeTuple (newV : values)

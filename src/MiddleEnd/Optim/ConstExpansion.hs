@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 
 module MiddleEnd.Optim.ConstExpansion (expandConstants) where
@@ -10,7 +11,6 @@ import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (IdentProp (constant), genNewVar, getTyOf, searchProp)
 import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (
-    AllowCompBranch,
     Cond (CComp, CIdentity),
     Expr (..),
     Ident,
@@ -49,7 +49,7 @@ requiredConstants (If _ cond t f) = do
     f' <- requiredConstants f
     pure $ cond' `union` t' `union` f'
   where
-    pickConstantInCond :: (Monad m) => Cond Ident AllowCompBranch -> OptimStateT m [(Ident, Literal)]
+    pickConstantInCond :: (Monad m) => Cond Ident True -> OptimStateT m [(Ident, Literal)]
     pickConstantInCond (CIdentity cond') = pickConstant cond'
     pickConstantInCond (CComp _ lhs rhs) = do
         lhs' <- pickConstant lhs
@@ -113,7 +113,7 @@ expandConstants' expr = do
             ty <- lift $ getTyOf ident
             v <- lift $ genNewVar ty
             let constExpr = Const (TypedState ty dummyLoc) lit
-            let substBody = subst ident v ident v body
+            let substBody = subst ident v body
             pure $ Let (TypedState exprTy dummyLoc) (PVar v) constExpr substBody
         )
         expr'

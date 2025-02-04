@@ -24,11 +24,11 @@ insertLetAll = insertLetAll' []
         insertLet e (\ident -> insertLetAll' (idents ++ [ident]) exprs genBody)
 
 kNormalize :: (Monad m) => TypedExpr -> IdentEnvT m KExpr
-kNormalize (TGuard (Const s lit)) = pure (Const s lit)
-kNormalize (TGuard (Unary s op expr)) = do
+kNormalize (Const s lit) = pure (Const s lit)
+kNormalize (Unary s op expr) = do
     expr' <- kNormalize expr
     insertLet expr' (pure . Unary s op)
-kNormalize (TGuard (Binary s op lhs rhs)) = do
+kNormalize (Binary s op lhs rhs) = do
     lhs' <- kNormalize lhs
     rhs' <- kNormalize rhs
     insertLet
@@ -36,22 +36,22 @@ kNormalize (TGuard (Binary s op lhs rhs)) = do
         ( \ident ->
             insertLet rhs' (pure . Binary s op ident)
         )
-kNormalize (TGuard (If s (CIdentity cond) thenE elseE)) = do
+kNormalize (If s (CIdentity cond) thenE elseE) = do
     cond' <- kNormalize cond
     insertLet
         cond'
         ( \ident -> do
-            thenE' <- kNormalize (TGuard thenE)
-            elseE' <- kNormalize (TGuard elseE)
+            thenE' <- kNormalize thenE
+            elseE' <- kNormalize elseE
             pure $ If s (CIdentity ident) thenE' elseE'
         )
-kNormalize (TGuard (Let s pat value body)) = do
-    value' <- kNormalize (TGuard value)
-    body' <- kNormalize (TGuard body)
+kNormalize (Let s pat value body) = do
+    value' <- kNormalize value
+    body' <- kNormalize body
     pure $ Let s pat value' body'
-kNormalize (TGuard (Var s v)) = do
+kNormalize (Var s v) = do
     pure $ Var s v
-kNormalize (TGuard (App s func args)) = do
+kNormalize (App s func args) = do
     func' <- kNormalize func
     args' <- mapM kNormalize args
     insertLet
@@ -59,10 +59,10 @@ kNormalize (TGuard (App s func args)) = do
         ( \fIdent ->
             insertLetAll args' (pure . App s fIdent)
         )
-kNormalize (TGuard (Tuple s values)) = do
+kNormalize (Tuple s values) = do
     values' <- mapM kNormalize values
     insertLetAll values' (pure . Tuple s)
-kNormalize (TGuard (ArrayCreate s size value)) = do
+kNormalize (ArrayCreate s size value) = do
     size' <- kNormalize size
     value' <- kNormalize value
     insertLet
@@ -70,7 +70,7 @@ kNormalize (TGuard (ArrayCreate s size value)) = do
         ( \sizeI ->
             insertLet value' (pure . ArrayCreate s sizeI)
         )
-kNormalize (TGuard (Get s array index)) = do
+kNormalize (Get s array index) = do
     array' <- kNormalize array
     index' <- kNormalize index
     insertLet
@@ -78,7 +78,7 @@ kNormalize (TGuard (Get s array index)) = do
         ( \arrayI ->
             insertLet index' (pure . Get s arrayI)
         )
-kNormalize (TGuard (Put s array index value)) = do
+kNormalize (Put s array index value) = do
     array' <- kNormalize array
     index' <- kNormalize index
     value' <- kNormalize value

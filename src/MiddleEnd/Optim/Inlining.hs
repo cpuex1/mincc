@@ -60,7 +60,7 @@ inlining (App state func args) = do
             -- Perform inlining.
             lift $
                 withFreshVars $
-                    foldl (\e (from, to) -> subst from to from to e) targetExpr' $
+                    foldl (\e (from, to) -> subst from to e) targetExpr' $
                         zip targetArgs' args
         Nothing ->
             pure $ App state func args
