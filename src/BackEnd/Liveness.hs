@@ -46,7 +46,7 @@ data LivenessLoc = LivenessLoc
     }
     deriving (Show, Eq)
 
-type LivenessStateM = State (RegVariant Liveness)
+type LivenessState = State (RegVariant Liveness)
 
 data RegGraph a = RegGraph
     { vertices :: Set RegID
@@ -69,21 +69,21 @@ toGraph l = RegVariant iGraph fGraph
         iV = unions iState
         iE = fromList $ map (\v -> (v, unions (filter (elem v) iState))) (toAscList iV)
 
-markUsed :: Register RegID a -> LivenessStateM ()
+markUsed :: Register RegID a -> LivenessState ()
 markUsed (Register rTy (SavedReg regId)) = do
     modify $ updateVariant rTy (Liveness . insert regId . alive)
 markUsed _ = pure ()
 
-markUsedImm :: RegOrImm RegID a -> LivenessStateM ()
+markUsedImm :: RegOrImm RegID a -> LivenessState ()
 markUsedImm (Reg reg) = markUsed reg
 markUsedImm _ = pure ()
 
-remove :: Register RegID a -> LivenessStateM ()
+remove :: Register RegID a -> LivenessState ()
 remove (Register rTy (SavedReg regId)) = do
     modify $ updateVariant rTy (Liveness . delete regId . alive)
 remove _ = pure ()
 
-getState :: Loc -> LivenessStateM LivenessLoc
+getState :: Loc -> LivenessState LivenessLoc
 getState loc' =
     gets $ LivenessLoc loc'
 
@@ -91,7 +91,7 @@ getState loc' =
 liveness :: [Inst Loc RegID AllowBranch] -> [Inst LivenessLoc RegID AllowBranch]
 liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ RegVariant (Liveness empty) (Liveness empty)
   where
-    liveness' :: Inst Loc RegID AllowBranch -> LivenessStateM (Inst LivenessLoc RegID AllowBranch)
+    liveness' :: Inst Loc RegID AllowBranch -> LivenessState (Inst LivenessLoc RegID AllowBranch)
     liveness' (ICompOp state op dest src1 src2) = do
         state' <- getState state
         remove dest
@@ -170,7 +170,7 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ RegVariant
         mapM_ markUsed fArgs
         pure $ IRawInst state' name retTy iArgs fArgs
       where
-        removeRet :: RawInstRetTy RegID -> LivenessStateM ()
+        removeRet :: RawInstRetTy RegID -> LivenessState ()
         removeRet RIRUnit = pure ()
         removeRet (RIRInt reg) = remove reg
         removeRet (RIRFloat reg) = remove reg
