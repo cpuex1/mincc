@@ -10,10 +10,10 @@ flowchart TD
     Optim@{shape: processes, label: "MiddleEnd.Optim"}
     Closure@{shape: rect, label: "MiddleEnd.Closure"}
     FrontEnd --> Desugar
-    Desugar --> Global
-    Global --> Analysis
+    Desugar --> Analysis
     Analysis --> Optim
-    Optim -->|Changed| Global
-    Optim -->|No change| Closure
+    Optim -->|Changed| Analysis
+    Optim -->|No change| Global
+    Global --> Closure
     Closure --> BackEnd
 ```
