@@ -18,6 +18,10 @@ definitelyPure (Unary{}) = True
 definitelyPure (Binary{}) = True
 definitelyPure (If _ _ then' else') = definitelyPure then' && definitelyPure else'
 definitelyPure (Let _ _ expr body) = definitelyPure expr && definitelyPure body
+definitelyPure (Loop _ _ _ body) = definitelyPure body
+definitelyPure (Continue{}) =
+    -- Continue is a control flow statement.
+    False
 definitelyPure (Var{}) = True
 definitelyPure (App{}) = False
 definitelyPure (Tuple{}) = True
@@ -40,6 +44,8 @@ exprSize (Tuple _ args) = 1 + length args
 exprSize (ArrayCreate{}) = 1
 exprSize (Get{}) = 1
 exprSize (Put{}) = 1
+exprSize (Loop _ _ _ body) = 1 + exprSize body
+exprSize (Continue{}) = 1
 
 -- | Checks if the identifier is used in the expression.
 isUsed :: Ident -> KExpr -> Bool

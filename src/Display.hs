@@ -21,6 +21,9 @@ class DisplayI a where
 class Display a where
     display :: a -> Text
 
+instance Display Int where
+    display = pack . show
+
 instance Display Literal where
     display LUnit = "()"
     display (LBool True) = "true"
@@ -163,6 +166,14 @@ instance (Display (StateTy kind), Display (IdentTy kind), DisplayI (OperandTy ki
         withoutState (Put _ array idx value) depth =
             "(" <> displayI array depth <> ".(" <> displayI idx depth <> ") <- " <> displayI value depth <> ")"
         withoutState (Var _ v) _ = display v
+        withoutState (Loop _ args values body) depth =
+            "(loop "
+                <> Data.Text.intercalate ", " (Prelude.zipWith (\a v -> display a <> " := " <> display v) args values)
+                <> "\n"
+                <> insertIndent (depth + 1)
+                <> displayI body (depth + 1)
+                <> ")"
+        withoutState (Continue _ values) _ = "continue " <> Data.Text.unwords (Prelude.map display values)
         withoutState (MakeClosure _ ident args) depth =
             "<" <> display ident <> ", " <> Data.Text.unwords (Prelude.map (`displayI` depth) args) <> ">"
         withoutState (ClosureApp _ closure args) depth =

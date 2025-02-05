@@ -143,8 +143,9 @@ class ExprKind ty where
     type StateTy ty :: Type
     type IdentTy ty :: Type
     type OperandTy ty :: Type
-    type ClosureTy ty :: Bool
-    type BranchTy ty :: Bool
+    type AllowBranch ty :: Bool
+    type AllowLoop ty :: Bool
+    type AllowClosure ty :: Bool
 
 data ParsedExprKind
 
@@ -152,8 +153,9 @@ instance ExprKind ParsedExprKind where
     type StateTy ParsedExprKind = Loc
     type IdentTy ParsedExprKind = RawIdent
     type OperandTy ParsedExprKind = ParsedExpr
-    type ClosureTy ParsedExprKind = False
-    type BranchTy ParsedExprKind = False
+    type AllowBranch ParsedExprKind = False
+    type AllowLoop ParsedExprKind = False
+    type AllowClosure ParsedExprKind = False
 
 {- | The type of an expression after parsing.
 PGuard is used for avoiding invalid recursive type definition.
@@ -166,8 +168,9 @@ instance ExprKind ResolvedExprKind where
     type StateTy ResolvedExprKind = Loc
     type IdentTy ResolvedExprKind = Ident
     type OperandTy ResolvedExprKind = ResolvedExpr
-    type ClosureTy ResolvedExprKind = False
-    type BranchTy ResolvedExprKind = False
+    type AllowBranch ResolvedExprKind = False
+    type AllowLoop ResolvedExprKind = False
+    type AllowClosure ResolvedExprKind = False
 
 {- | The type of an expression after name resolution.
 RGuard is used for avoiding invalid recursive type definition.
@@ -180,8 +183,9 @@ instance ExprKind TypedExprKind where
     type StateTy TypedExprKind = TypedState
     type IdentTy TypedExprKind = Ident
     type OperandTy TypedExprKind = TypedExpr
-    type ClosureTy TypedExprKind = False
-    type BranchTy TypedExprKind = False
+    type AllowBranch TypedExprKind = False
+    type AllowLoop TypedExprKind = False
+    type AllowClosure TypedExprKind = False
 
 -- | The type of an expression after type inference.
 type TypedExpr = Expr TypedExprKind
@@ -192,8 +196,9 @@ instance ExprKind KExprKind where
     type StateTy KExprKind = TypedState
     type IdentTy KExprKind = Ident
     type OperandTy KExprKind = Ident
-    type ClosureTy KExprKind = False
-    type BranchTy KExprKind = True
+    type AllowBranch KExprKind = True
+    type AllowLoop KExprKind = True
+    type AllowClosure KExprKind = False
 
 -- | The type of an expression after K-normalization.
 type KExpr = Expr KExprKind
@@ -204,8 +209,9 @@ instance ExprKind ClosureExprKind where
     type StateTy ClosureExprKind = TypedState
     type IdentTy ClosureExprKind = Ident
     type OperandTy ClosureExprKind = Ident
-    type ClosureTy ClosureExprKind = True
-    type BranchTy ClosureExprKind = True
+    type AllowBranch ClosureExprKind = True
+    type AllowLoop ClosureExprKind = True
+    type AllowClosure ClosureExprKind = True
 
 -- | The type of an expression after introducing closures.
 type ClosureExpr = Expr ClosureExprKind
@@ -229,7 +235,7 @@ data Expr kind where
         Expr kind
     If ::
         StateTy kind ->
-        Cond (OperandTy kind) (BranchTy kind) ->
+        Cond (OperandTy kind) (AllowBranch kind) ->
         Expr kind ->
         Expr kind ->
         Expr kind
@@ -244,7 +250,7 @@ data Expr kind where
         IdentTy kind ->
         Expr kind
     App ::
-        (ClosureTy kind ~ False) =>
+        (AllowClosure kind ~ False) =>
         StateTy kind ->
         OperandTy kind ->
         [OperandTy kind] ->
@@ -269,20 +275,32 @@ data Expr kind where
         OperandTy kind ->
         OperandTy kind ->
         Expr kind
+    Loop ::
+        (AllowLoop kind ~ True) =>
+        StateTy kind ->
+        [IdentTy kind] ->
+        [IdentTy kind] ->
+        Expr kind ->
+        Expr kind
+    Continue ::
+        (AllowLoop kind ~ True) =>
+        StateTy kind ->
+        [IdentTy kind] ->
+        Expr kind
     MakeClosure ::
-        (ClosureTy kind ~ True) =>
+        (AllowClosure kind ~ True) =>
         StateTy kind ->
         IdentTy kind ->
         [OperandTy kind] ->
         Expr kind
     ClosureApp ::
-        (ClosureTy kind ~ True) =>
+        (AllowClosure kind ~ True) =>
         StateTy kind ->
         IdentTy kind ->
         [OperandTy kind] ->
         Expr kind
     DirectApp ::
-        (ClosureTy kind ~ True) =>
+        (AllowClosure kind ~ True) =>
         StateTy kind ->
         IdentTy kind ->
         [OperandTy kind] ->
@@ -304,6 +322,8 @@ getExprState (Tuple state _) = state
 getExprState (ArrayCreate state _ _) = state
 getExprState (Get state _ _) = state
 getExprState (Put state _ _ _) = state
+getExprState (Loop state _ _ _) = state
+getExprState (Continue state _) = state
 getExprState (MakeClosure state _ _) = state
 getExprState (ClosureApp state _ _) = state
 getExprState (DirectApp state _ _) = state
@@ -324,7 +344,11 @@ subst before after expr =
             expr
 
 visitExprM ::
-    (Monad m, ClosureTy a ~ ClosureTy b, BranchTy a ~ BranchTy b) =>
+    ( Monad m
+    , AllowBranch a ~ AllowBranch b
+    , AllowLoop a ~ AllowLoop b
+    , AllowClosure a ~ AllowClosure b
+    ) =>
     (StateTy a -> m (StateTy b)) ->
     (IdentTy a -> m (IdentTy b)) ->
     (OperandTy a -> m (OperandTy b)) ->
@@ -396,6 +420,16 @@ visitExprM fState _ fOperand (Put state array index value) = do
     index' <- fOperand index
     value' <- fOperand value
     pure $ Put state' array' index' value'
+visitExprM fState fIdent fOperand (Loop state args vars body) = do
+    state' <- fState state
+    args' <- mapM fIdent args
+    vars' <- mapM fIdent vars
+    body' <- visitExprM fState fIdent fOperand body
+    pure $ Loop state' args' vars' body'
+visitExprM fState fIdent _ (Continue state args) = do
+    state' <- fState state
+    args' <- mapM fIdent args
+    pure $ Continue state' args'
 visitExprM fState fIdent fOperand (MakeClosure state ident args) = do
     state' <- fState state
     ident' <- fIdent ident

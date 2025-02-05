@@ -16,7 +16,7 @@ import Data.Map (Map, elems, empty, insert, lookup)
 import Data.Text (Text, pack)
 import Display (Display, display)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (IdentProp), asConstant, getTyOf, registerProp)
-import Syntax (Expr (App, ArrayCreate, If, Let, Tuple), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PUnit, PVar), TypedState (TypedState), dummyLoc, subst)
+import Syntax (Expr (App, ArrayCreate, If, Let, Loop, Tuple), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PUnit, PVar), TypedState (TypedState), dummyLoc, subst)
 import Typing (Ty, TypeKind (TUnit))
 import Prelude hiding (lookup)
 
@@ -100,6 +100,9 @@ extractGlobals (If state cond then' else') = do
     then'' <- extractGlobals then'
     else'' <- extractGlobals else'
     pure $ If state cond then'' else''
+extractGlobals (Loop state args values body) = do
+    body' <- extractGlobals body
+    pure $ Loop state args values body'
 extractGlobals expr = pure expr
 
 -- | Report all globals with pretty printing.

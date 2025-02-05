@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 module MiddleEnd.Optim.VarMerging (mergeVars) where
 
 import Control.Monad.Trans (MonadTrans (lift))
@@ -18,4 +20,7 @@ mergeVars (If state cond thenExpr elseExpr) = do
     thenExpr' <- mergeVars thenExpr
     elseExpr' <- mergeVars elseExpr
     pure $ If state cond thenExpr' elseExpr'
+mergeVars (Loop state args value body) = do
+    body' <- mergeVars body
+    pure $ Loop state args value body'
 mergeVars expr = pure expr

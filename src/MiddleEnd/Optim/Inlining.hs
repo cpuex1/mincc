@@ -14,7 +14,7 @@ import Data.Map (Map, delete, empty, insert, lookup)
 import FrontEnd.Flatten (flattenExpr)
 import MiddleEnd.Analysis.Common (exprSize, isUsed)
 import MiddleEnd.Optim.Common (OptimContext (inliningSizeThreshold, recInliningLimit, recInliningSizeThreshold), OptimStateT, Threshold (ThresholdInt), withFreshVars)
-import Syntax (Expr (App, If, Let), Ident, KExpr, Pattern (PRec), subst)
+import Syntax (Expr (App, If, Let, Loop), Ident, KExpr, Pattern (PRec), subst)
 import Prelude hiding (lookup)
 
 data InlineTarget = InlineTarget
@@ -82,6 +82,9 @@ inlining (Let state pat expr body) = do
     expr' <- inlining expr
     body' <- inlining body
     pure $ flattenExpr $ Let state pat expr' body'
+inlining (Loop state args values body) = do
+    body' <- inlining body
+    pure $ Loop state args values body'
 inlining expr = pure expr
 
 -- | Finds inlining targets.
@@ -96,6 +99,9 @@ findTargets (Let _ _ expr body) = do
 findTargets (If _ _ then' else') = do
     findTargets then'
     findTargets else'
+findTargets Loop{} =
+    -- Do not search inside the loop.
+    pure ()
 findTargets _ = pure ()
 
 runInlining :: (Monad m) => KExpr -> OptimStateT m KExpr

@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 module MiddleEnd.Optim.CSE (
     runCSE,
 ) where
@@ -26,18 +28,18 @@ newtype CSEContext = CSEContext
 type CSEStateT m = StateT CSEContext (OptimStateT m)
 
 runCSE :: (Monad m) => KExpr -> OptimStateT m KExpr
-runCSE expr = evalStateT (commonSubexprElim expr) $ CSEContext mempty
+runCSE expr = evalStateT (commonSElim expr) $ CSEContext mempty
 
 -- | Eliminates common subexpressions.
-commonSubexprElim :: (Monad m) => KExpr -> CSEStateT m KExpr
-commonSubexprElim (Let state (PVar v) expr body) = do
+commonSElim :: (Monad m) => KExpr -> CSEStateT m KExpr
+commonSElim (Let state (PVar v) expr body) = do
     ctx <- get
-    modifiedExpr <- commonSubexprElim expr
+    modifiedExpr <- commonSElim expr
     put ctx
     case modifiedExpr of
         Var _ _ -> do
             -- Can be replaced with the variable by removing common subexpressions.
-            modifiedBody <- commonSubexprElim body
+            modifiedBody <- commonSElim body
             pure $ Let state (PVar v) modifiedExpr modifiedBody
         _ -> do
             if definitelyPure modifiedExpr
@@ -45,33 +47,38 @@ commonSubexprElim (Let state (PVar v) expr body) = do
                     -- The expression is pure, so we can bind the expression to the variable.
                     let purged = purge modifiedExpr
                     modify $ \ctx' -> ctx'{variableMap = insert purged v $ variableMap ctx}
-                    modifiedBody <- commonSubexprElim body
+                    modifiedBody <- commonSElim body
                     pure $ Let state (PVar v) modifiedExpr modifiedBody
                 else do
                     -- The expression is not pure.
-                    modifiedBody <- commonSubexprElim body
+                    modifiedBody <- commonSElim body
                     pure $ Let state (PVar v) modifiedExpr modifiedBody
-commonSubexprElim (Let state (PRec func args) expr body) = do
+commonSElim (Let state (PRec func args) expr body) = do
     -- The function body should be handled within a empty context.
     ctx <- get
     put $ CSEContext mempty
-    modifiedExpr <- commonSubexprElim expr
+    modifiedExpr <- commonSElim expr
     put ctx
-    modifiedBody <- commonSubexprElim body
+    modifiedBody <- commonSElim body
     pure $ Let state (PRec func args) modifiedExpr modifiedBody
-commonSubexprElim (Let state pattern expr body) = do
+commonSElim (Let state pattern expr body) = do
     ctx <- get
-    modifiedExpr <- commonSubexprElim expr
+    modifiedExpr <- commonSElim expr
     put ctx
-    modifiedBody <- commonSubexprElim body
+    modifiedBody <- commonSElim body
     pure $ Let state pattern modifiedExpr modifiedBody
-commonSubexprElim (If state cond then' else') = do
+commonSElim (If state cond then' else') = do
     ctx <- get
-    modifiedThen <- commonSubexprElim then'
+    modifiedThen <- commonSElim then'
     put ctx
-    modifiedElse <- commonSubexprElim else'
+    modifiedElse <- commonSElim else'
     pure $ If state cond modifiedThen modifiedElse
-commonSubexprElim expr = do
+commonSElim (Loop state args values body) = do
+    ctx <- get
+    modifiedBody <- commonSElim body
+    put ctx
+    pure $ Loop state args values modifiedBody
+commonSElim expr = do
     searched <- gets $ lookup purged . variableMap
     case searched of
         Just v -> do

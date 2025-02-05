@@ -69,6 +69,15 @@ withFreshVars (If state cond then' else') = do
     then'' <- withFreshVars then'
     else'' <- withFreshVars else'
     pure $ If state cond then'' else''
+withFreshVars (Loop state args values body) = do
+    freshArgs <- mapM genFresh args
+    body' <-
+        withFreshVars
+            $ foldl
+                (\e (from, to) -> subst from to e)
+                body
+            $ zip args freshArgs
+    pure $ Loop state args values body'
 withFreshVars expr = pure expr
 
 -- | Purges all location information.

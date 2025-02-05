@@ -46,9 +46,11 @@ validateFlatten (Let _ _ expr body) = do
 validateFlatten (If _ _ lhs rhs) = do
     validateFlatten lhs
     validateFlatten rhs
+validateFlatten (Loop _ _ _ body) = do
+    validateFlatten body
 validateFlatten _ = pure ()
 
-checkTy :: (Monad m) => Loc -> Ty -> Ty -> Text -> Validator m ()
+checkTy :: (Monad m, Eq a, Display a) => Loc -> a -> a -> Text -> Validator m ()
 checkTy loc expected actual msg = do
     unless (expected == actual) $
         throwError $
