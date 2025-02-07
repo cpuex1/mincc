@@ -2,7 +2,7 @@
 
 module BackEnd.RegisterAlloc (assignRegister) where
 
-import BackEnd.Liveness (LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
+import BackEnd.Liveness (LivenessCodeBlock, LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Map (Map, findWithDefault)
 import qualified Data.Map as M
@@ -10,7 +10,8 @@ import Data.Maybe (listToMaybe)
 import Data.Set (Set, notMember, size, toDescList)
 import qualified Data.Set as S
 import IR (
-    IntermediateCodeBlock (getICBInst),
+    AbstCodeBlock,
+    HCodeBlock (hInst),
     RegID,
     getAllIState,
     mapReg,
@@ -26,7 +27,6 @@ import Registers (
     (#!!),
     (#$),
  )
-import Syntax (Loc)
 
 -- | Holds register mapping.
 newtype RegAllocEnv a = RegAllocEnv
@@ -83,10 +83,10 @@ runRegisterAlloc graph = execState (registerAlloc graph) (RegAllocEnv M.empty)
         sorted = sortByDegree graph'
 
 -- | Allocates registers.
-assignRegister :: IntermediateCodeBlock LivenessLoc RegID -> (RegVariant' Int, RegVariant' (Maybe RegID), IntermediateCodeBlock Loc RegID)
+assignRegister :: LivenessCodeBlock -> (RegVariant' Int, RegVariant' (Maybe RegID), AbstCodeBlock)
 assignRegister block =
     -- Accept the register allocation.
-    (used, spillTarget, block{getICBInst = map (substIState livenessLoc) mappedInst})
+    (used, spillTarget, block{hInst = map (substIState livenessLoc) mappedInst})
   where
     -- Enforces the register mapping.
     enforceMapped :: Register RegID a -> Register RegID a
@@ -96,7 +96,7 @@ assignRegister block =
             Nothing -> zeroReg rTy
     enforceMapped reg = reg
 
-    inst = getICBInst block
+    inst = hInst block
     graph = toGraph $ concatMap (map livenessProp . getAllIState) inst
     mapped = runRegisterAlloc #$ graph
     used = VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap #$ mapped

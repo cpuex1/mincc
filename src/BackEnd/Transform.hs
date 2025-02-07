@@ -8,15 +8,19 @@ import BackEnd.Shuffle (shuffleRegOrImm, shuffleRegs)
 import Control.Monad.State (MonadTrans (lift), StateT, execStateT, gets, modify)
 import Data.Text (Text, isPrefixOf, pack)
 import IR (
-    AllowBranch,
-    CodeBlock (..),
-    DisallowBranch,
+    AbstCodeBlock,
+    AbstInst,
+    HCodeBlock (HCodeBlock),
     Inst (..),
     InstLabel,
     InstTerm (..),
-    IntermediateCodeBlock (IntermediateCodeBlock),
+    LCodeBlock (LCodeBlock),
     PrimitiveIntOp (PAdd),
+    RawCodeBlock,
+    RawInst,
+    RawInstTerm,
     RegID,
+    isTerm,
  )
 import MiddleEnd.Globals (
     GlobalTable (endAddr),
@@ -25,50 +29,52 @@ import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Registe
 import Syntax (Loc, dummyLoc)
 import Prelude hiding (lookup)
 
-data CodeBlockGenEnv stateTy idTy = CodeBlockGenEnv
-    { blocks :: [CodeBlock stateTy idTy]
+data CodeBlockGenEnv = CodeBlockGenEnv
+    { blocks :: [RawCodeBlock]
     , mainLabel :: InstLabel
     , currentLabel :: InstLabel
     , generatedLabel :: Int
-    , instBuf :: [Inst stateTy idTy DisallowBranch]
-    , currentTerm :: InstTerm stateTy idTy
+    , instBuf :: [RawInst]
+    , currentTerm :: RawInstTerm
     , getLocalVars :: Int
     }
-    deriving (Show, Eq)
 
-type CodeBlockGenStateT m stateTy idTy = StateT (CodeBlockGenEnv stateTy idTy) (BackendStateT m)
+type CodeBlockGenStateT m = StateT CodeBlockGenEnv (BackendStateT m)
 
-insertBuf :: (Monad m) => Inst stateTy idTy DisallowBranch -> CodeBlockGenStateT m stateTy idTy ()
+insertBuf :: (Monad m) => RawInst -> CodeBlockGenStateT m ()
 insertBuf i =
     modify $ \e ->
         e
             { instBuf = instBuf e ++ [i]
             }
 
-epilogue :: (Monad m) => CodeBlockGenStateT m Loc RegID [Inst Loc RegID DisallowBranch]
+epilogue :: (Monad m) => CodeBlockGenStateT m [RawInst]
 epilogue = do
     localVars' <- gets getLocalVars
     pure
         [ ILoad dummyLoc returnReg stackReg localVars'
-        , IIntOp dummyLoc PAdd stackReg stackReg (Imm (localVars' + 1))
+        , IIntOp dummyLoc PAdd stackReg stackReg (Imm RInt (localVars' + 1))
         ]
 
-flushBuf :: (Monad m) => CodeBlockGenStateT m Loc RegID ()
+flushBuf :: (Monad m) => CodeBlockGenStateT m ()
 flushBuf = do
     ep <- epilogue
     modify $ \e ->
         e
             { blocks =
                 blocks e
-                    ++ [ CodeBlock
+                    ++ [ LCodeBlock
                             (currentLabel e)
-                            (instBuf e ++ if currentTerm e == Return then ep else [])
+                            ( instBuf e ++ case currentTerm e of
+                                Return -> ep
+                                _ -> []
+                            )
                             (currentTerm e)
                        ]
             , instBuf = []
             }
 
-genLabel :: (Monad m) => Text -> CodeBlockGenStateT m stateTy idTy InstLabel
+genLabel :: (Monad m) => Text -> CodeBlockGenStateT m InstLabel
 genLabel tag = do
     label <- gets generatedLabel
     mainLabel' <- gets mainLabel
@@ -84,21 +90,21 @@ tailCallLabel label = label <> "_start"
 tailRecCallLabel :: InstLabel -> InstLabel
 tailRecCallLabel label = label <> "_rec"
 
-insertIShuffle :: (Monad m) => Loc -> [(Register RegID Int, RegOrImm RegID Int)] -> CodeBlockGenStateT m Loc RegID ()
+insertIShuffle :: (Monad m) => Loc -> [(Register RegID Int, RegOrImm RegID Int)] -> CodeBlockGenStateT m ()
 insertIShuffle state assign =
     mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 r2) $ shuffleRegOrImm RInt assign
 
-insertFShuffle :: (Monad m) => Loc -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenStateT m Loc RegID ()
+insertFShuffle :: (Monad m) => Loc -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenStateT m ()
 insertFShuffle state assign =
-    mapM_ (\(r1, r2) -> insertBuf $ IFMov state r1 (Reg r2)) $ shuffleRegs RFloat assign
+    mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 (Reg r2)) $ shuffleRegs RFloat assign
 
-initializeGlobal :: (Monad m) => CodeBlockGenStateT m Loc RegID ()
+initializeGlobal :: (Monad m) => CodeBlockGenStateT m ()
 initializeGlobal = do
     global <- lift (gets globals)
-    insertBuf $ IMov dummyLoc heapReg (Imm $ endAddr global)
+    insertBuf $ IMov dummyLoc heapReg (Imm RInt $ endAddr global)
 
-transformCodeBlock :: (Monad m) => IntermediateCodeBlock Loc RegID -> BackendStateT m [CodeBlock Loc RegID]
-transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
+transformCodeBlock :: (Monad m) => AbstCodeBlock -> BackendStateT m [RawCodeBlock]
+transformCodeBlock (HCodeBlock label localVars' inst) =
     if label == "__entry"
         then do
             -- If the block is the entry block, we can skip the prologue and the epilogue.
@@ -117,13 +123,13 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
                     )
                     (CodeBlockGenEnv [] label label 0 [] Return localVars')
   where
-    insertPrologue :: (Monad m) => CodeBlockGenStateT m Loc RegID ()
+    insertPrologue :: (Monad m) => CodeBlockGenStateT m ()
     insertPrologue = do
         term <- gets currentTerm
         modify $ \env ->
             env
                 { instBuf =
-                    [ IIntOp dummyLoc PAdd stackReg stackReg (Imm (-1))
+                    [ IIntOp dummyLoc PAdd stackReg stackReg (Imm RInt (-1))
                     , IStore dummyLoc returnReg stackReg 0
                     ]
                 , currentTerm = Nop
@@ -133,7 +139,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
             env
                 { currentLabel = tailCallLabel $ mainLabel env
                 , instBuf =
-                    [IIntOp dummyLoc PAdd stackReg stackReg (Imm (-localVars')) | localVars' /= 0]
+                    [IIntOp dummyLoc PAdd stackReg stackReg (Imm RInt (-localVars')) | localVars' /= 0]
                 , currentTerm = Nop
                 }
         flushBuf
@@ -143,12 +149,11 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
                 , currentTerm = term
                 }
 
-    traverseInst :: (Monad m) => [Inst Loc RegID AllowBranch] -> CodeBlockGenStateT m Loc RegID ()
+    traverseInst :: (Monad m) => [AbstInst] -> CodeBlockGenStateT m ()
     traverseInst [] = flushBuf
     traverseInst (IBranch state op left right thenInst elseInst : rest) = do
         term <- gets currentTerm
-        let isTerm = term /= Nop
-        case (isTerm, rest) of
+        case (isTerm term, rest) of
             (True, []) -> do
                 -- We can distribute the terminator.
                 elseLabel <- genLabel "else"
@@ -206,39 +211,38 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
                 -- External functions should be called directly.
                 transformInst $ IRichCall state label' iArgs fArgs
                 flushBuf
-            else
-                if term == Return
-                    then do
-                        if mainLabel' == label'
-                            then do
-                                -- Found a tail rec call!
-                                -- Shuffle arguments.
-                                insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
-                                insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
-                                -- Jump to the rec label of the function instead.
-                                -- The prologue should be skipped.
-                                modify $ \env ->
-                                    env
-                                        { currentTerm = Jmp $ tailRecCallLabel $ mainLabel env
-                                        }
-                                flushBuf
-                            else do
-                                -- Found a tail call!
-                                -- Shuffle arguments.
-                                insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
-                                insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
-                                -- Jump to the start label of the function instead.
-                                -- The prologue should be skipped.
-                                insertBuf $ IIntOp state PAdd stackReg stackReg (Imm localVars')
-                                modify $ \env ->
-                                    env
-                                        { currentTerm = Jmp $ tailCallLabel label'
-                                        }
-                                flushBuf
-                    else do
-                        -- If not, just call a function.
-                        transformInst $ IRichCall state label' iArgs fArgs
-                        flushBuf
+            else case term of
+                Return -> do
+                    if mainLabel' == label'
+                        then do
+                            -- Found a tail rec call!
+                            -- Shuffle arguments.
+                            insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
+                            insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
+                            -- Jump to the rec label of the function instead.
+                            -- The prologue should be skipped.
+                            modify $ \env ->
+                                env
+                                    { currentTerm = Jmp $ tailRecCallLabel $ mainLabel env
+                                    }
+                            flushBuf
+                        else do
+                            -- Found a tail call!
+                            -- Shuffle arguments.
+                            insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
+                            insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
+                            -- Jump to the start label of the function instead.
+                            -- The prologue should be skipped.
+                            insertBuf $ IIntOp state PAdd stackReg stackReg (Imm RInt localVars')
+                            modify $ \env ->
+                                env
+                                    { currentTerm = Jmp $ tailCallLabel label'
+                                    }
+                            flushBuf
+                _ -> do
+                    -- If not, just call a function.
+                    transformInst $ IRichCall state label' iArgs fArgs
+                    flushBuf
     traverseInst [inst'] = do
         transformInst inst'
         flushBuf
@@ -246,11 +250,9 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         transformInst inst'
         traverseInst rest
 
-    transformInst :: (Monad m) => Inst Loc RegID AllowBranch -> CodeBlockGenStateT m Loc RegID ()
+    transformInst :: (Monad m) => AbstInst -> CodeBlockGenStateT m ()
     transformInst (ICompOp state op dest src1 src2) =
         insertBuf $ ICompOp state op dest src1 src2
-    transformInst (IFCompOp state op dest src1 src2) =
-        insertBuf $ IFCompOp state op dest src1 src2
     transformInst (IIntOp state op dest src1 src2) =
         insertBuf $ IIntOp state op dest src1 src2
     transformInst (IFOp state op dest src1 src2) =
@@ -258,9 +260,6 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
     transformInst (IMov _ (Register _ ZeroReg) _) = pure ()
     transformInst (IMov state dest src) =
         insertBuf $ IMov state dest src
-    transformInst (IFMov _ (Register _ ZeroReg) _) = pure ()
-    transformInst (IFMov state dest src) =
-        insertBuf $ IFMov state dest src
     transformInst (IRichCall state label' iArgs fArgs) = do
         -- Shuffle arguments
         insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
@@ -277,7 +276,7 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
         -- Shuffle arguments
         insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
         insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
-        insertBuf $ IIntOp state PAdd (argsReg RInt (length iArgs)) cl' (Imm 1)
+        insertBuf $ IIntOp state PAdd (argsReg RInt (length iArgs)) cl' (Imm RInt 1)
         insertBuf $ ILoad state (tempReg RInt 2) cl' 0
         insertBuf $ ICallReg state (tempReg RInt 2)
     transformInst (IMakeClosure state dest label' iFreeV fFreeV) = do
@@ -288,28 +287,24 @@ transformCodeBlock (IntermediateCodeBlock label localVars' inst) =
                 case arg of
                     Reg reg -> do
                         insertBuf $ IStore state reg heapReg i
-                    Imm imm -> do
-                        insertBuf $ IMov state (tempReg RInt 1) (Imm imm)
+                    Imm _ imm -> do
+                        insertBuf $ IMov state (tempReg RInt 1) (Imm RInt imm)
                         insertBuf $ IStore state (tempReg RInt 1) heapReg i
             )
             $ zip iFreeV [1 ..]
         mapM_
             ( \(arg, i) ->
-                insertBuf $ IFStore state arg heapReg i
+                insertBuf $ IStore state arg heapReg i
             )
             $ zip fFreeV [1 + length iFreeV ..]
         insertBuf $ IMov state dest (Reg heapReg)
-        insertBuf $ IIntOp state PAdd heapReg heapReg (Imm $ 1 + length iFreeV + length fFreeV)
+        insertBuf $ IIntOp state PAdd heapReg heapReg (Imm RInt $ 1 + length iFreeV + length fFreeV)
     transformInst (ILoad _ (Register RInt ZeroReg) _ _) =
         pure ()
     transformInst (ILoad state dest src offset) =
         insertBuf $ ILoad state dest src offset
     transformInst (IStore state dest src offset) =
         insertBuf $ IStore state dest src offset
-    transformInst (IFLoad state dest src offset) =
-        insertBuf $ IFLoad state dest src offset
-    transformInst (IFStore state dest src offset) =
-        insertBuf $ IFStore state dest src offset
     transformInst (IRawInst state name ret iArgs fArgs) =
         insertBuf $ IRawInst state name ret iArgs fArgs
     transformInst (IBranch{}) = undefined

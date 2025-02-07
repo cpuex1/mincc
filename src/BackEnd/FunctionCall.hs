@@ -4,24 +4,15 @@ module BackEnd.FunctionCall (
     saveRegisters,
 ) where
 
-import BackEnd.Liveness (Liveness (alive), LivenessLoc (LivenessLoc, livenessLoc), liveness)
+import BackEnd.Liveness (Liveness (alive), LivenessInst, LivenessLoc (LivenessLoc, livenessLoc), liveness)
 import Control.Monad (foldM)
 import Control.Monad.State (MonadState (get, put), State, runState)
 import Data.Foldable (toList)
 import Data.Sequence (Seq, empty, singleton)
 import IR (
-    AllowBranch,
-    Inst (
-        IBranch,
-        IClosureCall,
-        IFLoad,
-        IFStore,
-        ILoad,
-        IRichCall,
-        IStore
-    ),
-    IntermediateCodeBlock (getICBInst, localVars),
-    RegID,
+    AbstCodeBlock,
+    HCodeBlock (hInst, localVars),
+    Inst (..),
     substIState,
  )
 import Registers (
@@ -31,7 +22,7 @@ import Registers (
     stackReg,
     (#!!),
  )
-import Syntax (Loc, dummyLoc)
+import Syntax (dummyLoc)
 
 type FunctionCallState = State Int
 
@@ -44,15 +35,7 @@ genLocalVar = do
 dummyLivenessLoc :: LivenessLoc
 dummyLivenessLoc = LivenessLoc dummyLoc mempty
 
-store :: RegType a -> RegID -> Int -> Inst LivenessLoc RegID AllowBranch
-store RInt reg local = IStore dummyLivenessLoc (savedReg RInt reg) stackReg local
-store RFloat reg local = IFStore dummyLivenessLoc (savedReg RFloat reg) stackReg local
-
-load :: RegType a -> RegID -> Int -> Inst LivenessLoc RegID AllowBranch
-load RInt reg local = ILoad dummyLivenessLoc (savedReg RInt reg) stackReg local
-load RFloat reg local = IFLoad dummyLivenessLoc (savedReg RFloat reg) stackReg local
-
-genPrologueAndEpilogue :: RegType a -> RegVariant Liveness -> FunctionCallState (Seq (Inst LivenessLoc RegID AllowBranch), Seq (Inst LivenessLoc RegID AllowBranch))
+genPrologueAndEpilogue :: RegType a -> RegVariant Liveness -> FunctionCallState (Seq LivenessInst, Seq LivenessInst)
 genPrologueAndEpilogue rTy l = do
     foldM
         ( \(prologue, epilogue) reg -> do
@@ -60,10 +43,10 @@ genPrologueAndEpilogue rTy l = do
             pure
                 ( prologue
                     <> singleton
-                        (store rTy reg local)
+                        (IStore dummyLivenessLoc (savedReg rTy reg) stackReg local)
                 , epilogue
                     <> singleton
-                        (load rTy reg local)
+                        (ILoad dummyLivenessLoc (savedReg rTy reg) stackReg local)
                 )
         )
         (empty, empty)
@@ -72,7 +55,7 @@ genPrologueAndEpilogue rTy l = do
     toBeSaved = alive $ l #!! rTy
 
 -- | Saves registers on the stack before a function call and restores them after the call.
-saveRegBeyondCall :: RegType a -> Inst LivenessLoc RegID AllowBranch -> FunctionCallState (Seq (Inst LivenessLoc RegID AllowBranch))
+saveRegBeyondCall :: RegType a -> LivenessInst -> FunctionCallState (Seq LivenessInst)
 saveRegBeyondCall rTy (IRichCall (LivenessLoc loc l) label iArgs fArgs) = do
     (prologue, epilogue) <- genPrologueAndEpilogue rTy l
     pure $ prologue <> singleton (IRichCall (LivenessLoc loc l) label iArgs fArgs) <> epilogue
@@ -92,16 +75,16 @@ saveRegBeyondCall rTy (IBranch state op left right thenBlock elseBlock) = do
                 thenBlock'
                 elseBlock'
   where
-    saveRegBeyondCallAll :: [Inst LivenessLoc RegID AllowBranch] -> FunctionCallState (Seq (Inst LivenessLoc RegID AllowBranch))
+    saveRegBeyondCallAll :: [LivenessInst] -> FunctionCallState (Seq LivenessInst)
     saveRegBeyondCallAll = foldM (\already block -> (already <>) <$> saveRegBeyondCall rTy block) empty
 saveRegBeyondCall _ i = pure $ singleton i
 
 -- | Saves registers on the stack before a function call and restores them after the call.
-saveRegisters :: IntermediateCodeBlock Loc RegID -> IntermediateCodeBlock Loc RegID
+saveRegisters :: AbstCodeBlock -> AbstCodeBlock
 saveRegisters block =
-    block{localVars = locals, getICBInst = inst}
+    block{localVars = locals, hInst = inst}
   where
-    instWithLiveness = liveness $ getICBInst block
+    instWithLiveness = liveness $ hInst block
     (instList, locals) =
         runState
             ( do

@@ -5,6 +5,7 @@
 
 module Registers (
     RegType (..),
+    withRegType,
     RegVariant (..),
     RegVariant',
     VariantItem (..),
@@ -25,6 +26,8 @@ module Registers (
     RegOrImm (..),
 ) where
 
+import Typing (Ty, TypeKind (TFloat))
+
 -- | Holds the type of a register.
 data RegType ty where
     RInt :: RegType Int
@@ -32,6 +35,10 @@ data RegType ty where
 
 deriving instance (Show ty) => Show (RegType ty)
 deriving instance (Eq ty) => Eq (RegType ty)
+
+withRegType :: Ty -> (forall a. RegType a -> b) -> b
+withRegType TFloat f = f RFloat
+withRegType _ f = f RInt
 
 -- | Holds two objects - one is for integer registers and the other is for float registers.
 data RegVariant f
@@ -129,7 +136,7 @@ generalReg rTy i = Register rTy (GeneralReg i)
 
 data RegOrImm idTy ty where
     Reg :: Register idTy ty -> RegOrImm idTy ty
-    Imm :: ty -> RegOrImm idTy ty
+    Imm :: RegType ty -> ty -> RegOrImm idTy ty
 
 deriving instance (Show idTy, Show ty) => Show (RegOrImm idTy ty)
 deriving instance (Eq idTy, Eq ty) => Eq (RegOrImm idTy ty)

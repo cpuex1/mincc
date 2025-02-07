@@ -1,7 +1,11 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module IR (
@@ -9,14 +13,18 @@ module IR (
     InstLabel,
     PrimitiveIntOp (..),
     fromIntBinOp,
-    IntermediateCodeBlock (..),
-    CodeBlock (CodeBlock),
+    HCodeBlock (..),
+    LCodeBlock (..),
     exitBlock,
     InstTerm (Return, Jmp, Branch, Nop),
-    AllowBranch,
-    DisallowBranch,
-    RawInstRetTy (..),
+    isTerm,
     Inst (..),
+    AbstInst,
+    AbstCodeBlock,
+    RawInst,
+    RawCodeBlock,
+    RawInstTerm,
+    InstKind (..),
     getIState,
     getAllIState,
     substIState,
@@ -24,6 +32,7 @@ module IR (
     replaceReg,
 ) where
 
+import Data.Kind (Type)
 import Data.Text (Text)
 import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register))
 import Syntax (FloatBinOp, IntBinOp (..), Loc, RelationBinOp)
@@ -49,165 +58,220 @@ fromIntBinOp Sub = PSub
 fromIntBinOp Mul = PMul
 fromIntBinOp Div = PDiv
 
-data IntermediateCodeBlock stateTy idTy
-    = IntermediateCodeBlock
-    { getICBLabel :: InstLabel
-    , localVars :: Int
-    , getICBInst :: [Inst stateTy idTy AllowBranch]
-    }
-    deriving (Show, Eq)
+-- | Higher-level code block.
+data HCodeBlock ty where
+    HCodeBlock ::
+        (AllowInstBranch ty ~ True) =>
+        { hLabel :: InstLabel
+        , localVars :: Int
+        , hInst :: [Inst ty]
+        } ->
+        HCodeBlock ty
 
-data CodeBlock stateTy idTy
-    = CodeBlock
-        InstLabel
-        [Inst stateTy idTy DisallowBranch]
-        (InstTerm stateTy idTy)
-    deriving (Show, Eq)
+deriving instance (Show (Inst ty)) => Show (HCodeBlock ty)
+deriving instance (Eq (Inst ty)) => Eq (HCodeBlock ty)
 
-data InstTerm stateTy idTy
-    = Return
-    | Jmp InstLabel
-    | Branch
-        stateTy
-        RelationBinOp
-        (Register idTy Int)
-        (Register idTy Int)
-        InstLabel
-    | Nop
-    deriving (Show, Eq)
+-- | Lower-level code block.
+data LCodeBlock ty where
+    LCodeBlock ::
+        (AllowInstBranch ty ~ False) =>
+        { lGetLabel :: InstLabel
+        , lInst :: [Inst ty]
+        , lTerm :: InstTerm ty
+        } ->
+        LCodeBlock ty
 
-exitBlock :: CodeBlock Loc Int
-exitBlock = CodeBlock "__exit" [] Nop
+deriving instance (Show (Inst ty), Show (InstTerm ty)) => Show (LCodeBlock ty)
+deriving instance (Eq (Inst ty), Eq (InstTerm ty)) => Eq (LCodeBlock ty)
 
-data AllowBranch = AllowBranch
-    deriving (Show, Eq)
-data DisallowBranch = DisallowBranch
-    deriving (Show, Eq)
+-- | The last block to be executed.
+exitBlock :: (AllowInstBranch ty ~ False) => LCodeBlock ty
+exitBlock = LCodeBlock "__exit" [] Nop
 
-data RawInstRetTy idTy = RIRUnit | RIRInt (Register idTy Int) | RIRFloat (Register idTy Float)
-    deriving (Show, Eq)
+data InstTerm ty where
+    Return :: InstTerm ty
+    Jmp :: InstLabel -> InstTerm ty
+    Branch ::
+        (InstStateTy ty) ->
+        RelationBinOp ->
+        (Register (RegIDTy ty) a) ->
+        (Register (RegIDTy ty) a) ->
+        InstLabel ->
+        InstTerm ty
+    Nop :: InstTerm ty
 
-data Inst stateTy idTy branchTy where
+isTerm :: InstTerm ty -> Bool
+isTerm Nop = True
+isTerm _ = False
+
+class InstKind ty where
+    type InstStateTy ty :: Type
+    type RegIDTy ty :: Type
+    type AllowInstBranch ty :: Bool
+
+data AbstInstKind
+
+instance InstKind AbstInstKind where
+    type InstStateTy AbstInstKind = Loc
+    type RegIDTy AbstInstKind = RegID
+    type AllowInstBranch AbstInstKind = True
+
+type AbstInst = Inst AbstInstKind
+type AbstCodeBlock = HCodeBlock AbstInstKind
+
+data RawInstKind
+
+instance InstKind RawInstKind where
+    type InstStateTy RawInstKind = Loc
+    type RegIDTy RawInstKind = RegID
+    type AllowInstBranch RawInstKind = False
+
+type RawInst = Inst RawInstKind
+type RawCodeBlock = LCodeBlock RawInstKind
+type RawInstTerm = InstTerm RawInstKind
+
+data Inst ty where
     ICompOp ::
-        stateTy ->
+        InstStateTy ty ->
         RelationBinOp ->
-        Register idTy Int ->
-        Register idTy Int ->
-        RegOrImm idTy Int ->
-        Inst stateTy idTy branchTy
-    IFCompOp ::
-        stateTy ->
-        RelationBinOp ->
-        Register idTy Int ->
-        Register idTy Float ->
-        Register idTy Float ->
-        Inst stateTy idTy branchTy
+        Register (RegIDTy ty) Int ->
+        Register (RegIDTy ty) a ->
+        RegOrImm (RegIDTy ty) a ->
+        Inst ty
     IIntOp ::
-        stateTy ->
+        InstStateTy ty ->
         PrimitiveIntOp ->
-        Register idTy Int ->
-        Register idTy Int ->
-        RegOrImm idTy Int ->
-        Inst stateTy idTy branchTy
+        Register (RegIDTy ty) Int ->
+        Register (RegIDTy ty) Int ->
+        RegOrImm (RegIDTy ty) Int ->
+        Inst ty
     IFOp ::
-        stateTy ->
+        InstStateTy ty ->
         FloatBinOp ->
-        Register idTy Float ->
-        Register idTy Float ->
-        Register idTy Float ->
-        Inst stateTy idTy branchTy
+        Register (RegIDTy ty) Float ->
+        Register (RegIDTy ty) Float ->
+        Register (RegIDTy ty) Float ->
+        Inst ty
     IMov ::
-        stateTy ->
-        Register idTy Int ->
-        RegOrImm idTy Int ->
-        Inst stateTy idTy branchTy
-    IFMov ::
-        stateTy ->
-        Register idTy Float ->
-        RegOrImm idTy Float ->
-        Inst stateTy idTy branchTy
+        InstStateTy ty ->
+        Register (RegIDTy ty) a ->
+        RegOrImm (RegIDTy ty) a ->
+        Inst ty
     ILMov ::
-        stateTy ->
-        Register idTy Int ->
+        (AllowInstBranch ty ~ False) =>
+        InstStateTy ty ->
+        Register (RegIDTy ty) Int ->
         InstLabel ->
-        Inst stateTy idTy DisallowBranch
+        Inst ty
     IRichCall ::
-        stateTy ->
+        (AllowInstBranch ty ~ True) =>
+        InstStateTy ty ->
         InstLabel ->
-        [RegOrImm idTy Int] ->
-        [Register idTy Float] ->
-        Inst stateTy idTy AllowBranch
+        [RegOrImm (RegIDTy ty) Int] ->
+        [Register (RegIDTy ty) Float] ->
+        Inst ty
     IClosureCall ::
-        stateTy ->
-        Register idTy Int ->
-        [RegOrImm idTy Int] ->
-        [Register idTy Float] ->
-        Inst stateTy idTy AllowBranch
+        (AllowInstBranch ty ~ True) =>
+        InstStateTy ty ->
+        Register (RegIDTy ty) Int ->
+        [RegOrImm (RegIDTy ty) Int] ->
+        [Register (RegIDTy ty) Float] ->
+        Inst ty
     IMakeClosure ::
-        stateTy ->
-        Register idTy Int ->
+        (AllowInstBranch ty ~ True) =>
+        InstStateTy ty ->
+        Register (RegIDTy ty) Int ->
         InstLabel ->
-        [RegOrImm idTy Int] ->
-        [Register idTy Float] ->
-        Inst stateTy idTy AllowBranch
+        [RegOrImm (RegIDTy ty) Int] ->
+        [Register (RegIDTy ty) Float] ->
+        Inst ty
     ICall ::
-        stateTy ->
+        (AllowInstBranch ty ~ False) =>
+        InstStateTy ty ->
         InstLabel ->
-        Inst stateTy idTy DisallowBranch
+        Inst ty
     ICallReg ::
-        stateTy ->
-        Register idTy Int ->
-        Inst stateTy idTy DisallowBranch
+        (AllowInstBranch ty ~ False) =>
+        InstStateTy ty ->
+        Register (RegIDTy ty) Int ->
+        Inst ty
     ILoad ::
-        stateTy ->
-        Register idTy Int ->
-        Register idTy Int ->
+        InstStateTy ty ->
+        Register (RegIDTy ty) a ->
+        Register (RegIDTy ty) Int ->
         Int ->
-        Inst stateTy idTy branchTy
+        Inst ty
     IStore ::
-        stateTy ->
-        Register idTy Int ->
-        Register idTy Int ->
+        InstStateTy ty ->
+        Register (RegIDTy ty) a ->
+        Register (RegIDTy ty) Int ->
         Int ->
-        Inst stateTy idTy branchTy
-    IFLoad ::
-        stateTy ->
-        Register idTy Float ->
-        Register idTy Int ->
-        Int ->
-        Inst stateTy idTy branchTy
-    IFStore ::
-        stateTy ->
-        Register idTy Float ->
-        Register idTy Int ->
-        Int ->
-        Inst stateTy idTy branchTy
+        Inst ty
     IRawInst ::
-        stateTy ->
+        InstStateTy ty ->
         Text ->
-        RawInstRetTy idTy ->
-        [RegOrImm idTy Int] ->
-        [Register idTy Float] ->
-        Inst stateTy idTy branchTy
+        Register (RegIDTy ty) a ->
+        [RegOrImm (RegIDTy ty) Int] ->
+        [Register (RegIDTy ty) Float] ->
+        Inst ty
     IBranch ::
-        stateTy ->
+        (AllowInstBranch ty ~ True) =>
+        InstStateTy ty ->
         RelationBinOp ->
-        Register idTy Int ->
-        Register idTy Int ->
-        [Inst stateTy idTy AllowBranch] ->
-        [Inst stateTy idTy AllowBranch] ->
-        Inst stateTy idTy AllowBranch
+        Register (RegIDTy ty) a ->
+        Register (RegIDTy ty) a ->
+        [Inst ty] ->
+        [Inst ty] ->
+        Inst ty
 
-deriving instance (Show stateTy, Show idTy, Show branchTy) => Show (Inst stateTy idTy branchTy)
-deriving instance (Eq stateTy, Eq idTy, Eq branchTy) => Eq (Inst stateTy idTy branchTy)
+instance (Eq (InstStateTy ty), Eq (RegIDTy ty)) => Eq (Inst ty) where
+    (ICompOp state1 op1 dest1 src1_1@(Register RInt _) src1_2) == (ICompOp state2 op2 dest2 src2_1@(Register RInt _) src2_2) =
+        state1 == state2 && op1 == op2 && dest1 == dest2 && src1_1 == src2_1 && src1_2 == src2_2
+    (ICompOp state1 op1 dest1 src1_1@(Register RFloat _) src1_2) == (ICompOp state2 op2 dest2 src2_1@(Register RFloat _) src2_2) =
+        state1 == state2 && op1 == op2 && dest1 == dest2 && src1_1 == src2_1 && src1_2 == src2_2
+    (IIntOp state1 op1 dest1 src1_1 src1_2) == (IIntOp state2 op2 dest2 src2_1 src2_2) =
+        state1 == state2 && op1 == op2 && dest1 == dest2 && src1_1 == src2_1 && src1_2 == src2_2
+    (IFOp state1 op1 dest1 src1_1 src1_2) == (IFOp state2 op2 dest2 src2_1 src2_2) =
+        state1 == state2 && op1 == op2 && dest1 == dest2 && src1_1 == src2_1 && src1_2 == src2_2
+    (IMov state1 dest1@(Register RInt _) src1) == (IMov state2 dest2@(Register RInt _) src2) =
+        state1 == state2 && dest1 == dest2 && src1 == src2
+    (IMov state1 dest1@(Register RFloat _) src1) == (IMov state2 dest2@(Register RFloat _) src2) =
+        state1 == state2 && dest1 == dest2 && src1 == src2
+    (ILMov state1 dest1 label1) == (ILMov state2 dest2 label2) =
+        state1 == state2 && dest1 == dest2 && label1 == label2
+    (IRichCall state1 label1 iArgs1 fArgs1) == (IRichCall state2 label2 iArgs2 fArgs2) =
+        state1 == state2 && label1 == label2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
+    (IClosureCall state1 dest1 iArgs1 fArgs1) == (IClosureCall state2 dest2 iArgs2 fArgs2) =
+        state1 == state2 && dest1 == dest2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
+    (IMakeClosure state1 dest1 label1 iArgs1 fArgs1) == (IMakeClosure state2 dest2 label2 iArgs2 fArgs2) =
+        state1 == state2 && dest1 == dest2 && label1 == label2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
+    (ICall state1 label1) == (ICall state2 label2) =
+        state1 == state2 && label1 == label2
+    (ICallReg state1 reg1) == (ICallReg state2 reg2) =
+        state1 == state2 && reg1 == reg2
+    (ILoad state1 dest1@(Register RInt _) src1 offset1) == (ILoad state2 dest2@(Register RInt _) src2 offset2) =
+        state1 == state2 && dest1 == dest2 && src1 == src2 && offset1 == offset2
+    (ILoad state1 dest1@(Register RFloat _) src1 offset1) == (ILoad state2 dest2@(Register RFloat _) src2 offset2) =
+        state1 == state2 && dest1 == dest2 && src1 == src2 && offset1 == offset2
+    (IStore state1 dest1@(Register RInt _) src1 offset1) == (IStore state2 dest2@(Register RInt _) src2 offset2) =
+        state1 == state2 && dest1 == dest2 && src1 == src2 && offset1 == offset2
+    (IStore state1 dest1@(Register RFloat _) src1 offset1) == (IStore state2 dest2@(Register RFloat _) src2 offset2) =
+        state1 == state2 && dest1 == dest2 && src1 == src2 && offset1 == offset2
+    (IRawInst state1 inst1 retTy1@(Register RInt _) iArgs1 fArgs1) == (IRawInst state2 inst2 retTy2@(Register RInt _) iArgs2 fArgs2) =
+        state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
+    (IRawInst state1 inst1 retTy1@(Register RFloat _) iArgs1 fArgs1) == (IRawInst state2 inst2 retTy2@(Register RFloat _) iArgs2 fArgs2) =
+        state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
+    (IBranch state1 op1 left1@(Register RInt _) right1 thenExpr1 elseExpr1) == (IBranch state2 op2 left2@(Register RInt _) right2 thenExpr2 elseExpr2) =
+        state1 == state2 && op1 == op2 && left1 == left2 && right1 == right2 && thenExpr1 == thenExpr2 && elseExpr1 == elseExpr2
+    (IBranch state1 op1 left1@(Register RFloat _) right1 thenExpr1 elseExpr1) == (IBranch state2 op2 left2@(Register RFloat _) right2 thenExpr2 elseExpr2) =
+        state1 == state2 && op1 == op2 && left1 == left2 && right1 == right2 && thenExpr1 == thenExpr2 && elseExpr1 == elseExpr2
+    _ == _ = False
 
-getIState :: Inst stateTy idTy branchTy -> stateTy
+getIState :: Inst ty -> InstStateTy ty
 getIState (ICompOp state _ _ _ _) = state
-getIState (IFCompOp state _ _ _ _) = state
 getIState (IIntOp state _ _ _ _) = state
 getIState (IFOp state _ _ _ _) = state
 getIState (IMov state _ _) = state
-getIState (IFMov state _ _) = state
 getIState (ILMov state _ _) = state
 getIState (IRichCall state _ _ _) = state
 getIState (IClosureCall state _ _ _) = state
@@ -216,23 +280,23 @@ getIState (ICall state _) = state
 getIState (ICallReg state _) = state
 getIState (ILoad state _ _ _) = state
 getIState (IStore state _ _ _) = state
-getIState (IFLoad state _ _ _) = state
-getIState (IFStore state _ _ _) = state
 getIState (IRawInst state _ _ _ _) = state
 getIState (IBranch state _ _ _ _ _) = state
 
-getAllIState :: Inst stateTy idTy branchTy -> [stateTy]
+getAllIState :: Inst ty -> [InstStateTy ty]
 getAllIState (IBranch state _ _ _ thenInst elseInst) =
     state : (concatMap getAllIState thenInst ++ concatMap getAllIState elseInst)
 getAllIState inst = [getIState inst]
 
-substIState :: (stateTy -> stateTy') -> Inst stateTy idTy branchTy -> Inst stateTy' idTy branchTy
+substIState ::
+    (RegIDTy a ~ RegIDTy b, AllowInstBranch a ~ AllowInstBranch b) =>
+    (InstStateTy a -> InstStateTy b) ->
+    Inst a ->
+    Inst b
 substIState f (ICompOp state op dest src1 src2) = ICompOp (f state) op dest src1 src2
-substIState f (IFCompOp state op dest src1 src2) = IFCompOp (f state) op dest src1 src2
 substIState f (IIntOp state op dest src1 src2) = IIntOp (f state) op dest src1 src2
 substIState f (IFOp state op dest src1 src2) = IFOp (f state) op dest src1 src2
 substIState f (IMov state dest src) = IMov (f state) dest src
-substIState f (IFMov state dest src) = IFMov (f state) dest src
 substIState f (ILMov state dest src) = ILMov (f state) dest src
 substIState f (IRichCall state label iArgs fArgs) = IRichCall (f state) label iArgs fArgs
 substIState f (IClosureCall state dest iArgs fArgs) = IClosureCall (f state) dest iArgs fArgs
@@ -241,8 +305,6 @@ substIState f (ICall state label) = ICall (f state) label
 substIState f (ICallReg state reg) = ICallReg (f state) reg
 substIState f (ILoad state dest src offset) = ILoad (f state) dest src offset
 substIState f (IStore state dest src offset) = IStore (f state) dest src offset
-substIState f (IFLoad state dest src offset) = IFLoad (f state) dest src offset
-substIState f (IFStore state dest src offset) = IFStore (f state) dest src offset
 substIState f (IRawInst state inst retTy iArgs fArgs) = IRawInst (f state) inst retTy iArgs fArgs
 substIState f (IBranch state op left right thenExpr elseExpr) =
     IBranch
@@ -271,25 +333,21 @@ substReg (Register RFloat before) afterReg (Register RFloat victim) =
 substReg _ _ victim = victim
 
 coverImm :: (Register idTy ty -> Register idTy ty) -> (RegOrImm idTy ty -> RegOrImm idTy ty)
-coverImm _ (Imm imm) = Imm imm
+coverImm _ (Imm rTy imm) = Imm rTy imm
 coverImm substR (Reg reg) = Reg $ substR reg
 
 mapReg ::
-    (forall regTy1. Register idTy regTy1 -> Register idTy regTy1) ->
-    Inst stateTy idTy branchTy ->
-    Inst stateTy idTy branchTy
+    (forall regTy1. Register (RegIDTy ty) regTy1 -> Register (RegIDTy ty) regTy1) ->
+    Inst ty ->
+    Inst ty
 mapReg substR (ICompOp state op dest left right) =
     ICompOp state op (substR dest) (substR left) (coverImm substR right)
-mapReg substR (IFCompOp state op dest left right) =
-    IFCompOp state op (substR dest) (substR left) (substR right)
 mapReg substR (IIntOp state op dest left right) =
     IIntOp state op (substR dest) (substR left) (coverImm substR right)
 mapReg substR (IFOp state op dest left right) =
     IFOp state op (substR dest) (substR left) (substR right)
 mapReg substR (IMov state dest src) =
     IMov state (substR dest) (coverImm substR src)
-mapReg substR (IFMov state dest src) =
-    IFMov state (substR dest) (coverImm substR src)
 mapReg substR (ILMov state dest src) =
     ILMov state (substR dest) src
 mapReg substR (IRichCall state label iArgs fArgs) =
@@ -304,17 +362,10 @@ mapReg substR (ICallReg state reg) =
     ICallReg state (substR reg)
 mapReg substR (ILoad state dest src offset) =
     ILoad state (substR dest) (substR src) offset
-mapReg substR (IFLoad state dest src offset) =
-    IFLoad state (substR dest) (substR src) offset
 mapReg substR (IStore state dest src offset) =
     IStore state (substR dest) (substR src) offset
-mapReg substR (IFStore state dest src offset) =
-    IFStore state (substR dest) (substR src) offset
-mapReg substR (IRawInst state inst retTy iArgs fArgs) =
-    case retTy of
-        RIRUnit -> IRawInst state inst retTy (map (coverImm substR) iArgs) (map substR fArgs)
-        RIRInt reg -> IRawInst state inst (RIRInt (substR reg)) (map (coverImm substR) iArgs) (map substR fArgs)
-        RIRFloat reg -> IRawInst state inst (RIRFloat (substR reg)) (map (coverImm substR) iArgs) (map substR fArgs)
+mapReg substR (IRawInst state inst retReg iArgs fArgs) =
+    IRawInst state inst (substR retReg) (map (coverImm substR) iArgs) (map substR fArgs)
 mapReg substR (IBranch state op left right thenExpr elseExpr) =
     IBranch
         state
@@ -331,9 +382,9 @@ mapReg substR (IBranch state op left right thenExpr elseExpr) =
         )
 
 replaceReg ::
-    (Eq idTy) =>
-    Register idTy regTy ->
-    Register idTy regTy ->
-    Inst stateTy idTy branchTy ->
-    Inst stateTy idTy branchTy
+    (Eq (RegIDTy ty)) =>
+    Register (RegIDTy ty) regTy ->
+    Register (RegIDTy ty) regTy ->
+    Inst ty ->
+    Inst ty
 replaceReg before after = mapReg (substReg before after)

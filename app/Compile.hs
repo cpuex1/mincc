@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Compile (
@@ -24,12 +25,12 @@ import BackEnd.BackendEnv (
     liftB,
  )
 import BackEnd.FunctionCall (saveRegisters)
-import BackEnd.Liveness (LivenessLoc (livenessLoc), liveness)
+import BackEnd.Liveness (LivenessCodeBlock, LivenessLoc (livenessLoc), liveness)
 import BackEnd.Lowering (toInstructions)
 import BackEnd.Optim (runBackEndOptim)
 import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndOptimStateT)
 import BackEnd.RegisterAlloc (assignRegister)
-import BackEnd.Spill (spillF, spillI)
+import BackEnd.Spill (spill)
 import BackEnd.Transform (transformCodeBlock)
 import CommandLine (
     BackendIdentStateIO,
@@ -57,9 +58,9 @@ import FrontEnd.NameRes (resolveNames)
 import FrontEnd.Parser (parseExpr, parsePartialExpr)
 import FrontEnd.TypeInferrer (inferType)
 import IR (
-    CodeBlock,
-    IntermediateCodeBlock (getICBInst, getICBLabel),
-    RegID,
+    AbstCodeBlock,
+    HCodeBlock (hInst, hLabel),
+    RawCodeBlock,
     exitBlock,
     substIState,
  )
@@ -87,7 +88,6 @@ import Registers (
 import Syntax (
     Function,
     KExpr,
-    Loc,
     ParsedExpr,
     ResolvedExpr,
     TypedExpr,
@@ -202,14 +202,14 @@ extractGlobalsIO expr =
 getFunctionsIO :: KExpr -> IdentEnvIO [Function]
 getFunctionsIO = getFunctions
 
-toInstructionsIO :: [Function] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
+toInstructionsIO :: [Function] -> BackendIdentStateIO [AbstCodeBlock]
 toInstructionsIO = mapM toInstructions
 
-optimInstIO :: [IntermediateCodeBlock Loc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc RegID]
+optimInstIO :: [AbstCodeBlock] -> BackendIdentStateIO [AbstCodeBlock]
 optimInstIO inst = do
     evalStateT (mapM (optimInstIOLoop 1) inst) BackEndOptimContext
   where
-    optimInstIOLoop :: Int -> IntermediateCodeBlock Loc RegID -> BackEndOptimStateT (IdentEnvT ConfigIO) (IntermediateCodeBlock Loc RegID)
+    optimInstIOLoop :: Int -> AbstCodeBlock -> BackEndOptimStateT (IdentEnvT ConfigIO) AbstCodeBlock
     optimInstIOLoop roundCount beforeInst = do
         lift $ liftB $ lift $ printTextLog Debug $ "Optimization round " <> pack (show roundCount) <> " started"
 
@@ -235,26 +235,26 @@ optimInstIO inst = do
                 _ <- lift $ liftB $ lift $ printLog Info "Perform more optimization"
                 optimInstIOLoop (roundCount + 1) optimInst
 
-transformCodeBlockIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [CodeBlock Loc Int]
+transformCodeBlockIO :: [AbstCodeBlock] -> BackendIdentStateIO [RawCodeBlock]
 transformCodeBlockIO blocks =
     (\blocks' -> blocks' ++ [exitBlock]) . concat
         <$> mapM
             ( \block -> do
                 blocks' <- transformCodeBlock block
-                liftB $ lift $ printTextLog Debug $ "Generated " <> getICBLabel block
+                liftB $ lift $ printTextLog Debug $ "Generated " <> hLabel block
                 pure blocks'
             )
             blocks
 
-livenessIO :: [IntermediateCodeBlock Loc Int] -> BackendIdentStateIO [IntermediateCodeBlock LivenessLoc Int]
+livenessIO :: [AbstCodeBlock] -> BackendIdentStateIO [LivenessCodeBlock]
 livenessIO = mapM livenessIO'
   where
-    livenessIO' :: IntermediateCodeBlock Loc Int -> BackendIdentStateIO (IntermediateCodeBlock LivenessLoc Int)
+    livenessIO' :: AbstCodeBlock -> BackendIdentStateIO LivenessCodeBlock
     livenessIO' block =
         pure $
-            block{getICBInst = liveness $ getICBInst block}
+            block{hInst = liveness $ hInst block}
 
-assignRegisterIO :: [IntermediateCodeBlock LivenessLoc RegID] -> BackendIdentStateIO [IntermediateCodeBlock Loc Int]
+assignRegisterIO :: [LivenessCodeBlock] -> BackendIdentStateIO [AbstCodeBlock]
 assignRegisterIO blocks = do
     -- Report used registers.
     usedIRegLen' <- gets (generatedReg . (#!! RInt) . regContext)
@@ -264,11 +264,11 @@ assignRegisterIO blocks = do
     blocks' <-
         mapM
             ( \block -> do
-                liftB $ lift $ printTextLog Debug $ "Allocating registers for " <> getICBLabel block
+                liftB $ lift $ printTextLog Debug $ "Allocating registers for " <> hLabel block
 
                 block' <- assignRegisterLoop block
 
-                liftB $ lift $ printTextLog Debug $ "Allocated registers for " <> getICBLabel block
+                liftB $ lift $ printTextLog Debug $ "Allocated registers for " <> hLabel block
                 pure block'
             )
             blocks
@@ -283,7 +283,7 @@ assignRegisterIO blocks = do
 
     pure blocks''
   where
-    assignRegisterLoop :: IntermediateCodeBlock LivenessLoc RegID -> BackendIdentStateIO (IntermediateCodeBlock Loc RegID)
+    assignRegisterLoop :: LivenessCodeBlock -> BackendIdentStateIO AbstCodeBlock
     assignRegisterLoop block = do
         let ~(used, spillTarget, block') = assignRegister block
         let usedI = unwrap $ used #!! RInt
@@ -304,12 +304,12 @@ assignRegisterIO blocks = do
             then do
                 case iSpillTarget of
                     Just target -> do
-                        let livenessRemoved = map (substIState livenessLoc) $ getICBInst block
-                        spilt <- spillI target block{getICBInst = livenessRemoved}
+                        let livenessRemoved = map (substIState livenessLoc) $ hInst block
+                        spilt <- spill RInt target block{hInst = livenessRemoved}
 
                         liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (savedReg RInt target)
 
-                        assignRegisterLoop spilt{getICBInst = liveness $ getICBInst spilt}
+                        assignRegisterLoop spilt{hInst = liveness $ hInst spilt}
                     Nothing -> do
                         throwError $ OtherError "Failed to find a spill target for int registers."
             else do
@@ -318,12 +318,12 @@ assignRegisterIO blocks = do
                     then do
                         case fSpillTarget of
                             Just target -> do
-                                let livenessRemoved = map (substIState livenessLoc) $ getICBInst block
-                                spilt <- spillF target block{getICBInst = livenessRemoved}
+                                let livenessRemoved = map (substIState livenessLoc) $ hInst block
+                                spilt <- spill RFloat target block{hInst = livenessRemoved}
 
                                 liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (savedReg RFloat target)
 
-                                assignRegisterLoop spilt{getICBInst = liveness $ getICBInst spilt}
+                                assignRegisterLoop spilt{hInst = liveness $ hInst spilt}
                             Nothing -> do
                                 throwError $ OtherError "Failed to find a spill target for float registers."
                     else do
