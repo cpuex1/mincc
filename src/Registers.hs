@@ -5,6 +5,7 @@
 
 module Registers (
     RegType (..),
+    withRegType,
     RegVariant (..),
     RegVariant',
     VariantItem (..),
@@ -23,15 +24,23 @@ module Registers (
     savedReg,
     generalReg,
     RegOrImm (..),
+    compareReg,
+    compareRegOrImm,
 ) where
+
+import Typing (Ty, TypeKind (TFloat))
 
 -- | Holds the type of a register.
 data RegType ty where
     RInt :: RegType Int
     RFloat :: RegType Float
 
-deriving instance (Show ty) => Show (RegType ty)
-deriving instance (Eq ty) => Eq (RegType ty)
+deriving instance Show (RegType ty)
+deriving instance Eq (RegType ty)
+
+withRegType :: Ty -> (forall a. RegType a -> b) -> b
+withRegType TFloat f = f RFloat
+withRegType _ f = f RInt
 
 -- | Holds two objects - one is for integer registers and the other is for float registers.
 data RegVariant f
@@ -90,15 +99,22 @@ data RegisterKind idTy ty where
     -- | Used for marking it as a "don't care" register.
     DCReg :: RegisterKind idTy ty
 
-deriving instance (Show idTy, Show ty) => Show (RegisterKind idTy ty)
-deriving instance (Eq idTy, Eq ty) => Eq (RegisterKind idTy ty)
+deriving instance (Show idTy) => Show (RegisterKind idTy ty)
+deriving instance (Eq idTy) => Eq (RegisterKind idTy ty)
 
 data Register idTy ty
     = Register
     { regType :: RegType ty
     , regKind :: RegisterKind idTy ty
     }
-    deriving (Show, Eq)
+
+deriving instance (Show idTy) => Show (Register idTy ty)
+deriving instance (Eq idTy) => Eq (Register idTy ty)
+
+compareReg :: (Eq idTy) => Register idTy ty1 -> Register idTy ty2 -> Bool
+compareReg (Register RInt rKind1) (Register RInt rKind2) = rKind1 == rKind2
+compareReg (Register RFloat rKind1) (Register RFloat rKind2) = rKind1 == rKind2
+compareReg _ _ = False
 
 zeroReg :: RegType ty -> Register idTy ty
 zeroReg rTy = Register rTy ZeroReg
@@ -129,7 +145,21 @@ generalReg rTy i = Register rTy (GeneralReg i)
 
 data RegOrImm idTy ty where
     Reg :: Register idTy ty -> RegOrImm idTy ty
-    Imm :: ty -> RegOrImm idTy ty
+    Imm :: RegType ty -> ty -> RegOrImm idTy ty
 
-deriving instance (Show idTy, Show ty) => Show (RegOrImm idTy ty)
-deriving instance (Eq idTy, Eq ty) => Eq (RegOrImm idTy ty)
+instance (Show idTy) => Show (RegOrImm idTy ty) where
+    show (Reg reg) = show reg
+    show (Imm RInt imm) = show imm
+    show (Imm RFloat imm) = show imm
+
+instance (Eq idTy) => Eq (RegOrImm idTy ty) where
+    Reg reg1 == Reg reg2 = reg1 == reg2
+    Imm RInt imm1 == Imm RInt imm2 = imm1 == imm2
+    Imm RFloat imm1 == Imm RFloat imm2 = imm1 == imm2
+    _ == _ = False
+
+compareRegOrImm :: (Eq idTy) => RegOrImm idTy ty1 -> RegOrImm idTy ty2 -> Bool
+compareRegOrImm (Reg reg1) (Reg reg2) = compareReg reg1 reg2
+compareRegOrImm (Imm RInt imm1) (Imm RInt imm2) = imm1 == imm2
+compareRegOrImm (Imm RFloat imm1) (Imm RFloat imm2) = imm1 == imm2
+compareRegOrImm _ _ = False

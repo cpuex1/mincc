@@ -26,6 +26,7 @@ import Registers (
     argsReg,
     heapReg,
     retReg,
+    withRegType,
     zeroReg,
     (#!!),
  )
@@ -53,7 +54,6 @@ import Syntax (
     Ident (ExternalIdent),
     IntBinOp (Sub),
     Literal (LBool, LFloat, LInt, LUnit),
-    Loc,
     Pattern (PRec, PTuple, PUnit, PVar),
     RelationBinOp (Eq, Ne),
     TypedState (getLoc, getType),
@@ -110,15 +110,15 @@ expandExprToInst ::
     Register RegID Int ->
     Register RegID Float ->
     ClosureExpr ->
-    BackendIdentState m [Inst Loc RegID AllowBranch]
+    BackendIdentState m [AbstInst]
 expandExprToInst _ _ (Const _ LUnit) = do
     pure []
 expandExprToInst iReg _ (Const state (LInt i)) = do
-    pure [IMov (getLoc state) iReg (Imm i)]
+    pure [IMov (getLoc state) iReg (Imm RInt i)]
 expandExprToInst iReg _ (Const state (LBool b)) = do
-    pure [IMov (getLoc state) iReg (Imm $ if b then 1 else 0)]
+    pure [IMov (getLoc state) iReg (Imm RInt $ if b then 1 else 0)]
 expandExprToInst _ fReg (Const state (LFloat f)) = do
-    pure [IFMov (getLoc state) fReg (Imm f)]
+    pure [IMov (getLoc state) fReg (Imm RFloat f)]
 expandExprToInst iReg _ (Unary state Not operand) = do
     operand' <- findReg RInt operand
     pure [ICompOp (getLoc state) Eq iReg (zeroReg RInt) (Reg operand')]
@@ -130,24 +130,21 @@ expandExprToInst _ fReg (Unary state FNeg operand) = do
     pure [IFOp (getLoc state) FSub fReg (zeroReg RFloat) operand']
 expandExprToInst iReg _ (Binary state (RelationOp op) operand1 operand2) = do
     ty <- liftB $ getTyOf operand1
-    case ty of
-        TFloat -> do
-            operand1' <- findReg RFloat operand1
-            operand2' <- findReg RFloat operand2
-            pure [IFCompOp (getLoc state) op iReg operand1' operand2']
-        _ -> do
-            operand1' <- findReg RInt operand1
-            operand2' <- findReg RInt operand2
+    withRegType
+        ty
+        $ \rTy -> do
+            operand1' <- findReg rTy operand1
+            operand2' <- findReg rTy operand2
             pure [ICompOp (getLoc state) op iReg operand1' (Reg operand2')]
 expandExprToInst iReg _ (Binary state (IntOp op) operand1 operand2) = do
     const2 <- liftB $ asConstant operand2
     case (const2, op) of
         (Just (LInt i), Sub) -> do
             operand1' <- findReg RInt operand1
-            pure [IIntOp (getLoc state) PAdd iReg operand1' (Imm $ -i)]
+            pure [IIntOp (getLoc state) PAdd iReg operand1' (Imm RInt $ -i)]
         (Just (LInt i), _) -> do
             operand1' <- findReg RInt operand1
-            pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Imm i)]
+            pure [IIntOp (getLoc state) (fromIntBinOp op) iReg operand1' (Imm RInt i)]
         _ -> do
             operand1' <- findReg RInt operand1
             operand2' <- findReg RInt operand2
@@ -168,19 +165,10 @@ expandExprToInst iReg fReg (If state (CComp op lhs rhs) thenExpr elseExpr) = do
     elseExpr' <- expandExprToInst iReg fReg elseExpr
 
     lhsTy <- liftB $ getTyOf lhs
-    case lhsTy of
-        TFloat -> do
-            lhs' <- findReg RFloat lhs
-            rhs' <- findReg RFloat rhs
-            cond <- genTempReg RInt
-
-            pure
-                [ IFCompOp (getLoc state) op cond lhs' rhs'
-                , IBranch (getLoc state) Ne cond (zeroReg RInt) thenExpr' elseExpr'
-                ]
-        _ -> do
-            lhs' <- findReg RInt lhs
-            rhs' <- findReg RInt rhs
+    withRegType lhsTy $
+        \rTy -> do
+            lhs' <- findReg rTy lhs
+            rhs' <- findReg rTy rhs
 
             pure [IBranch (getLoc state) op lhs' rhs' thenExpr' elseExpr']
 expandExprToInst _ _ (Let _ (PRec _ _) _ _) =
@@ -221,12 +209,9 @@ expandExprToInst iReg fReg (Let state (PTuple vals) expr body) = do
         mapM
             ( \(idx, val) -> do
                 ty <- liftB $ getTyOf val
-                case ty of
-                    TFloat -> do
-                        val' <- genReg RFloat val
-                        pure $ IFLoad (getLoc state) val' tuple idx
-                    _ -> do
-                        val' <- genReg RInt val
+                withRegType ty $
+                    \rTy -> do
+                        val' <- genReg rTy val
                         pure $ ILoad (getLoc state) val' tuple idx
             )
             $ zip [0 ..] vals
@@ -236,7 +221,7 @@ expandExprToInst iReg _ (Var state (ExternalIdent ext)) = do
     -- Possibly a global variable.
     prop <- findGlobal ext
     let offset = globalOffset prop
-    pure [IMov (getLoc state) iReg (Imm offset)]
+    pure [IMov (getLoc state) iReg (Imm RInt offset)]
 expandExprToInst iReg fReg (Var state ident) = do
     ty <- liftB $ getTyOf ident
     case ty of
@@ -245,7 +230,7 @@ expandExprToInst iReg fReg (Var state ident) = do
         TFloat -> do
             regID <- findReg RFloat ident
             if fReg /= regID
-                then pure [IFMov (getLoc state) fReg (Reg regID)]
+                then pure [IMov (getLoc state) fReg (Reg regID)]
                 else pure []
         _ -> do
             regID <- findReg RInt ident
@@ -264,24 +249,21 @@ expandExprToInst iReg _ (Tuple state vars) = do
                             prop <- findGlobal ext
                             let offset = globalOffset prop
                             pure
-                                [ IMov (getLoc state) temp (Imm offset)
+                                [ IMov (getLoc state) temp (Imm RInt offset)
                                 , IStore (getLoc state) temp heapReg index
                                 ]
                         _ -> do
                             varTy <- liftB $ getTyOf var
-                            case varTy of
-                                TFloat -> do
-                                    var' <- findReg RFloat var
-                                    pure [IFStore (getLoc state) var' heapReg index]
-                                _ -> do
-                                    var' <- findReg RInt var
+                            withRegType varTy $
+                                \rTy -> do
+                                    var' <- findReg rTy var
                                     pure [IStore (getLoc state) var' heapReg index]
                 )
                 (zip [0 ..] vars)
     pure $
         inst
             ++ [ IMov (getLoc state) iReg (Reg heapReg)
-               , IIntOp (getLoc state) PAdd heapReg heapReg (Imm $ length vars)
+               , IIntOp (getLoc state) PAdd heapReg heapReg (Imm RInt $ length vars)
                ]
 expandExprToInst iReg _ (ArrayCreate state size _) = do
     size' <- findReg RInt size
@@ -293,26 +275,26 @@ expandExprToInst iReg fReg (Get state array index) = do
     array' <- findRegOrImm RInt array
     constIndex <- liftB $ asConstant index
     case (array', constIndex) of
-        (Imm offset, Just (LInt index')) -> do
+        (Imm _ offset, Just (LInt index')) -> do
             -- If both of them are constants, we can calculate the address at compile time.
             let ty = getType state
             case ty of
                 TFloat ->
                     pure
-                        [ IFLoad (getLoc state) fReg (zeroReg RInt) (offset + index')
+                        [ ILoad (getLoc state) fReg (zeroReg RInt) (offset + index')
                         ]
                 _ ->
                     pure
                         [ ILoad (getLoc state) iReg (zeroReg RInt) (offset + index')
                         ]
-        (Imm offset, Nothing) -> do
+        (Imm _ offset, Nothing) -> do
             -- If the array is a constant and the index is a variable, we can calculate the address at compile time.
             index' <- findReg RInt index
             let ty = getType state
             case ty of
                 TFloat ->
                     pure
-                        [ IFLoad (getLoc state) fReg index' offset
+                        [ ILoad (getLoc state) fReg index' offset
                         ]
                 _ ->
                     pure
@@ -324,7 +306,7 @@ expandExprToInst iReg fReg (Get state array index) = do
             case ty of
                 TFloat ->
                     pure
-                        [ IFLoad (getLoc state) fReg reg index'
+                        [ ILoad (getLoc state) fReg reg index'
                         ]
                 _ ->
                     pure
@@ -339,7 +321,7 @@ expandExprToInst iReg fReg (Get state array index) = do
                 TFloat ->
                     pure
                         [ IIntOp (getLoc state) PAdd addr index' array'
-                        , IFLoad (getLoc state) fReg addr 0
+                        , ILoad (getLoc state) fReg addr 0
                         ]
                 _ ->
                     pure
@@ -355,21 +337,21 @@ expandExprToInst _ _ (Put state dest idx src) = do
         TFloat -> do
             src' <- findReg RFloat src
             case (dest', constIdx) of
-                (Imm offset, Just (LInt index')) -> do
+                (Imm _ offset, Just (LInt index')) -> do
                     -- If both of them are constants, we can calculate the address at compile time.
                     pure
-                        [ IFStore (getLoc state) src' (zeroReg RInt) (offset + index')
+                        [ IStore (getLoc state) src' (zeroReg RInt) (offset + index')
                         ]
-                (Imm offset, Nothing) -> do
+                (Imm _ offset, Nothing) -> do
                     -- If the array is a constant and the index is a variable, we can calculate the address at compile time.
                     index' <- findReg RInt idx
                     pure
-                        [ IFStore (getLoc state) src' index' offset
+                        [ IStore (getLoc state) src' index' offset
                         ]
                 (Reg reg, Just (LInt index')) -> do
                     -- If the array is a register and the index is a constant, we can calculate the address at compile time.
                     pure
-                        [ IFStore (getLoc state) src' reg index'
+                        [ IStore (getLoc state) src' reg index'
                         ]
                 (Reg reg, Nothing) -> do
                     -- If both of them are variables, we need to calculate the address at runtime.
@@ -377,7 +359,7 @@ expandExprToInst _ _ (Put state dest idx src) = do
                     addr <- genTempReg RInt
                     pure
                         [ IIntOp (getLoc state) PAdd addr reg (Reg index')
-                        , IFStore (getLoc state) src' addr 0
+                        , IStore (getLoc state) src' addr 0
                         ]
                 _ -> throwError $ OtherError "The index should be integer."
         _ -> do
@@ -385,18 +367,18 @@ expandExprToInst _ _ (Put state dest idx src) = do
             src' <- findRegOrImm RInt src
             (prologue, srcReg) <- case src' of
                 Reg reg -> pure ([], reg)
-                Imm imm -> do
+                Imm _ imm -> do
                     srcReg <- genTempReg RInt
-                    pure ([IMov (getLoc state) srcReg (Imm imm)], srcReg)
+                    pure ([IMov (getLoc state) srcReg (Imm RInt imm)], srcReg)
 
             case (dest', constIdx) of
-                (Imm offset, Just (LInt index')) -> do
+                (Imm _ offset, Just (LInt index')) -> do
                     -- If both of them are constants, we can calculate the address at compile time.
                     pure $
                         prologue
                             ++ [ IStore (getLoc state) srcReg (zeroReg RInt) (offset + index')
                                ]
-                (Imm offset, _) -> do
+                (Imm _ offset, _) -> do
                     -- If the array is a constant and the index is a variable, we can calculate the address at compile time.
                     index' <- findReg RInt idx
                     pure $
@@ -447,7 +429,7 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
                     simpleApp
         _ -> simpleApp
   where
-    mkTuple :: (Monad m) => Text -> [Ident] -> BackendIdentState m [Inst Loc RegID AllowBranch]
+    mkTuple :: (Monad m) => Text -> [Ident] -> BackendIdentState m [AbstInst]
     mkTuple tuple values = do
         prop <- findGlobal tuple
         let offset = globalOffset prop
@@ -455,21 +437,20 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
             <$> mapM
                 ( \(idx, val) -> do
                     ty <- liftB $ getTyOf val
-                    case ty of
-                        TFloat -> do
-                            reg <- findReg RFloat val
-                            pure [IFStore (getLoc state) reg (zeroReg RInt) (offset + idx)]
-                        _ -> do
-                            reg <- findRegOrImm RInt val
+                    withRegType ty $
+                        \rTy -> do
+                            reg <- findRegOrImm rTy val
                             case reg of
                                 Reg reg' -> do
                                     pure [IStore (getLoc state) reg' (zeroReg RInt) (offset + idx)]
-                                Imm imm -> do
+                                Imm RInt imm -> do
                                     temp' <- genTempReg RInt
                                     pure
-                                        [ IMov (getLoc state) temp' (Imm imm)
+                                        [ IMov (getLoc state) temp' (Imm RInt imm)
                                         , IStore (getLoc state) temp' (zeroReg RInt) (offset + idx)
                                         ]
+                                Imm RFloat _ -> do
+                                    throwError $ OtherError "The address cannot be float."
                 )
                 ( zip
                     [0 ..]
@@ -478,29 +459,29 @@ expandExprToInst iReg fReg (DirectApp state func args) = do
 
     simpleApp ::
         (Monad m) =>
-        BackendIdentState m [Inst Loc RegID AllowBranch]
+        BackendIdentState m [AbstInst]
     simpleApp = do
         (iArgs', fArgs') <- resolveArgs args
         case getType state of
             TUnit -> do
                 case findBuiltin func of
                     Just builtin -> do
-                        pure [IRawInst (getLoc state) (builtinInst builtin) RIRUnit iArgs' fArgs']
+                        pure [IRawInst (getLoc state) (builtinInst builtin) (Register RInt DCReg) iArgs' fArgs']
                     Nothing -> do
                         pure [IRichCall (getLoc state) (display func) iArgs' fArgs']
             TFloat -> do
                 case findBuiltin func of
                     Just builtin -> do
-                        pure [IRawInst (getLoc state) (builtinInst builtin) (RIRFloat fReg) iArgs' fArgs']
+                        pure [IRawInst (getLoc state) (builtinInst builtin) fReg iArgs' fArgs']
                     Nothing -> do
                         pure
                             [ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                            , IFMov (getLoc state) fReg (Reg $ retReg RFloat)
+                            , IMov (getLoc state) fReg (Reg $ retReg RFloat)
                             ]
             _ -> do
                 case findBuiltin func of
                     Just builtin -> do
-                        pure [IRawInst (getLoc state) (builtinInst builtin) (RIRInt iReg) iArgs' fArgs']
+                        pure [IRawInst (getLoc state) (builtinInst builtin) iReg iArgs' fArgs']
                     Nothing -> do
                         pure
                             [ IRichCall (getLoc state) (display func) iArgs' fArgs'
@@ -515,7 +496,7 @@ expandExprToInst iReg fReg (ClosureApp state func args) = do
         TFloat -> do
             pure
                 [ IClosureCall (getLoc state) func' iArgs' fArgs'
-                , IFMov (getLoc state) fReg (Reg $ retReg RFloat)
+                , IMov (getLoc state) fReg (Reg $ retReg RFloat)
                 ]
         _ -> do
             pure
@@ -523,7 +504,7 @@ expandExprToInst iReg fReg (ClosureApp state func args) = do
                 , IMov (getLoc state) iReg (Reg $ retReg RInt)
                 ]
 
-extractFreeVars :: (Monad m) => Int -> [Ident] -> BackendIdentState m [Inst Loc RegID AllowBranch]
+extractFreeVars :: (Monad m) => Int -> [Ident] -> BackendIdentState m [AbstInst]
 extractFreeVars closureArg freeVars = do
     iFreeRegisters <- genRegisters RInt freeVars
     fFreeRegisters <- genRegisters RFloat freeVars
@@ -536,7 +517,7 @@ extractFreeVars closureArg freeVars = do
     fLoadInst <-
         mapM
             ( \(num, reg) ->
-                pure $ IFLoad dummyLoc reg argReg num
+                pure $ ILoad dummyLoc reg argReg num
             )
             $ zip [length iFreeRegisters ..] fFreeRegisters
 
@@ -544,7 +525,7 @@ extractFreeVars closureArg freeVars = do
   where
     argReg = argsReg RInt closureArg
 
-extractBoundedVars :: (Monad m) => RegType rTy -> [Ident] -> BackendIdentState m [Inst Loc RegID AllowBranch]
+extractBoundedVars :: (Monad m) => RegType rTy -> [Ident] -> BackendIdentState m [AbstInst]
 extractBoundedVars RInt boundedVars = do
     boundedRegisters <- genRegisters RInt boundedVars
     updateRegContext RInt $ \ctx -> ctx{argsLength = length boundedRegisters}
@@ -558,16 +539,16 @@ extractBoundedVars RFloat boundedVars = do
     updateRegContext RFloat $ \ctx -> ctx{argsLength = length boundedRegisters}
     mapM
         ( \(num, reg) ->
-            pure $ IFMov dummyLoc reg (Reg (argsReg RFloat num))
+            pure $ IMov dummyLoc reg (Reg (argsReg RFloat num))
         )
         $ zip [0 ..] boundedRegisters
 
-toInstructions :: (Monad m) => Function -> BackendIdentState m (IntermediateCodeBlock Loc RegID)
+toInstructions :: (Monad m) => Function -> BackendIdentState m AbstCodeBlock
 toInstructions function = do
     inst <- toInstructions' function
-    pure $ IntermediateCodeBlock (display $ funcName function) 0 inst
+    pure $ HCodeBlock (display $ funcName function) 0 inst
   where
-    toInstructions' :: (Monad m) => Function -> BackendIdentState m [Inst Loc RegID AllowBranch]
+    toInstructions' :: (Monad m) => Function -> BackendIdentState m [AbstInst]
     toInstructions' (Function _ _ _ freeVars boundedArgs body) = do
         iBoundedInst <- extractBoundedVars RInt boundedArgs
         fBoundedInst <- extractBoundedVars RFloat boundedArgs

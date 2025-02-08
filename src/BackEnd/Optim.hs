@@ -9,7 +9,7 @@ module BackEnd.Optim (
 import BackEnd.Optim.Common (BackEndOptimStateT)
 import BackEnd.Optim.MulElim (elimMul)
 import Display (Display (display))
-import IR (IntermediateCodeBlock)
+import IR (AbstCodeBlock)
 
 -- | List of optimizations.
 data BackEndOptimKind
@@ -17,7 +17,7 @@ data BackEndOptimKind
     deriving (Show, Ord, Eq)
 
 -- | Run the optimization.
-runBackEndOptim :: (Monad m) => BackEndOptimKind -> IntermediateCodeBlock stateTy idTy -> BackEndOptimStateT m (IntermediateCodeBlock stateTy idTy)
+runBackEndOptim :: (Monad m) => BackEndOptimKind -> AbstCodeBlock -> BackEndOptimStateT m AbstCodeBlock
 runBackEndOptim MulElim = elimMul
 
 instance Display BackEndOptimKind where

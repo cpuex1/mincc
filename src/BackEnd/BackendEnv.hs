@@ -150,7 +150,7 @@ findReg rTy ident = do
 
 findRegOrImm :: (Monad m) => RegType a -> Ident -> BackendStateT m (RegOrImm RegID a)
 findRegOrImm RInt (ExternalIdent ext) =
-    Imm . globalOffset <$> findGlobal ext
+    Imm RInt . globalOffset <$> findGlobal ext
 findRegOrImm rTy ident = Reg <$> findReg rTy ident
 
 registerReg :: (Monad m) => Ident -> Register RegID a -> BackendStateT m ()

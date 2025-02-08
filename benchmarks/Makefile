@@ -28,7 +28,7 @@ include ./src/mincaml/mincaml.mk
 
 %.bin: %.s
 	mkdir -p $(BUILD_DIR)
-	$(ASM) $(ASM_OPTION) -input $^ -output $(BUILD_DIR)/$(basename $@ .bin)
+	$(ASM) $(ASM_OPTION) --input $^ --output $(BUILD_DIR)/$(basename $@ .bin)
 	cp $(BUILD_DIR)/$@ .
 
 run: $(EXEC).bin

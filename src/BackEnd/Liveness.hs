@@ -1,4 +1,6 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module BackEnd.Liveness (
     liveness,
@@ -6,6 +8,8 @@ module BackEnd.Liveness (
     RegGraph (..),
     LivenessLoc (..),
     LivenessGraph,
+    LivenessInst,
+    LivenessCodeBlock,
     toGraph,
 ) where
 
@@ -13,9 +17,10 @@ import Control.Monad.State (MonadState (get, put), State, evalState, gets, modif
 import Data.Map (Map, fromList)
 import Data.Set (Set, delete, empty, insert, toAscList, union, unions)
 import IR (
-    AllowBranch,
+    AbstInst,
+    HCodeBlock,
     Inst (..),
-    RawInstRetTy (..),
+    InstKind (..),
     RegID,
  )
 import Registers (
@@ -47,6 +52,16 @@ data LivenessLoc = LivenessLoc
     deriving (Show, Eq)
 
 type LivenessState = State (RegVariant Liveness)
+
+data LivenessInstKind
+
+instance InstKind LivenessInstKind where
+    type InstStateTy LivenessInstKind = LivenessLoc
+    type RegIDTy LivenessInstKind = RegID
+    type AllowInstBranch LivenessInstKind = True
+
+type LivenessInst = Inst LivenessInstKind
+type LivenessCodeBlock = HCodeBlock LivenessInstKind
 
 data RegGraph a = RegGraph
     { vertices :: Set RegID
@@ -88,22 +103,16 @@ getState loc' =
     gets $ LivenessLoc loc'
 
 -- | Calculates liveness information for each instruction.
-liveness :: [Inst Loc RegID AllowBranch] -> [Inst LivenessLoc RegID AllowBranch]
+liveness :: [AbstInst] -> [LivenessInst]
 liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ RegVariant (Liveness empty) (Liveness empty)
   where
-    liveness' :: Inst Loc RegID AllowBranch -> LivenessState (Inst LivenessLoc RegID AllowBranch)
+    liveness' :: AbstInst -> LivenessState LivenessInst
     liveness' (ICompOp state op dest src1 src2) = do
         state' <- getState state
         remove dest
         markUsed src1
         markUsedImm src2
         pure $ ICompOp state' op dest src1 src2
-    liveness' (IFCompOp state op dest src1 src2) = do
-        state' <- getState state
-        remove dest
-        markUsed src1
-        markUsed src2
-        pure $ IFCompOp state' op dest src1 src2
     liveness' (IIntOp state op dest src1 src2) = do
         state' <- getState state
         remove dest
@@ -121,11 +130,6 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ RegVariant
         remove dest
         markUsedImm src
         pure $ IMov state' dest src
-    liveness' (IFMov state dest src) = do
-        state' <- getState state
-        remove dest
-        markUsedImm src
-        pure $ IFMov state' dest src
     liveness' (IRichCall state label iArgs fArgs) = do
         state' <- getState state
         mapM_ markUsedImm iArgs
@@ -153,27 +157,12 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ RegVariant
         markUsed dest
         markUsed src
         pure $ IStore state' dest src offset
-    liveness' (IFLoad state dest src offset) = do
-        state' <- getState state
-        remove dest
-        markUsed src
-        pure $ IFLoad state' dest src offset
-    liveness' (IFStore state dest src offset) = do
-        state' <- getState state
-        markUsed dest
-        markUsed src
-        pure $ IFStore state' dest src offset
     liveness' (IRawInst state name retTy iArgs fArgs) = do
         state' <- getState state
-        removeRet retTy
+        remove retTy
         mapM_ markUsedImm iArgs
         mapM_ markUsed fArgs
         pure $ IRawInst state' name retTy iArgs fArgs
-      where
-        removeRet :: RawInstRetTy RegID -> LivenessState ()
-        removeRet RIRUnit = pure ()
-        removeRet (RIRInt reg) = remove reg
-        removeRet (RIRFloat reg) = remove reg
     liveness' (IBranch state op left right thenInst elseInst) = do
         env <- get
         thenInst' <- mapM liveness' $ reverse thenInst

@@ -4,12 +4,12 @@ module BackEnd.Optim.MulElim (elimMul) where
 
 import BackEnd.Optim.Common (BackEndOptimStateT)
 import IR (
-    AllowBranch,
+    AbstCodeBlock,
+    HCodeBlock (hInst),
     Inst (IBranch, IIntOp),
-    IntermediateCodeBlock (getICBInst),
     PrimitiveIntOp (PDiv, PMul, PShiftL, PShiftR),
  )
-import Registers (RegOrImm (Imm))
+import Registers (RegOrImm (Imm), RegType (RInt))
 
 log2 :: Int -> Maybe Int
 log2 1 = Just 0
@@ -18,19 +18,19 @@ log2 n
     | n `mod` 2 == 1 = Nothing
     | otherwise = (+ 1) <$> log2 (n `div` 2)
 
-elimMul :: (Monad m) => IntermediateCodeBlock stateTy idTy -> BackEndOptimStateT m (IntermediateCodeBlock stateTy idTy)
+elimMul :: (Monad m) => AbstCodeBlock -> BackEndOptimStateT m AbstCodeBlock
 elimMul block =
-    pure $ block{getICBInst = map elimMul' $ getICBInst block}
+    pure $ block{hInst = map elimMul' $ hInst block}
   where
-    elimMul' :: Inst stateTy idTy AllowBranch -> Inst stateTy idTy AllowBranch
-    elimMul' (IIntOp state PMul dest src (Imm i)) =
+    elimMul' :: Inst ty -> Inst ty
+    elimMul' (IIntOp state PMul dest src (Imm _ i)) =
         case log2 i of
-            Just e -> IIntOp state PShiftL dest src (Imm e)
-            Nothing -> IIntOp state PMul dest src (Imm i)
-    elimMul' (IIntOp state PDiv dest src (Imm i)) =
+            Just e -> IIntOp state PShiftL dest src (Imm RInt e)
+            Nothing -> IIntOp state PMul dest src (Imm RInt i)
+    elimMul' (IIntOp state PDiv dest src (Imm _ i)) =
         case log2 i of
-            Just e -> IIntOp state PShiftR dest src (Imm e)
-            Nothing -> IIntOp state PDiv dest src (Imm i)
+            Just e -> IIntOp state PShiftR dest src (Imm RInt e)
+            Nothing -> IIntOp state PDiv dest src (Imm RInt i)
     elimMul' (IBranch state op operand1 operand2 left right) =
         IBranch state op operand1 operand2 (map elimMul' left) (map elimMul' right)
     elimMul' inst = inst
