@@ -101,8 +101,8 @@ data InstTerm ty where
     Nop :: InstTerm ty
 
 isTerm :: InstTerm ty -> Bool
-isTerm Nop = True
-isTerm _ = False
+isTerm Nop = False
+isTerm _ = True
 
 class InstKind ty where
     type InstStateTy ty :: Type
