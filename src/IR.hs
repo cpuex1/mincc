@@ -224,6 +224,8 @@ data Inst ty where
         [Inst ty] ->
         Inst ty
 
+deriving instance (Show (InstStateTy ty), Show (RegIDTy ty)) => Show (Inst ty)
+
 instance (Eq (InstStateTy ty), Eq (RegIDTy ty)) => Eq (Inst ty) where
     (ICompOp state1 op1 dest1 src1_1@(Register RInt _) src1_2) == (ICompOp state2 op2 dest2 src2_1@(Register RInt _) src2_2) =
         state1 == state2 && op1 == op2 && dest1 == dest2 && src1_1 == src2_1 && src1_2 == src2_2
@@ -321,7 +323,7 @@ substIState f (IBranch state op left right thenExpr elseExpr) =
             elseExpr
         )
 
-weakSubstReg :: (Eq idTy, Eq ty) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
+weakSubstReg :: (Eq idTy) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
 weakSubstReg beforeReg afterReg victim =
     if victim == beforeReg then afterReg else victim
 
