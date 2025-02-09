@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 module MiddleEnd.Optim.CompMerging (runMergeComp) where
 
 import Control.Monad.State (StateT, evalStateT, gets, modify)
@@ -41,4 +43,7 @@ mergeComp (If state cond then' else') = do
     then'' <- mergeComp then'
     else'' <- mergeComp else'
     pure $ If state cond then'' else''
+mergeComp (Loop state args values body) = do
+    body' <- mergeComp body
+    pure $ Loop state args values body'
 mergeComp expr = pure expr

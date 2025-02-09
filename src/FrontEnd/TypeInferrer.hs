@@ -30,8 +30,9 @@ instance ExprKind ITypedExprKind where
     type StateTy ITypedExprKind = (ITy, Loc)
     type IdentTy ITypedExprKind = Ident
     type OperandTy ITypedExprKind = ITypedExpr
-    type ClosureTy ITypedExprKind = False
-    type BranchTy ITypedExprKind = False
+    type AllowBranch ITypedExprKind = False
+    type AllowLoop ITypedExprKind = False
+    type AllowClosure ITypedExprKind = False
 
 type ITypedExpr = Expr ITypedExprKind
 

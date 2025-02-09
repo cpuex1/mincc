@@ -109,6 +109,11 @@ getFreeVars kExpr bounded = eFreeVars $ execState (getFreeVarState kExpr) (FreeA
     getFreeVarState (App _ func args) = do
         registerFreeVar func
         mapM_ registerFreeVar args
+    getFreeVarState (Loop _ _ values body) = do
+        mapM_ registerFreeVar values
+        getFreeVarState body
+    getFreeVarState (Continue _ values) = do
+        mapM_ registerFreeVar values
 
 -- | Determines whether the function has been treated as a closure.
 isUsedAsClosure :: Ident -> KExpr -> Bool
@@ -273,3 +278,8 @@ genFunctions (Get state array index) =
     pure $ Get state array index
 genFunctions (Put state array index value) =
     pure $ Put state array index value
+genFunctions (Loop state args values body) = do
+    body' <- genFunctions body
+    pure $ Loop state args values body'
+genFunctions (Continue state values) =
+    pure $ Continue state values

@@ -54,11 +54,10 @@ library
       MiddleEnd.Optim
       MiddleEnd.Optim.Common
       MiddleEnd.Optim.CompMerging
-      MiddleEnd.Optim.ConstExpansion
       MiddleEnd.Optim.ConstFold
       MiddleEnd.Optim.CSE
       MiddleEnd.Optim.Inlining
-      MiddleEnd.Optim.UnitElim
+      MiddleEnd.Optim.LoopDetection
       MiddleEnd.Optim.UnusedElim
       MiddleEnd.Optim.VarMerging
       MiddleEnd.Validator

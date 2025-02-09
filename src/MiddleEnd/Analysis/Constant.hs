@@ -3,7 +3,7 @@
 module MiddleEnd.Analysis.Constant (registerConstants) where
 
 import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (constant), updateProp)
-import Syntax (Expr (Const, If, Let), KExpr, Pattern (PRec, PVar))
+import Syntax (Expr (Const, If, Let, Loop), KExpr, Pattern (PRec, PVar))
 
 -- | Registers variables that hold a constant value.
 registerConstants :: (Monad m) => KExpr -> IdentEnvT m ()
@@ -19,4 +19,6 @@ registerConstants (Let _ _ expr body) = do
 registerConstants (If _ _ t f) = do
     registerConstants t
     registerConstants f
+registerConstants (Loop _ _ _ body) = do
+    registerConstants body
 registerConstants _ = pure ()

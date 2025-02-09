@@ -141,6 +141,9 @@ expandArrayCreate expr = do
         then'' <- expandArrayCreate' then'
         else'' <- expandArrayCreate' else'
         pure $ If state cond then'' else''
+    expandArrayCreate' (Loop state args values body) = do
+        body' <- expandArrayCreate' body
+        pure $ Loop state args values body'
     expandArrayCreate' (ArrayCreate state size val) = do
         temp <- lift $ genNewVar (getType state)
         expandArrayCreate' (Let state (PVar temp) (ArrayCreate state size val) (Var state temp))

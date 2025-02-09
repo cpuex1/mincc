@@ -84,6 +84,14 @@ searchUnused (Put _ arr idx val) = do
     markAsUsed arr
     markAsUsed idx
     markAsUsed val
+searchUnused (Loop _ _ values body) = do
+    -- TODO: Implement the loop argument elimination.
+
+    -- The loop arguments should not be marked as used in this time.
+    mapM_ markAsUsed values
+    searchUnused body
+searchUnused (Continue _ args) = do
+    mapM_ markAsUsed args
 
 unusedElim :: (Monad m) => KExpr -> OptimStateT m KExpr
 unusedElim expr =
@@ -120,4 +128,7 @@ unusedElim expr =
         removedLeft <- removeUnused lhs
         removedRight <- removeUnused rhs
         pure $ If state cond removedLeft removedRight
+    removeUnused (Loop state args values body) = do
+        removedBody <- removeUnused body
+        pure $ Loop state args values removedBody
     removeUnused expr' = pure expr'

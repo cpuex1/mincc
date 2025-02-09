@@ -64,6 +64,7 @@ data CommandLineArg = CommandLineArg
     , optConstFold :: Bool
     , optInlining :: Bool
     , optUnusedElim :: Bool
+    , optLoopDetection :: Bool
     , optimize :: Bool
     , iLimit :: Int
     , fLimit :: Int
@@ -150,6 +151,10 @@ parseArg =
         <*> switch
             ( long "opt-unused-elim"
                 <> help "Enable unused variable elimination optimization"
+            )
+        <*> switch
+            ( long "opt-loop-detection"
+                <> help "Enable loop detection optimization"
             )
         <*> switch
             ( long "optimize"
@@ -249,8 +254,9 @@ toCompilerConfig arg = do
             . insertIf (optimize arg || optVarMerging arg) VarMerging
             . insertIf (optimize arg || optConstFold arg) ConstFold
             . insertIf ((optimize arg || optConstFold arg) && not (disableFloatFold arg)) ConstFoldFloat
-            . insertIf (optimize arg || optInlining arg) Inlining
             . insertIf (optimize arg || optUnusedElim arg) UnusedElim
+            . insertIf (optimize arg || optInlining arg) Inlining
+            . insertIf (optLoopDetection arg) LoopDetection -- TODO: Stabilize this optimization.
             $ mempty
 
     selectedBackEndOptim =

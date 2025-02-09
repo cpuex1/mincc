@@ -8,6 +8,7 @@ import MiddleEnd.Optim.Common (OptimStateT)
 import MiddleEnd.Optim.CompMerging (runMergeComp)
 import MiddleEnd.Optim.ConstFold (constFold, constFoldFloat)
 import MiddleEnd.Optim.Inlining (runInlining)
+import MiddleEnd.Optim.LoopDetection (runReplaceWithLoops)
 import MiddleEnd.Optim.UnusedElim (unusedElim)
 import MiddleEnd.Optim.VarMerging (mergeVars)
 import Syntax (KExpr)
@@ -21,6 +22,7 @@ data OptimKind
     | ConstFoldFloat
     | UnusedElim
     | Inlining
+    | LoopDetection
     deriving (Show, Ord, Eq)
 
 -- | Run the optimization.
@@ -32,9 +34,11 @@ runOptim ConstFold = constFold
 runOptim ConstFoldFloat = constFoldFloat
 runOptim Inlining = runInlining
 runOptim UnusedElim = unusedElim
+runOptim LoopDetection = runReplaceWithLoops
 
 instance Display OptimKind where
     display CompMerging = "Comparison merging"
+    display LoopDetection = "Loop detection"
     display CSE = "Common subexpression elimination"
     display VarMerging = "Variable merging"
     display ConstFold = "Constant folding"

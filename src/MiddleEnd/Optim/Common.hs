@@ -4,6 +4,7 @@ module MiddleEnd.Optim.Common (
     genFresh,
     withFreshVars,
     purge,
+    occur,
     Threshold (..),
     toThreshold,
     OptimContext (..),
@@ -15,6 +16,7 @@ import Control.Monad.State (StateT)
 import Control.Monad.Trans (lift)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar, getTyOf)
 import Syntax (
+    Cond (CComp, CIdentity),
     Expr (..),
     Ident,
     KExpr,
@@ -69,6 +71,15 @@ withFreshVars (If state cond then' else') = do
     then'' <- withFreshVars then'
     else'' <- withFreshVars else'
     pure $ If state cond then'' else''
+withFreshVars (Loop state args values body) = do
+    freshArgs <- mapM genFresh args
+    body' <-
+        withFreshVars
+            $ foldl
+                (\e (from, to) -> subst from to e)
+                body
+            $ zip args freshArgs
+    pure $ Loop state args values body'
 withFreshVars expr = pure expr
 
 -- | Purges all location information.
@@ -81,6 +92,25 @@ purge =
             )
             pure
             pure
+
+occur :: Ident -> KExpr -> Bool
+occur _ Const{} = False
+occur ident (Unary _ _ expr) = ident == expr
+occur ident (Binary _ _ lhs rhs) = ident == lhs || ident == rhs
+occur ident (If _ (CIdentity cond) then' else') = ident == cond || occur ident then' || occur ident else'
+occur ident (If _ (CComp _ lhs rhs) then' else') = ident == lhs || ident == rhs || occur ident then' || occur ident else'
+occur ident (Let _ PUnit expr body) = occur ident expr || occur ident body
+occur ident (Let _ (PVar _) expr body) = occur ident expr || occur ident body
+occur ident (Let _ (PRec _ _) expr body) = occur ident expr || occur ident body
+occur ident (Let _ (PTuple _) expr body) = occur ident expr || occur ident body
+occur ident (Var _ ident') = ident == ident'
+occur ident (App _ func args) = ident == func || any (== ident) args
+occur ident (Tuple _ values) = any (== ident) values
+occur ident (ArrayCreate _ size value) = ident == size || ident == value
+occur ident (Get _ array index) = ident == array || ident == index
+occur ident (Put _ array index value) = ident == array || ident == index || ident == value
+occur ident (Loop _ _ values body) = ident `elem` values || occur ident body
+occur ident (Continue _ values) = ident `elem` values
 
 -- | Threshold for inlining.
 data Threshold

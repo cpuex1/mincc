@@ -16,4 +16,6 @@ flattenExpr (Let (TypedState ty loc) pat value body) =
     insert (Let (TypedState _ loc') pat' value' body') =
         Let (TypedState ty loc') pat' value' (insert body')
     insert expr = Let (TypedState ty loc) pat expr (flattenExpr body)
+flattenExpr (Loop s args values body) =
+    Loop s args values (flattenExpr body)
 flattenExpr e = e

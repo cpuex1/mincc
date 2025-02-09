@@ -100,6 +100,10 @@ constFold (Tuple state args) = pure $ Tuple state args
 constFold (ArrayCreate state size val) = pure $ ArrayCreate state size val
 constFold (Get state arr idx) = pure $ Get state arr idx
 constFold (Put state arr idx val) = pure $ Put state arr idx val
+constFold (Loop state args values body) = do
+    body' <- constFold body
+    pure $ Loop state args values body'
+constFold (Continue state args) = pure $ Continue state args
 
 {- | Calculates constant variables in the compile-time.
 | This function is specialized for floating-point numbers.
@@ -162,3 +166,7 @@ constFoldFloat (Tuple state args) = pure $ Tuple state args
 constFoldFloat (ArrayCreate state size val) = pure $ ArrayCreate state size val
 constFoldFloat (Get state arr idx) = pure $ Get state arr idx
 constFoldFloat (Put state arr idx val) = pure $ Put state arr idx val
+constFoldFloat (Loop state args values body) = do
+    body' <- constFoldFloat body
+    pure $ Loop state args values body'
+constFoldFloat (Continue state args) = pure $ Continue state args
