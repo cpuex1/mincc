@@ -12,12 +12,12 @@ import qualified Data.Set as S
 import IR (
     AbstCodeBlock,
     HCodeBlock (hInst),
-    RegID,
     getAllIState,
     mapReg,
     substIState,
  )
 import Registers (
+    RegID,
     RegVariant',
     Register (Register),
     RegisterKind (SavedReg),

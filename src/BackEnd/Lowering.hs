@@ -19,6 +19,7 @@ import IR
 import MiddleEnd.Analysis.Identifier (IdentEnvT, asConstant, getTyOf)
 import MiddleEnd.Globals (GlobalProp (globalOffset))
 import Registers (
+    RegID,
     RegOrImm (Imm, Reg),
     RegType (RFloat, RInt),
     Register (Register),

@@ -1,5 +1,7 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module BackEnd.Liveness (
@@ -16,14 +18,16 @@ module BackEnd.Liveness (
 import Control.Monad.State (MonadState (get, put), State, evalState, gets, modify)
 import Data.Map (Map, fromList)
 import Data.Set (Set, delete, empty, insert, toAscList, union, unions)
+import Data.Text (intercalate)
+import Display (Display (display))
 import IR (
     AbstInst,
     HCodeBlock,
     Inst (..),
     InstKind (..),
-    RegID,
  )
 import Registers (
+    RegID,
     RegOrImm (Reg),
     RegType (RFloat, RInt),
     RegVariant (RegVariant),
@@ -45,11 +49,22 @@ instance Semigroup (Liveness a) where
 instance Monoid (Liveness a) where
     mempty = Liveness empty
 
+instance Display (RegVariant Liveness) where
+    display (RegVariant (Liveness iAlive) (Liveness fAlive)) =
+        "["
+            <> intercalate "," (map (display . Register RInt . SavedReg) (toAscList iAlive))
+            <> "], ["
+            <> intercalate "," (map (display . Register RFloat . SavedReg) (toAscList fAlive))
+            <> "]"
+
 data LivenessLoc = LivenessLoc
     { livenessLoc :: Loc
     , livenessProp :: RegVariant Liveness
     }
     deriving (Show, Eq)
+
+instance Display LivenessLoc where
+    display loc = display $ livenessProp loc
 
 type LivenessState = State (RegVariant Liveness)
 

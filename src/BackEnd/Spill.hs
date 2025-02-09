@@ -8,9 +8,8 @@ import IR (
     AbstInst,
     HCodeBlock (hInst, localVars),
     Inst (..),
-    RegID,
  )
-import Registers (RegOrImm (Reg), RegType (RFloat, RInt), Register (Register), savedReg, stackReg)
+import Registers (RegID, RegOrImm (Reg), RegType (RFloat, RInt), Register (Register), savedReg, stackReg)
 import Syntax (dummyLoc)
 
 loadNewReg :: (Monad m) => RegType b -> Int -> RegID -> Register RegID a -> BackendStateT m (Register RegID a, [AbstInst])

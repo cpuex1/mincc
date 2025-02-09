@@ -39,9 +39,12 @@ module Syntax (
 
 import Control.Monad.Identity (Identity (runIdentity))
 import Data.Kind (Type)
-import Data.Text (Text, pack)
+import Data.Text (Text, intercalate, pack, unwords)
+import Display (Display (display), DisplayI (displayI), insertIndent)
+import Numeric (showFFloat)
 import Text.Megaparsec.Pos (SourcePos, sourceColumn, sourceLine, sourceName, unPos)
 import Typing (Ty, TypeKind (TBool, TFloat, TInt, TUnit))
+import Prelude hiding (unwords)
 
 data Literal
     = LUnit
@@ -49,6 +52,13 @@ data Literal
     | LInt Int
     | LFloat Float
     deriving (Show, Eq, Ord)
+
+instance Display Literal where
+    display LUnit = "()"
+    display (LBool True) = "true"
+    display (LBool False) = "false"
+    display (LInt n) = pack $ show n
+    display (LFloat f) = pack $ showFFloat Nothing f ""
 
 getLiteralType :: Literal -> Ty
 getLiteralType LUnit = TUnit
@@ -62,6 +72,11 @@ data UnaryOp
     | FNeg
     deriving (Show, Eq, Ord)
 
+instance Display UnaryOp where
+    display Not = "not"
+    display Neg = "-"
+    display FNeg = "-."
+
 data RelationBinOp = Eq | Ne | Lt | Ge deriving (Show, Eq, Ord)
 data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq, Ord)
 data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq, Ord)
@@ -71,9 +86,26 @@ data BinaryOp
     | FloatOp FloatBinOp
     deriving (Show, Eq, Ord)
 
+instance Display BinaryOp where
+    display (RelationOp Eq) = "="
+    display (RelationOp Ge) = ">="
+    display (RelationOp Ne) = "<>"
+    display (RelationOp Lt) = "<"
+    display (IntOp Add) = "+"
+    display (IntOp Sub) = "-"
+    display (IntOp Mul) = "*"
+    display (IntOp Div) = "/"
+    display (FloatOp FAdd) = "+."
+    display (FloatOp FSub) = "-."
+    display (FloatOp FMul) = "*."
+    display (FloatOp FDiv) = "/."
+
 data RawIdent
     = RawIdent Loc Text
     deriving (Show, Eq)
+
+instance Display RawIdent where
+    display (RawIdent _ ident) = ident
 
 data Ident
     = -- | The entry of the program.
@@ -85,6 +117,23 @@ data Ident
     | -- | An identifier that is used to refer to an external item.
       ExternalIdent Text
     deriving (Show, Eq, Ord)
+
+instance DisplayI Ident where
+    displayI _ (Entry _) = "__entry"
+    displayI _ (UserDefined pos ident) =
+        "__"
+            <> ident
+            <> "_"
+            <> (pack . show . locLine) pos
+            <> "_"
+            <> (pack . show . locColumn) pos
+    displayI _ (CompilerGenerated ident) =
+        "__gen_" <> pack (show ident)
+    displayI _ (ExternalIdent ident) =
+        "__ext_" <> ident
+
+instance Display Ident where
+    display = displayI 0
 
 identLoc :: Ident -> Loc
 identLoc (Entry pos) = pos
@@ -119,6 +168,14 @@ deriving instance
 data Loc = Loc {locFileName :: Text, locLine :: Int, locColumn :: Int}
     deriving (Show, Eq, Ord)
 
+instance Display Loc where
+    display loc =
+        locFileName loc
+            <> ":"
+            <> pack (show (locLine loc))
+            <> ":"
+            <> pack (show (locColumn loc))
+
 fromSourcePos :: SourcePos -> Loc
 fromSourcePos pos = Loc (pack (sourceName pos)) (unPos (sourceLine pos)) (unPos (sourceColumn pos))
 
@@ -127,6 +184,9 @@ dummyLoc = Loc "__dummy" 0 0
 
 data TypedState = TypedState {getType :: Ty, getLoc :: Loc}
     deriving (Show, Eq, Ord)
+
+instance Display TypedState where
+    display (TypedState ty _) = ": " <> display ty
 
 data Function = Function
     { funcState :: TypedState
@@ -137,6 +197,23 @@ data Function = Function
     , funcBody :: ClosureExpr
     }
     deriving (Show, Eq)
+
+instance DisplayI Function where
+    displayI depth func =
+        insertIndent depth
+            <> display (funcName func)
+            <> "@"
+            <> (if isDirect func then "direct" else "closure")
+            <> " {"
+            <> unwords (map display (freeVars func))
+            <> "} "
+            <> unwords (map display (boundedArgs func))
+            <> ":\n"
+            <> insertIndent (depth + 1)
+            <> display (funcBody func)
+
+instance Display Function where
+    display = displayI 0
 
 -- | The type of an expression.
 class ExprKind ty where
@@ -309,6 +386,111 @@ data Expr kind where
 deriving instance (Show (StateTy kind), Show (IdentTy kind), Show (OperandTy kind)) => Show (Expr kind)
 deriving instance (Eq (StateTy kind), Eq (IdentTy kind), Eq (OperandTy kind)) => Eq (Expr kind)
 deriving instance (Ord (StateTy kind), Ord (IdentTy kind), Ord (OperandTy kind)) => Ord (Expr kind)
+
+instance (Display (StateTy kind), Display (IdentTy kind), DisplayI (OperandTy kind)) => DisplayI (Expr kind) where
+    displayI indentDepth expression = withoutState expression indentDepth <> " (* " <> display (getExprState expression) <> " *)"
+      where
+        withoutState :: (Display (StateTy kind), Display (IdentTy kind), DisplayI (OperandTy kind)) => Expr kind -> Int -> Text
+        withoutState (Const _ lit) _ = display lit
+        withoutState (Unary _ op expr) depth =
+            "(" <> display op <> " " <> displayI depth expr <> ")"
+        withoutState (Binary _ op expr1 expr2) depth =
+            "(" <> displayI depth expr1 <> " " <> display op <> " " <> displayI depth expr2 <> ")"
+        withoutState (If _ (CIdentity cond) thenExpr elseExpr) depth =
+            "(if "
+                <> displayI depth cond
+                <> " then\n"
+                <> insertIndent (depth + 1)
+                <> displayI (depth + 1) thenExpr
+                <> "\n"
+                <> insertIndent depth
+                <> "else\n"
+                <> insertIndent (depth + 1)
+                <> displayI (depth + 1) elseExpr
+                <> ")"
+        withoutState (If _ (CComp op lhs rhs) thenExpr elseExpr) depth =
+            "(if "
+                <> "("
+                <> displayI depth lhs
+                <> " "
+                <> display (RelationOp op)
+                <> " "
+                <> displayI depth rhs
+                <> ")"
+                <> " then\n"
+                <> insertIndent (depth + 1)
+                <> displayI (depth + 1) thenExpr
+                <> "\n"
+                <> insertIndent depth
+                <> "else\n"
+                <> insertIndent (depth + 1)
+                <> displayI (depth + 1) elseExpr
+                <> ")"
+        withoutState (Let _ PUnit value body) depth =
+            "(let () = "
+                <> displayI depth value
+                <> " in\n"
+                <> insertIndent depth
+                <> displayI depth body
+                <> ")"
+        withoutState (Let _ (PVar v) value body) depth =
+            "(let "
+                <> display v
+                <> " = "
+                <> displayI depth value
+                <> " in\n"
+                <> insertIndent depth
+                <> displayI depth body
+                <> ")"
+        withoutState (Let _ (PRec f args) value body) depth =
+            "(let rec "
+                <> display f
+                <> " "
+                <> Data.Text.unwords (Prelude.map display args)
+                <> " =\n"
+                <> insertIndent (depth + 1)
+                <> displayI (depth + 1) value
+                <> " in\n"
+                <> insertIndent depth
+                <> displayI depth body
+                <> ")"
+        withoutState (Let _ (PTuple values) value body) depth =
+            "(let ("
+                <> Data.Text.unwords (Prelude.map display values)
+                <> ") = "
+                <> displayI depth value
+                <> " in\n"
+                <> insertIndent depth
+                <> displayI depth body
+                <> ")"
+        withoutState (App _ func args) depth =
+            "(" <> displayI depth func <> " " <> Data.Text.unwords (Prelude.map (displayI depth) args) <> ")"
+        withoutState (Tuple _ values) depth =
+            "(" <> intercalate ", " (Prelude.map (displayI depth) values) <> ")"
+        withoutState (ArrayCreate _ size initVal) depth =
+            "(Array.create " <> displayI depth size <> " " <> displayI depth initVal <> ")"
+        withoutState (Get _ array idx) depth =
+            "(" <> displayI depth array <> ".(" <> displayI depth idx <> "))"
+        withoutState (Put _ array idx value) depth =
+            "(" <> displayI depth array <> ".(" <> displayI depth idx <> ") <- " <> displayI depth value <> ")"
+        withoutState (Var _ v) _ = display v
+        withoutState (Loop _ args values body) depth =
+            "(loop "
+                <> Data.Text.intercalate ", " (Prelude.zipWith (\a v -> display a <> " := " <> display v) args values)
+                <> "\n"
+                <> insertIndent (depth + 1)
+                <> displayI (depth + 1) body
+                <> ")"
+        withoutState (Continue _ values) _ = "continue " <> Data.Text.unwords (Prelude.map display values)
+        withoutState (MakeClosure _ ident args) depth =
+            "<" <> display ident <> ", " <> Data.Text.unwords (Prelude.map (displayI depth) args) <> ">"
+        withoutState (ClosureApp _ closure args) depth =
+            "(" <> display closure <> " @ " <> Data.Text.unwords (Prelude.map (displayI depth) args) <> ")"
+        withoutState (DirectApp _ func args) depth =
+            "(" <> display func <> " " <> Data.Text.unwords (Prelude.map (displayI depth) args) <> ")"
+
+instance (Display (StateTy kind), Display (IdentTy kind), DisplayI (OperandTy kind)) => Display (Expr kind) where
+    display = displayI 0
 
 getExprState :: Expr kind -> StateTy kind
 getExprState (Const state _) = state

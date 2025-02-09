@@ -12,8 +12,8 @@ import Control.Monad.State (State, evalState, gets, modify)
 import Data.List ((\\))
 import Data.Map.Lazy (Map, alter, empty, insert, lookup)
 import Data.Maybe (fromMaybe, mapMaybe)
-import IR (RegID)
 import Registers (
+    RegID,
     RegOrImm (Reg),
     RegType,
     Register (Register),
