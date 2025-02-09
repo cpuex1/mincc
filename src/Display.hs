@@ -365,6 +365,17 @@ instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => DisplayI (Inst ty) wh
             toOp Ne = "ifne!"
             toOp Ge = "ifge!"
             toOp Lt = "iflt!"
+        withoutState (ILoop _ iArgs fArgs iValues fValues body) depth' =
+            "loop! "
+                <> Data.Text.intercalate
+                    ", "
+                    ( Prelude.zipWith (\a v -> display a <> " := " <> display v) iArgs iValues
+                        ++ Prelude.zipWith (\a v -> display a <> " := " <> display v) fArgs fValues
+                    )
+                <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth' + 1) <> displayI i (depth' + 1)) body)
+        withoutState (IContinue _ iArgs fArgs) _ =
+            "continue! "
+                <> Data.Text.intercalate ", " (Prelude.map display iArgs ++ Prelude.map display fArgs)
 
 instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (Inst ty) where
     display inst = displayI inst 0

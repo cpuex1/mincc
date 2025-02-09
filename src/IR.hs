@@ -223,6 +223,21 @@ data Inst ty where
         [Inst ty] ->
         [Inst ty] ->
         Inst ty
+    ILoop ::
+        (AllowInstBranch ty ~ True) =>
+        InstStateTy ty ->
+        [Register (RegIDTy ty) Int] ->
+        [Register (RegIDTy ty) Float] ->
+        [RegOrImm (RegIDTy ty) Int] ->
+        [RegOrImm (RegIDTy ty) Float] ->
+        [Inst ty] ->
+        Inst ty
+    IContinue ::
+        (AllowInstBranch ty ~ True) =>
+        InstStateTy ty ->
+        [RegOrImm (RegIDTy ty) Int] ->
+        [RegOrImm (RegIDTy ty) Float] ->
+        Inst ty
 
 deriving instance (Show (InstStateTy ty), Show (RegIDTy ty)) => Show (Inst ty)
 
@@ -284,6 +299,8 @@ getIState (ILoad state _ _ _) = state
 getIState (IStore state _ _ _) = state
 getIState (IRawInst state _ _ _ _) = state
 getIState (IBranch state _ _ _ _ _) = state
+getIState (ILoop state _ _ _ _ _) = state
+getIState (IContinue state _ _) = state
 
 getAllIState :: Inst ty -> [InstStateTy ty]
 getAllIState (IBranch state _ _ _ thenInst elseInst) =
@@ -322,6 +339,18 @@ substIState f (IBranch state op left right thenExpr elseExpr) =
             (substIState f)
             elseExpr
         )
+substIState f (ILoop state iArgs fArgs iImmArgs fImmArgs loopExpr) =
+    ILoop
+        (f state)
+        iArgs
+        fArgs
+        iImmArgs
+        fImmArgs
+        ( map
+            (substIState f)
+            loopExpr
+        )
+substIState f (IContinue state iArgs fArgs) = IContinue (f state) iArgs fArgs
 
 weakSubstReg :: (Eq idTy) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
 weakSubstReg beforeReg afterReg victim =
@@ -382,6 +411,19 @@ mapReg substR (IBranch state op left right thenExpr elseExpr) =
             (mapReg substR)
             elseExpr
         )
+mapReg substR (ILoop state iArgs fArgs iValues fValues loopExpr) =
+    ILoop
+        state
+        (map substR iArgs)
+        (map substR fArgs)
+        (map (coverImm substR) iValues)
+        (map (coverImm substR) fValues)
+        ( map
+            (mapReg substR)
+            loopExpr
+        )
+mapReg substR (IContinue state iValues fValues) =
+    IContinue state (map (coverImm substR) iValues) (map (coverImm substR) fValues)
 
 replaceReg ::
     (Eq (RegIDTy ty)) =>
