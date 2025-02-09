@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Display (display, Display) where
+module Display (display, Display, displayI, DisplayI) where
 
 import BackEnd.Liveness (Liveness (Liveness), LivenessLoc (livenessProp))
 import Data.Set (toAscList)

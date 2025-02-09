@@ -37,6 +37,7 @@ library
       BackEnd.Spill
       BackEnd.Transform
       Builtin
+      CodeBlock
       Display
       Error
       FrontEnd.Flatten
