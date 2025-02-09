@@ -256,7 +256,7 @@ toCompilerConfig arg = do
             . insertIf ((optimize arg || optConstFold arg) && not (disableFloatFold arg)) ConstFoldFloat
             . insertIf (optimize arg || optUnusedElim arg) UnusedElim
             . insertIf (optimize arg || optInlining arg) Inlining
-            . insertIf (optimize arg || optLoopDetection arg) LoopDetection
+            . insertIf (optLoopDetection arg) LoopDetection -- TODO: Stabilize this optimization.
             $ mempty
 
     selectedBackEndOptim =
