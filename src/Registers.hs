@@ -1,9 +1,12 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Registers (
+    RegID,
     RegType (..),
     withRegType,
     RegVariant (..),
@@ -28,7 +31,11 @@ module Registers (
     compareRegOrImm,
 ) where
 
+import Data.Text (pack)
+import Display (Display (display))
 import Typing (Ty, TypeKind (TFloat))
+
+type RegID = Int
 
 -- | Holds the type of a register.
 data RegType ty where
@@ -111,6 +118,25 @@ data Register idTy ty
 deriving instance (Show idTy) => Show (Register idTy ty)
 deriving instance (Eq idTy) => Eq (Register idTy ty)
 
+instance Display (Register RegID a) where
+    display (Register RInt ZeroReg) = "zero"
+    display (Register RFloat ZeroReg) = "fzero"
+    display (Register _ ReturnReg) = "ra"
+    display (Register RInt RetReg) = "a0"
+    display (Register RFloat RetReg) = "fa0"
+    display (Register _ HeapReg) = "hp"
+    display (Register _ StackReg) = "sp"
+    display (Register RInt (ArgsReg idTy)) = "a" <> pack (show idTy)
+    display (Register RFloat (ArgsReg idTy)) = "fa" <> pack (show idTy)
+    display (Register RInt (TempReg idTy)) = "t" <> pack (show idTy)
+    display (Register RFloat (TempReg idTy)) = "ft" <> pack (show idTy)
+    display (Register RInt (SavedReg idTy)) = "s" <> pack (show idTy)
+    display (Register RFloat (SavedReg idTy)) = "fs" <> pack (show idTy)
+    display (Register RInt (GeneralReg idTy)) = "r" <> pack (show idTy)
+    display (Register RFloat (GeneralReg idTy)) = "fr" <> pack (show idTy)
+    display (Register RInt DCReg) = "zero" -- Don't care
+    display (Register RFloat DCReg) = "fzero" -- Don't care
+
 compareReg :: (Eq idTy) => Register idTy ty1 -> Register idTy ty2 -> Bool
 compareReg (Register RInt rKind1) (Register RInt rKind2) = rKind1 == rKind2
 compareReg (Register RFloat rKind1) (Register RFloat rKind2) = rKind1 == rKind2
@@ -157,6 +183,14 @@ instance (Eq idTy) => Eq (RegOrImm idTy ty) where
     Imm RInt imm1 == Imm RInt imm2 = imm1 == imm2
     Imm RFloat imm1 == Imm RFloat imm2 = imm1 == imm2
     _ == _ = False
+
+instance Display (RegOrImm RegID Int) where
+    display (Reg reg) = display reg
+    display (Imm _ imm) = pack (show imm)
+
+instance Display (RegOrImm RegID Float) where
+    display (Reg reg) = display reg
+    display (Imm _ imm) = pack (show imm)
 
 compareRegOrImm :: (Eq idTy) => RegOrImm idTy ty1 -> RegOrImm idTy ty2 -> Bool
 compareRegOrImm (Reg reg1) (Reg reg2) = compareReg reg1 reg2

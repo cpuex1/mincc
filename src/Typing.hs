@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 module Typing (
@@ -8,6 +9,9 @@ module Typing (
     TypeKind (TUnit, TBool, TInt, TFloat, TFun, TTuple, TArray, TVar),
     weakenTy,
 ) where
+
+import Data.Text (intercalate, pack)
+import Display (Display (display))
 
 data TypeNotResolved = TypeNotResolved
     deriving (Show, Eq, Ord)
@@ -32,6 +36,19 @@ data TypeKind resolvedTy where
 deriving instance (Show a) => Show (TypeKind a)
 deriving instance (Eq a) => Eq (TypeKind a)
 deriving instance (Ord a) => Ord (TypeKind a)
+
+instance Display (TypeKind a) where
+    display TUnit = "unit"
+    display TBool = "bool"
+    display TInt = "int"
+    display TFloat = "float"
+    display (TFun args ret) =
+        "(" <> intercalate ", " (Prelude.map display args) <> ") -> " <> display ret
+    display (TTuple values) =
+        "(" <> intercalate " * " (Prelude.map display values) <> ")"
+    display (TArray value) =
+        display value <> " array"
+    display (TVar tId) = "__t" <> pack (show tId)
 
 weakenTy :: Ty -> ITy
 weakenTy TUnit = TUnit

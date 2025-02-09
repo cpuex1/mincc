@@ -30,9 +30,9 @@ import qualified Data.Map as M
 import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
-import IR (RegID)
 import MiddleEnd.Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
 import Registers (
+    RegID,
     RegOrImm (Imm, Reg),
     RegType (RInt),
     RegVariant (..),

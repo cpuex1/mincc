@@ -19,13 +19,12 @@ import IR (
     RawCodeBlock,
     RawInst,
     RawInstTerm,
-    RegID,
     isTerm,
  )
 import MiddleEnd.Globals (
     GlobalTable (endAddr),
  )
-import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register), RegisterKind (ArgsReg, ZeroReg), argsReg, heapReg, returnReg, stackReg, tempReg)
+import Registers (RegID, RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register), RegisterKind (ArgsReg, ZeroReg), argsReg, heapReg, returnReg, stackReg, tempReg)
 import Syntax (Loc, dummyLoc)
 import Prelude hiding (lookup)
 

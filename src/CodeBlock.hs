@@ -14,8 +14,8 @@ module CodeBlock (
 
 import Data.Text (intercalate)
 import Display (Display (display), DisplayI (displayI))
-import IR (Inst, InstKind (InstStateTy, RegIDTy), InstLabel, RegID)
-import Registers (RegType (RFloat, RInt), Register (Register))
+import IR (Inst, InstKind (InstStateTy, RegIDTy), InstLabel)
+import Registers (RegID, RegType (RFloat, RInt), Register (Register))
 import Syntax (RelationBinOp (..))
 
 -- | The last instruction of a block
@@ -55,7 +55,7 @@ data CodeBlock ty = CodeBlock
 
 instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (CodeBlock ty) where
     display (CodeBlock l inst _ term) =
-        l <> ":" <> intercalate "" (map (\i -> "\n" <> displayI i 1) inst) <> display term
+        l <> ":" <> intercalate "" (map (\i -> "\n" <> displayI 1 i) inst) <> display term
 
 -- | Get the next blocks from a block
 nextBlocks :: CodeBlock ty -> [InstLabel]
