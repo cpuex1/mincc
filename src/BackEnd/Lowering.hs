@@ -255,7 +255,7 @@ generateInstructions iReg fReg (If state cond thenExpr elseExpr) = do
             iThenReg <- lift $ genTempReg RInt
             fThenReg <- lift $ genTempReg RFloat
 
-            genNewBlock elseLabel [label]
+            genNewBlock thenLabel [label]
             generateInstructions iThenReg fThenReg thenExpr
             terminate $ TJmp endIfLabel
 

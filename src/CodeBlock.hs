@@ -10,10 +10,11 @@ module CodeBlock (
     Terminator (..),
     nextBlocks,
     lookupBlock,
+    asMermaidGraph,
 ) where
 
-import Data.Text (intercalate)
-import Display (Display (display), DisplayI (displayI))
+import Data.Text (Text, intercalate)
+import Display (Display (display), DisplayI (displayI), insertIndent)
 import IR (Inst, InstKind (InstStateTy, RegIDTy), InstLabel)
 import Registers (RegID, RegType (RFloat, RInt), Register (Register))
 import Syntax (RelationBinOp (..))
@@ -30,10 +31,22 @@ data Terminator ty where
         Terminator ty
     TReturn :: Terminator ty
 
-instance Display (Terminator ty) where
-    display (TJmp l) = "jmp " <> l
-    display (TBranch op r1 r2 l1 l2) =
-        "b" <> floatPrefix <> opPrefix <> " " <> display r1 <> ", " <> display r2 <> ", " <> l1 <> "\njmp " <> l2
+instance DisplayI (Terminator ty) where
+    displayI _ (TJmp l) = "jmp " <> l
+    displayI depth (TBranch op r1 r2 l1 l2) =
+        "b"
+            <> floatPrefix
+            <> opPrefix
+            <> " "
+            <> display r1
+            <> ", "
+            <> display r2
+            <> ", "
+            <> l1
+            <> "\n"
+            <> insertIndent depth
+            <> "jmp "
+            <> l2
       where
         opPrefix = case op of
             Eq -> "eq"
@@ -43,7 +56,7 @@ instance Display (Terminator ty) where
         floatPrefix = case r1 of
             Register RFloat _ -> "f"
             Register RInt _ -> ""
-    display TReturn = "ret"
+    displayI _ TReturn = "ret"
 
 -- | A block that holds instructions and a terminator
 data CodeBlock ty = CodeBlock
@@ -55,7 +68,12 @@ data CodeBlock ty = CodeBlock
 
 instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (CodeBlock ty) where
     display (CodeBlock l inst _ term) =
-        l <> ":" <> intercalate "" (map (\i -> "\n" <> displayI 1 i) inst) <> display term
+        l
+            <> ":"
+            <> intercalate "" (map (\i -> "\n" <> insertIndent 1 <> displayI 1 i) inst)
+            <> "\n"
+            <> insertIndent 1
+            <> displayI 1 term
 
 -- | Get the next blocks from a block
 nextBlocks :: CodeBlock ty -> [InstLabel]
@@ -73,3 +91,14 @@ instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (BlockGraph t
 
 lookupBlock :: InstLabel -> BlockGraph ty -> Maybe (CodeBlock ty)
 lookupBlock l block = lookup l $ map (\b -> (blockName b, b)) $ blocks block
+
+asMermaidGraph :: BlockGraph ty -> Text
+asMermaidGraph graph =
+    "# "
+        <> entryBlock graph
+        <> "\n```mermaid\ngraph TD\n"
+        <> intercalate "\n" (map blockToNode $ blocks graph)
+        <> "\n"
+        <> "```"
+  where
+    blockToNode block = intercalate "\n" $ map (\n -> blockName block <> "-->" <> n) $ nextBlocks block

@@ -6,7 +6,7 @@ import CommandLine
 import Compile
 import Control.Monad (when)
 import Control.Monad.Trans.Reader
-import Data.Text (intercalate)
+import Data.Text (intercalate, unpack)
 import qualified Data.Text.IO as TIO
 import Display
 import Options.Applicative (
@@ -20,6 +20,8 @@ import Options.Applicative (
  )
 
 import BackEnd.BackendEnv (createBackendConfig, liftB, runBackendStateT)
+import BackEnd.Lowering (generateBlockGraph)
+import CodeBlock (BlockGraph (entryBlock), CodeBlock (blockName), asMermaidGraph)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.State (evalStateT)
@@ -29,7 +31,7 @@ import Log
 import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (defaultIdentContext, reportEnv)
 import Path
-import Syntax (Function, ResolvedExpr)
+import Syntax (Function (funcName), ResolvedExpr)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 
 main :: IO ()
@@ -149,35 +151,38 @@ execArgsWithBackend :: [Function] -> BackendIdentStateIO ()
 execArgsWithBackend functions = do
     outputFile <- liftB' $ asks cOutput
 
-    blocks <- toInstructionsIO functions
+    blocks <- mapM generateBlockGraph functions
     liftB' $ printLog Done "Lowering succeeded"
     emitIR <- liftB' $ asks cEmitIR
     when emitIR $ do
         liftIO $ TIO.writeFile (changeExt "ir.s" outputFile) $ intercalate "\n" $ map display blocks
         liftB' $ printLog Debug "Intermediate representation code was saved"
 
-    optimBlocks <- optimInstIO blocks
-    liftB' $ printLog Done "Backend optimization succeeded"
-    emitOptim <- liftB' $ asks cEmitOptim
-    when emitOptim $ do
-        liftIO $ TIO.writeFile (changeExt "optim.s" outputFile) $ intercalate "\n" $ map display optimBlocks
-        liftB' $ printLog Debug "Optimized IR was saved"
-
-    liveness <- livenessIO optimBlocks
-    liftB' $ printLog Done "Liveness analysis succeeded"
-    when emitIR $ do
-        liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display liveness
-        liftB' $ printLog Debug "The result of liveness analysis was saved"
-
-    assignedBlocks <- assignRegisterIO liveness
-    liftB' $ printLog Done "Register allocation succeeded"
-    when emitIR $ do
-        liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display assignedBlocks
-        liftB' $ printLog Debug "The result of register allocation was saved"
-
-    blocks' <- transformCodeBlockIO assignedBlocks
-    liftB' $ printLog Done "Code generation succeeded"
-    liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" $ map display blocks'
-    liftB' $ printLog Debug "Generated code was saved"
+        liftIO $ TIO.writeFile (changeExt "ir.md" outputFile) $ intercalate "\n" $ map asMermaidGraph blocks
+        liftB' $ printLog Debug "Intermediate representation code was saved"
   where
+    -- optimBlocks <- optimInstIO blocks
+    -- liftB' $ printLog Done "Backend optimization succeeded"
+    -- emitOptim <- liftB' $ asks cEmitOptim
+    -- when emitOptim $ do
+    --     liftIO $ TIO.writeFile (changeExt "optim.s" outputFile) $ intercalate "\n" $ map display optimBlocks
+    --     liftB' $ printLog Debug "Optimized IR was saved"
+
+    -- liveness <- livenessIO optimBlocks
+    -- liftB' $ printLog Done "Liveness analysis succeeded"
+    -- when emitIR $ do
+    --     liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display liveness
+    --     liftB' $ printLog Debug "The result of liveness analysis was saved"
+
+    -- assignedBlocks <- assignRegisterIO liveness
+    -- liftB' $ printLog Done "Register allocation succeeded"
+    -- when emitIR $ do
+    --     liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display assignedBlocks
+    --     liftB' $ printLog Debug "The result of register allocation was saved"
+
+    -- blocks' <- transformCodeBlockIO assignedBlocks
+    -- liftB' $ printLog Done "Code generation succeeded"
+    -- liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" $ map display blocks'
+    -- liftB' $ printLog Debug "Generated code was saved"
+
     liftB' = liftB . lift
