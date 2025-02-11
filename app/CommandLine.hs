@@ -9,7 +9,7 @@ module CommandLine (
 ) where
 
 import BackEnd.Lowering (BackendIdentState)
-import BackEnd.Optim (BackEndOptimKind (MulElim))
+import BackEnd.Optim (BackEndOptimKind (MulElim, Unreachable))
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
 import Data.Set (Set, insert)
@@ -260,4 +260,6 @@ toCompilerConfig arg = do
             $ mempty
 
     selectedBackEndOptim =
-        insert MulElim mempty
+        insert MulElim
+            . insert Unreachable
+            $ mempty

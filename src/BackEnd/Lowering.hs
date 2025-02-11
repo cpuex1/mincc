@@ -8,6 +8,7 @@ module BackEnd.Lowering (
     generateBlockGraph,
 ) where
 
+import BackEnd.Analysis.CodeBlock (fillInPrevBlocks)
 import BackEnd.BackendEnv
 import Builtin (BuiltinFunction (builtinInst), builtinMakeTuple, findBuiltin)
 import CodeBlock (
@@ -669,6 +670,7 @@ generateBlockGraph func = do
                 , iLoopArgs = []
                 , fLoopArgs = []
                 }
-    pure $ BlockGraph (generatedBlocks ctx) funcLabel
+    let graph = BlockGraph (generatedBlocks ctx) funcLabel
+    pure $ fillInPrevBlocks graph
   where
     funcLabel = display $ funcName func

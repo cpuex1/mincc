@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      BackEnd.Analysis.CodeBlock
       BackEnd.BackendEnv
       BackEnd.FunctionCall
       BackEnd.Liveness
@@ -32,6 +33,7 @@ library
       BackEnd.Optim
       BackEnd.Optim.Common
       BackEnd.Optim.MulElim
+      BackEnd.Optim.Unreachable
       BackEnd.RegisterAlloc
       BackEnd.Shuffle
       BackEnd.Spill
