@@ -89,11 +89,11 @@ tailCallLabel label = label <> "_start"
 tailRecCallLabel :: InstLabel -> InstLabel
 tailRecCallLabel label = label <> "_rec"
 
-insertIShuffle :: (Monad m) => Loc -> [(Register RegID Int, RegOrImm RegID Int)] -> CodeBlockGenStateT m ()
+insertIShuffle :: (Monad m) => Loc -> [(Register Int, RegOrImm Int)] -> CodeBlockGenStateT m ()
 insertIShuffle state assign =
     mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 r2) $ shuffleRegOrImm RInt assign
 
-insertFShuffle :: (Monad m) => Loc -> [(Register RegID Float, Register RegID Float)] -> CodeBlockGenStateT m ()
+insertFShuffle :: (Monad m) => Loc -> [(Register Float, Register Float)] -> CodeBlockGenStateT m ()
 insertFShuffle state assign =
     mapM_ (\(r1, r2) -> insertBuf $ IMov state r1 (Reg r2)) $ shuffleRegs RFloat assign
 

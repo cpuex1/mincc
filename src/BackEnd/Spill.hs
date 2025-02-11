@@ -12,7 +12,7 @@ import IR (
 import Registers (RegID, RegOrImm (Reg), RegType (RFloat, RInt), Register (Register), savedReg, stackReg)
 import Syntax (dummyLoc)
 
-loadNewReg :: (Monad m) => RegType b -> Int -> RegID -> Register RegID a -> BackendStateT m (Register RegID a, [AbstInst])
+loadNewReg :: (Monad m) => RegType b -> Int -> RegID -> Register a -> BackendStateT m (Register a, [AbstInst])
 loadNewReg RInt vars searching victim@(Register RInt _) =
     if savedReg RInt searching == victim
         then do
@@ -27,13 +27,13 @@ loadNewReg RFloat vars searching victim@(Register RFloat _) =
         else pure (victim, [])
 loadNewReg _ _ _ victim = pure (victim, [])
 
-loadNewRegOrImm :: (Monad m) => RegType b -> Int -> RegID -> RegOrImm RegID a -> BackendStateT m (RegOrImm RegID a, [AbstInst])
+loadNewRegOrImm :: (Monad m) => RegType b -> Int -> RegID -> RegOrImm a -> BackendStateT m (RegOrImm a, [AbstInst])
 loadNewRegOrImm rTy vars searching (Reg reg) = do
     (reg', inst) <- loadNewReg rTy vars searching reg
     pure (Reg reg', inst)
 loadNewRegOrImm _ _ _ imm = pure (imm, [])
 
-storeNewReg :: (Monad m) => RegType b -> Int -> RegID -> Register RegID a -> BackendStateT m (Register RegID a, [AbstInst])
+storeNewReg :: (Monad m) => RegType b -> Int -> RegID -> Register a -> BackendStateT m (Register a, [AbstInst])
 storeNewReg RInt vars searching victim@(Register RInt _) =
     if savedReg RInt searching == victim
         then do

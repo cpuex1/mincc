@@ -32,7 +32,6 @@ import Display (display)
 import Error (CompilerError (OtherError))
 import MiddleEnd.Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
 import Registers (
-    RegID,
     RegOrImm (Imm, Reg),
     RegType (RInt),
     RegVariant (..),
@@ -52,7 +51,7 @@ data RegContext ty
     = RegContext
     { generatedReg :: Int
     , argsLength :: Int
-    , registerMap :: Map Ident (Register RegID ty)
+    , registerMap :: Map Ident (Register ty)
     , usedRegLen :: Int
     }
     deriving (Show, Eq)
@@ -106,7 +105,7 @@ runBackendStateT s config table =
 liftB :: (Monad m) => m a -> BackendStateT m a
 liftB = lift . lift . lift
 
-genTempReg :: (Monad m) => RegType a -> BackendStateT m (Register RegID a)
+genTempReg :: (Monad m) => RegType a -> BackendStateT m (Register a)
 genTempReg rTy = do
     ctx <- gets regContext
     modify $ \ctx' ->
@@ -123,7 +122,7 @@ genTempReg rTy = do
             }
     pure $ Register rTy $ SavedReg $ generatedReg $ ctx #!! rTy
 
-genReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
+genReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register a)
 genReg rTy ident = do
     reg <- genTempReg rTy
     modify $ \ctx ->
@@ -140,7 +139,7 @@ genReg rTy ident = do
             }
     pure reg
 
-findReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
+findReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register a)
 findReg rTy ident = do
     regID <- gets ((lookup ident . registerMap) . (#!! rTy) . regContext)
     case regID of
@@ -148,12 +147,12 @@ findReg rTy ident = do
         Nothing -> do
             throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
 
-findRegOrImm :: (Monad m) => RegType a -> Ident -> BackendStateT m (RegOrImm RegID a)
+findRegOrImm :: (Monad m) => RegType a -> Ident -> BackendStateT m (RegOrImm a)
 findRegOrImm RInt (ExternalIdent ext) =
     Imm RInt . globalOffset <$> findGlobal ext
 findRegOrImm rTy ident = Reg <$> findReg rTy ident
 
-registerReg :: (Monad m) => Ident -> Register RegID a -> BackendStateT m ()
+registerReg :: (Monad m) => Ident -> Register a -> BackendStateT m ()
 registerReg ident (Register rTy kind) = do
     modify $ \ctx ->
         ctx

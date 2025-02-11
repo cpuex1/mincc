@@ -89,7 +89,7 @@ assignRegister block =
     (used, spillTarget, block{hInst = map (substIState livenessLoc) mappedInst})
   where
     -- Enforces the register mapping.
-    enforceMapped :: Register RegID a -> Register RegID a
+    enforceMapped :: Register a -> Register a
     enforceMapped (Register rTy (SavedReg regId)) =
         case M.lookup regId $ regMap $ mapped #!! rTy of
             Just regId' -> savedReg rTy regId'

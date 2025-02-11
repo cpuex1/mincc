@@ -93,32 +93,32 @@ instance (Semigroup (f Int), Semigroup (f Float)) => Semigroup (RegVariant f) wh
 instance (Monoid (f Int), Monoid (f Float)) => Monoid (RegVariant f) where
     mempty = RegVariant mempty mempty
 
-data RegisterKind idTy ty where
-    ZeroReg :: RegisterKind idTy ty
-    ReturnReg :: RegisterKind idTy Int
-    RetReg :: RegisterKind idTy ty
-    HeapReg :: RegisterKind idTy Int
-    StackReg :: RegisterKind idTy Int
-    ArgsReg :: idTy -> RegisterKind idTy ty
-    TempReg :: idTy -> RegisterKind idTy ty
-    SavedReg :: idTy -> RegisterKind idTy ty
-    GeneralReg :: idTy -> RegisterKind idTy ty
+data RegisterKind ty where
+    ZeroReg :: RegisterKind ty
+    ReturnReg :: RegisterKind Int
+    RetReg :: RegisterKind ty
+    HeapReg :: RegisterKind Int
+    StackReg :: RegisterKind Int
+    ArgsReg :: RegID -> RegisterKind ty
+    TempReg :: RegID -> RegisterKind ty
+    SavedReg :: RegID -> RegisterKind ty
+    GeneralReg :: RegID -> RegisterKind ty
     -- | Used for marking it as a "don't care" register.
-    DCReg :: RegisterKind idTy ty
+    DCReg :: RegisterKind ty
 
-deriving instance (Show idTy) => Show (RegisterKind idTy ty)
-deriving instance (Eq idTy) => Eq (RegisterKind idTy ty)
+deriving instance Show (RegisterKind ty)
+deriving instance Eq (RegisterKind ty)
 
-data Register idTy ty
+data Register ty
     = Register
     { regType :: RegType ty
-    , regKind :: RegisterKind idTy ty
+    , regKind :: RegisterKind ty
     }
 
-deriving instance (Show idTy) => Show (Register idTy ty)
-deriving instance (Eq idTy) => Eq (Register idTy ty)
+deriving instance Show (Register ty)
+deriving instance Eq (Register ty)
 
-instance Display (Register RegID a) where
+instance Display (Register a) where
     display (Register RInt ZeroReg) = "zero"
     display (Register RFloat ZeroReg) = "fzero"
     display (Register _ ReturnReg) = "ra"
@@ -137,62 +137,62 @@ instance Display (Register RegID a) where
     display (Register RInt DCReg) = "zero" -- Don't care
     display (Register RFloat DCReg) = "fzero" -- Don't care
 
-compareReg :: (Eq idTy) => Register idTy ty1 -> Register idTy ty2 -> Bool
+compareReg :: Register ty1 -> Register ty2 -> Bool
 compareReg (Register RInt rKind1) (Register RInt rKind2) = rKind1 == rKind2
 compareReg (Register RFloat rKind1) (Register RFloat rKind2) = rKind1 == rKind2
 compareReg _ _ = False
 
-zeroReg :: RegType ty -> Register idTy ty
+zeroReg :: RegType ty -> Register ty
 zeroReg rTy = Register rTy ZeroReg
 
-returnReg :: Register idTy Int
+returnReg :: Register Int
 returnReg = Register RInt ReturnReg
 
-retReg :: RegType ty -> Register idTy ty
+retReg :: RegType ty -> Register ty
 retReg rTy = Register rTy RetReg
 
-heapReg :: Register idTy Int
+heapReg :: Register Int
 heapReg = Register RInt HeapReg
 
-stackReg :: Register idTy Int
+stackReg :: Register Int
 stackReg = Register RInt StackReg
 
-argsReg :: RegType ty -> idTy -> Register idTy ty
+argsReg :: RegType ty -> RegID -> Register ty
 argsReg rTy i = Register rTy (ArgsReg i)
 
-tempReg :: RegType ty -> idTy -> Register idTy ty
+tempReg :: RegType ty -> RegID -> Register ty
 tempReg rTy i = Register rTy (TempReg i)
 
-savedReg :: RegType ty -> idTy -> Register idTy ty
+savedReg :: RegType ty -> RegID -> Register ty
 savedReg rTy i = Register rTy (SavedReg i)
 
-generalReg :: RegType ty -> idTy -> Register idTy ty
+generalReg :: RegType ty -> RegID -> Register ty
 generalReg rTy i = Register rTy (GeneralReg i)
 
-data RegOrImm idTy ty where
-    Reg :: Register idTy ty -> RegOrImm idTy ty
-    Imm :: RegType ty -> ty -> RegOrImm idTy ty
+data RegOrImm ty where
+    Reg :: Register ty -> RegOrImm ty
+    Imm :: RegType ty -> ty -> RegOrImm ty
 
-instance (Show idTy) => Show (RegOrImm idTy ty) where
+instance Show (RegOrImm ty) where
     show (Reg reg) = show reg
     show (Imm RInt imm) = show imm
     show (Imm RFloat imm) = show imm
 
-instance (Eq idTy) => Eq (RegOrImm idTy ty) where
+instance Eq (RegOrImm ty) where
     Reg reg1 == Reg reg2 = reg1 == reg2
     Imm RInt imm1 == Imm RInt imm2 = imm1 == imm2
     Imm RFloat imm1 == Imm RFloat imm2 = imm1 == imm2
     _ == _ = False
 
-instance Display (RegOrImm RegID Int) where
+instance Display (RegOrImm Int) where
     display (Reg reg) = display reg
     display (Imm _ imm) = pack (show imm)
 
-instance Display (RegOrImm RegID Float) where
+instance Display (RegOrImm Float) where
     display (Reg reg) = display reg
     display (Imm _ imm) = pack (show imm)
 
-compareRegOrImm :: (Eq idTy) => RegOrImm idTy ty1 -> RegOrImm idTy ty2 -> Bool
+compareRegOrImm :: RegOrImm ty1 -> RegOrImm ty2 -> Bool
 compareRegOrImm (Reg reg1) (Reg reg2) = compareReg reg1 reg2
 compareRegOrImm (Imm RInt imm1) (Imm RInt imm2) = imm1 == imm2
 compareRegOrImm (Imm RFloat imm1) (Imm RFloat imm2) = imm1 == imm2

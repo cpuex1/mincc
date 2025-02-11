@@ -15,8 +15,8 @@ module CodeBlock (
 
 import Data.Text (Text, intercalate)
 import Display (Display (display), DisplayI (displayI), insertIndent)
-import IR (Inst, InstKind (InstStateTy, RegIDTy), InstLabel)
-import Registers (RegID, RegType (RFloat, RInt), Register (Register))
+import IR (Inst, InstKind (InstStateTy), InstLabel)
+import Registers (RegType (RFloat, RInt), Register (Register))
 import Syntax (RelationBinOp (..))
 
 -- | The last instruction of a block
@@ -24,8 +24,8 @@ data Terminator ty where
     TJmp :: InstLabel -> Terminator ty
     TBranch ::
         RelationBinOp ->
-        Register RegID a ->
-        Register RegID a ->
+        Register a ->
+        Register a ->
         InstLabel ->
         InstLabel ->
         Terminator ty
@@ -66,7 +66,7 @@ data CodeBlock ty = CodeBlock
     , terminator :: Terminator ty
     }
 
-instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (CodeBlock ty) where
+instance (Display (InstStateTy ty)) => Display (CodeBlock ty) where
     display (CodeBlock l inst _ term) =
         l
             <> ":"
@@ -86,7 +86,7 @@ data BlockGraph ty = BlockGraph
     , entryBlock :: InstLabel
     }
 
-instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (BlockGraph ty) where
+instance (Display (InstStateTy ty)) => Display (BlockGraph ty) where
     display (BlockGraph b _) = intercalate "\n" $ map display b
 
 lookupBlock :: InstLabel -> BlockGraph ty -> Maybe (CodeBlock ty)

@@ -35,7 +35,7 @@ import Data.Bifunctor (Bifunctor (second))
 import Data.Kind (Type)
 import Data.Text (Text, intercalate, justifyLeft, pack)
 import Display (Display (display), DisplayI (displayI), insertIndent)
-import Registers (RegID, RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register))
+import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register))
 import Syntax (FloatBinOp (..), IntBinOp (..), Loc, RelationBinOp (..))
 
 type InstLabel = Text
@@ -71,7 +71,7 @@ data HCodeBlock ty where
 deriving instance (Show (Inst ty)) => Show (HCodeBlock ty)
 deriving instance (Eq (Inst ty)) => Eq (HCodeBlock ty)
 
-instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (HCodeBlock ty) where
+instance (Display (InstStateTy ty)) => Display (HCodeBlock ty) where
     display (HCodeBlock label _ inst) =
         label
             <> ":\n"
@@ -90,7 +90,7 @@ data LCodeBlock ty where
 deriving instance (Show (Inst ty), Show (InstTerm ty)) => Show (LCodeBlock ty)
 deriving instance (Eq (Inst ty), Eq (InstTerm ty)) => Eq (LCodeBlock ty)
 
-instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (LCodeBlock ty) where
+instance (Display (InstStateTy ty)) => Display (LCodeBlock ty) where
     display (LCodeBlock label inst term) =
         label
             <> ":"
@@ -110,13 +110,13 @@ data InstTerm ty where
     Branch ::
         (InstStateTy ty) ->
         RelationBinOp ->
-        (Register (RegIDTy ty) a) ->
-        (Register (RegIDTy ty) a) ->
+        (Register a) ->
+        (Register a) ->
         InstLabel ->
         InstTerm ty
     Nop :: InstTerm ty
 
-instance (RegIDTy ty ~ RegID) => Display (InstTerm ty) where
+instance Display (InstTerm ty) where
     display Return = "ret"
     display (Jmp label) = "jmp " <> label
     display (Branch _ Eq lhs@(Register RInt _) rhs label) =
@@ -143,14 +143,12 @@ isTerm _ = True
 
 class InstKind ty where
     type InstStateTy ty :: Type
-    type RegIDTy ty :: Type
     type AllowInstBranch ty :: Bool
 
 data AbstInstKind
 
 instance InstKind AbstInstKind where
     type InstStateTy AbstInstKind = Loc
-    type RegIDTy AbstInstKind = RegID
     type AllowInstBranch AbstInstKind = True
 
 type AbstInst = Inst AbstInstKind
@@ -160,7 +158,6 @@ data RawInstKind
 
 instance InstKind RawInstKind where
     type InstStateTy RawInstKind = Loc
-    type RegIDTy RawInstKind = RegID
     type AllowInstBranch RawInstKind = False
 
 type RawInst = Inst RawInstKind
@@ -171,56 +168,56 @@ data Inst ty where
     ICompOp ::
         InstStateTy ty ->
         RelationBinOp ->
-        Register (RegIDTy ty) Int ->
-        Register (RegIDTy ty) a ->
-        RegOrImm (RegIDTy ty) a ->
+        Register Int ->
+        Register a ->
+        RegOrImm a ->
         Inst ty
     IIntOp ::
         InstStateTy ty ->
         PrimitiveIntOp ->
-        Register (RegIDTy ty) Int ->
-        Register (RegIDTy ty) Int ->
-        RegOrImm (RegIDTy ty) Int ->
+        Register Int ->
+        Register Int ->
+        RegOrImm Int ->
         Inst ty
     IFOp ::
         InstStateTy ty ->
         FloatBinOp ->
-        Register (RegIDTy ty) Float ->
-        Register (RegIDTy ty) Float ->
-        Register (RegIDTy ty) Float ->
+        Register Float ->
+        Register Float ->
+        Register Float ->
         Inst ty
     IMov ::
         InstStateTy ty ->
-        Register (RegIDTy ty) a ->
-        RegOrImm (RegIDTy ty) a ->
+        Register a ->
+        RegOrImm a ->
         Inst ty
     ILMov ::
         (AllowInstBranch ty ~ False) =>
         InstStateTy ty ->
-        Register (RegIDTy ty) Int ->
+        Register Int ->
         InstLabel ->
         Inst ty
     IRichCall ::
         (AllowInstBranch ty ~ True) =>
         InstStateTy ty ->
         InstLabel ->
-        [RegOrImm (RegIDTy ty) Int] ->
-        [Register (RegIDTy ty) Float] ->
+        [RegOrImm Int] ->
+        [Register Float] ->
         Inst ty
     IClosureCall ::
         (AllowInstBranch ty ~ True) =>
         InstStateTy ty ->
-        Register (RegIDTy ty) Int ->
-        [RegOrImm (RegIDTy ty) Int] ->
-        [Register (RegIDTy ty) Float] ->
+        Register Int ->
+        [RegOrImm Int] ->
+        [Register Float] ->
         Inst ty
     IMakeClosure ::
         (AllowInstBranch ty ~ True) =>
         InstStateTy ty ->
-        Register (RegIDTy ty) Int ->
+        Register Int ->
         InstLabel ->
-        [RegOrImm (RegIDTy ty) Int] ->
-        [Register (RegIDTy ty) Float] ->
+        [RegOrImm Int] ->
+        [Register Float] ->
         Inst ty
     ICall ::
         (AllowInstBranch ty ~ False) =>
@@ -230,37 +227,37 @@ data Inst ty where
     ICallReg ::
         (AllowInstBranch ty ~ False) =>
         InstStateTy ty ->
-        Register (RegIDTy ty) Int ->
+        Register Int ->
         Inst ty
     ILoad ::
         InstStateTy ty ->
-        Register (RegIDTy ty) a ->
-        Register (RegIDTy ty) Int ->
+        Register a ->
+        Register Int ->
         Int ->
         Inst ty
     IStore ::
         InstStateTy ty ->
-        Register (RegIDTy ty) a ->
-        Register (RegIDTy ty) Int ->
+        Register a ->
+        Register Int ->
         Int ->
         Inst ty
     IRawInst ::
         InstStateTy ty ->
         Text ->
-        Register (RegIDTy ty) a ->
-        [RegOrImm (RegIDTy ty) Int] ->
-        [Register (RegIDTy ty) Float] ->
+        Register a ->
+        [RegOrImm Int] ->
+        [Register Float] ->
         Inst ty
     IPhi ::
         (AllowInstBranch ty ~ True) =>
         InstStateTy ty ->
-        Register (RegIDTy ty) a ->
-        [(InstLabel, Register (RegIDTy ty) a)] ->
+        Register a ->
+        [(InstLabel, Register a)] ->
         Inst ty
 
-deriving instance (Show (InstStateTy ty), Show (RegIDTy ty)) => Show (Inst ty)
+deriving instance (Show (InstStateTy ty)) => Show (Inst ty)
 
-instance (Eq (InstStateTy ty), Eq (RegIDTy ty)) => Eq (Inst ty) where
+instance (Eq (InstStateTy ty)) => Eq (Inst ty) where
     (ICompOp state1 op1 dest1 src1_1@(Register RInt _) src1_2) == (ICompOp state2 op2 dest2 src2_1@(Register RInt _) src2_2) =
         state1 == state2 && op1 == op2 && dest1 == dest2 && src1_1 == src2_1 && src1_2 == src2_2
     (ICompOp state1 op1 dest1 src1_1@(Register RFloat _) src1_2) == (ICompOp state2 op2 dest2 src2_1@(Register RFloat _) src2_2) =
@@ -302,13 +299,13 @@ instance (Eq (InstStateTy ty), Eq (RegIDTy ty)) => Eq (Inst ty) where
 instructionWidth :: Int
 instructionWidth = 30
 
-instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => DisplayI (Inst ty) where
+instance (Display (InstStateTy ty)) => DisplayI (Inst ty) where
     displayI depth inst =
         justifyLeft instructionWidth ' ' displayed <> " # " <> display (getIState inst)
       where
         displayed = withoutState inst depth
 
-        withoutState :: (RegIDTy ty ~ RegID) => Inst ty -> Int -> Text
+        withoutState :: Inst ty -> Int -> Text
         withoutState (ICompOp _ op lhs rhs1@(Register rTy _) rhs2) _ =
             case rhs2 of
                 (Reg rhs2') ->
@@ -407,7 +404,7 @@ instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => DisplayI (Inst ty) wh
         withoutState (IPhi _ dest choices) _ =
             "phi! " <> display dest <> ", " <> Data.Text.intercalate ", " (Prelude.map (\(l, r) -> l <> ": " <> display r) choices)
 
-instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (Inst ty) where
+instance (Display (InstStateTy ty)) => Display (Inst ty) where
     display = displayI 0
 
 getIState :: Inst ty -> InstStateTy ty
@@ -427,7 +424,7 @@ getIState (IRawInst state _ _ _ _) = state
 getIState (IPhi state _ _) = state
 
 substIState ::
-    (RegIDTy a ~ RegIDTy b, AllowInstBranch a ~ AllowInstBranch b) =>
+    (AllowInstBranch a ~ AllowInstBranch b) =>
     (InstStateTy a -> InstStateTy b) ->
     Inst a ->
     Inst b
@@ -446,23 +443,23 @@ substIState f (IStore state dest src offset) = IStore (f state) dest src offset
 substIState f (IRawInst state inst retTy iArgs fArgs) = IRawInst (f state) inst retTy iArgs fArgs
 substIState f (IPhi state dest choices) = IPhi (f state) dest choices
 
-weakSubstReg :: (Eq idTy) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
+weakSubstReg :: Register ty -> Register ty -> Register ty -> Register ty
 weakSubstReg beforeReg afterReg victim =
     if victim == beforeReg then afterReg else victim
 
-substReg :: (Eq idTy) => Register idTy ty1 -> Register idTy ty1 -> Register idTy ty2 -> Register idTy ty2
+substReg :: Register ty1 -> Register ty1 -> Register ty2 -> Register ty2
 substReg (Register RInt before) afterReg (Register RInt victim) =
     weakSubstReg (Register RInt before) afterReg (Register RInt victim)
 substReg (Register RFloat before) afterReg (Register RFloat victim) =
     weakSubstReg (Register RFloat before) afterReg (Register RFloat victim)
 substReg _ _ victim = victim
 
-coverImm :: (Register idTy ty -> Register idTy ty) -> (RegOrImm idTy ty -> RegOrImm idTy ty)
+coverImm :: (Register ty -> Register ty) -> (RegOrImm ty -> RegOrImm ty)
 coverImm _ (Imm rTy imm) = Imm rTy imm
 coverImm substR (Reg reg) = Reg $ substR reg
 
 mapReg ::
-    (forall regTy1. Register (RegIDTy ty) regTy1 -> Register (RegIDTy ty) regTy1) ->
+    (forall regTy1. Register regTy1 -> Register regTy1) ->
     Inst ty ->
     Inst ty
 mapReg substR (ICompOp state op dest left right) =
@@ -495,9 +492,8 @@ mapReg substR (IPhi state dest choices) =
     IPhi state (substR dest) (Prelude.map (second substR) choices)
 
 replaceReg ::
-    (Eq (RegIDTy ty)) =>
-    Register (RegIDTy ty) regTy ->
-    Register (RegIDTy ty) regTy ->
+    Register regTy ->
+    Register regTy ->
     Inst ty ->
     Inst ty
 replaceReg before after = mapReg (substReg before after)

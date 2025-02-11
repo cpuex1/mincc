@@ -72,7 +72,6 @@ data LivenessInstKind
 
 instance InstKind LivenessInstKind where
     type InstStateTy LivenessInstKind = LivenessLoc
-    type RegIDTy LivenessInstKind = RegID
     type AllowInstBranch LivenessInstKind = True
 
 type LivenessInst = Inst LivenessInstKind
@@ -99,16 +98,16 @@ toGraph l = RegVariant iGraph fGraph
         iV = unions iState
         iE = fromList $ map (\v -> (v, unions (filter (elem v) iState))) (toAscList iV)
 
-markUsed :: Register RegID a -> LivenessState ()
+markUsed :: Register a -> LivenessState ()
 markUsed (Register rTy (SavedReg regId)) = do
     modify $ updateVariant rTy (Liveness . insert regId . alive)
 markUsed _ = pure ()
 
-markUsedImm :: RegOrImm RegID a -> LivenessState ()
+markUsedImm :: RegOrImm a -> LivenessState ()
 markUsedImm (Reg reg) = markUsed reg
 markUsedImm _ = pure ()
 
-remove :: Register RegID a -> LivenessState ()
+remove :: Register a -> LivenessState ()
 remove (Register rTy (SavedReg regId)) = do
     modify $ updateVariant rTy (Liveness . delete regId . alive)
 remove _ = pure ()

@@ -90,12 +90,12 @@ filterVars RInt vars = do
             pure $ ty' /= TFloat
         )
         vars
-genRegisters :: (Monad m) => RegType rTy -> [Ident] -> BackendIdentState m [Register RegID rTy]
+genRegisters :: (Monad m) => RegType rTy -> [Ident] -> BackendIdentState m [Register rTy]
 genRegisters rTy vars = do
     filtered <- filterVars rTy vars
     mapM (genReg rTy) filtered
 
-resolveArgs :: (Monad m) => [Ident] -> BackendIdentState m ([RegOrImm RegID Int], [Register RegID Float])
+resolveArgs :: (Monad m) => [Ident] -> BackendIdentState m ([RegOrImm Int], [Register Float])
 resolveArgs args = do
     iArgs <-
         filterM
@@ -124,8 +124,8 @@ data CodeBlockContext = CodeBlockContext
     , generatedID :: Int
     , prevLabels :: [InstLabel]
     , loopLabel :: InstLabel
-    , iLoopArgs :: [Register RegID Int]
-    , fLoopArgs :: [Register RegID Float]
+    , iLoopArgs :: [Register Int]
+    , fLoopArgs :: [Register Float]
     }
 
 type CodeBlockStateT m = StateT CodeBlockContext (BackendIdentState m)
@@ -162,20 +162,20 @@ genNewLabelId = do
     modify $ \ctx' -> ctx'{generatedID = labelID + 1}
     pure $ display labelID
 
-resolveRegOrImm :: (Monad m) => RegOrImm RegID rTy -> CodeBlockStateT m (Register RegID rTy)
+resolveRegOrImm :: (Monad m) => RegOrImm rTy -> CodeBlockStateT m (Register rTy)
 resolveRegOrImm (Reg reg) = pure reg
 resolveRegOrImm (Imm ty imm) = do
     temp <- lift $ genTempReg ty
     addInst $ IMov dummyLoc temp (Imm ty imm)
     pure temp
 
-takeReg :: (Monad m) => RegType rTy -> Ident -> CodeBlockStateT m (Register RegID rTy)
+takeReg :: (Monad m) => RegType rTy -> Ident -> CodeBlockStateT m (Register rTy)
 takeReg rTy ident = lift (findRegOrImm rTy ident) >>= resolveRegOrImm
 
 generateInstructions ::
     (Monad m) =>
-    Register RegID Int ->
-    Register RegID Float ->
+    Register Int ->
+    Register Float ->
     ClosureExpr ->
     CodeBlockStateT m ()
 generateInstructions _ _ (Const _ LUnit) =
