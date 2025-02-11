@@ -6,7 +6,7 @@ import BackEnd.Optim.Common (BackEndOptimStateT)
 import IR (
     AbstCodeBlock,
     HCodeBlock (hInst),
-    Inst (IBranch, IIntOp),
+    Inst (IIntOp),
     PrimitiveIntOp (PDiv, PMul, PShiftL, PShiftR),
  )
 import Registers (RegOrImm (Imm), RegType (RInt))
@@ -31,6 +31,4 @@ elimMul block =
         case log2 i of
             Just e -> IIntOp state PShiftR dest src (Imm RInt e)
             Nothing -> IIntOp state PDiv dest src (Imm RInt i)
-    elimMul' (IBranch state op operand1 operand2 left right) =
-        IBranch state op operand1 operand2 (map elimMul' left) (map elimMul' right)
     elimMul' inst = inst

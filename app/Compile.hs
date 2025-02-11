@@ -10,7 +10,6 @@ module Compile (
     optimIO,
     extractGlobalsIO,
     getFunctionsIO,
-    toInstructionsIO,
     optimInstIO,
     transformCodeBlockIO,
     livenessIO,
@@ -26,7 +25,6 @@ import BackEnd.BackendEnv (
  )
 import BackEnd.FunctionCall (saveRegisters)
 import BackEnd.Liveness (LivenessCodeBlock, LivenessLoc (livenessLoc), liveness)
-import BackEnd.Lowering (toInstructions)
 import BackEnd.Optim (runBackEndOptim)
 import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndOptimStateT)
 import BackEnd.RegisterAlloc (assignRegister)
@@ -201,9 +199,6 @@ extractGlobalsIO expr =
 
 getFunctionsIO :: KExpr -> IdentEnvIO [Function]
 getFunctionsIO = getFunctions
-
-toInstructionsIO :: [Function] -> BackendIdentStateIO [AbstCodeBlock]
-toInstructionsIO = mapM toInstructions
 
 optimInstIO :: [AbstCodeBlock] -> BackendIdentStateIO [AbstCodeBlock]
 optimInstIO inst = do

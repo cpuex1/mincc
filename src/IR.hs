@@ -26,7 +26,6 @@ module IR (
     RawInstTerm,
     InstKind (..),
     getIState,
-    getAllIState,
     substIState,
     mapReg,
     replaceReg,
@@ -252,30 +251,6 @@ data Inst ty where
         [RegOrImm (RegIDTy ty) Int] ->
         [Register (RegIDTy ty) Float] ->
         Inst ty
-    IBranch ::
-        (AllowInstBranch ty ~ True) =>
-        InstStateTy ty ->
-        RelationBinOp ->
-        Register (RegIDTy ty) a ->
-        Register (RegIDTy ty) a ->
-        [Inst ty] ->
-        [Inst ty] ->
-        Inst ty
-    ILoop ::
-        (AllowInstBranch ty ~ True) =>
-        InstStateTy ty ->
-        [Register (RegIDTy ty) Int] ->
-        [Register (RegIDTy ty) Float] ->
-        [RegOrImm (RegIDTy ty) Int] ->
-        [RegOrImm (RegIDTy ty) Float] ->
-        [Inst ty] ->
-        Inst ty
-    IContinue ::
-        (AllowInstBranch ty ~ True) =>
-        InstStateTy ty ->
-        [RegOrImm (RegIDTy ty) Int] ->
-        [RegOrImm (RegIDTy ty) Float] ->
-        Inst ty
     IPhi ::
         (AllowInstBranch ty ~ True) =>
         InstStateTy ty ->
@@ -322,10 +297,6 @@ instance (Eq (InstStateTy ty), Eq (RegIDTy ty)) => Eq (Inst ty) where
         state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
     (IRawInst state1 inst1 retTy1@(Register RFloat _) iArgs1 fArgs1) == (IRawInst state2 inst2 retTy2@(Register RFloat _) iArgs2 fArgs2) =
         state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
-    (IBranch state1 op1 left1@(Register RInt _) right1 thenExpr1 elseExpr1) == (IBranch state2 op2 left2@(Register RInt _) right2 thenExpr2 elseExpr2) =
-        state1 == state2 && op1 == op2 && left1 == left2 && right1 == right2 && thenExpr1 == thenExpr2 && elseExpr1 == elseExpr2
-    (IBranch state1 op1 left1@(Register RFloat _) right1 thenExpr1 elseExpr1) == (IBranch state2 op2 left2@(Register RFloat _) right2 thenExpr2 elseExpr2) =
-        state1 == state2 && op1 == op2 && left1 == left2 && right1 == right2 && thenExpr1 == thenExpr2 && elseExpr1 == elseExpr2
     _ == _ = False
 
 instructionWidth :: Int
@@ -333,13 +304,11 @@ instructionWidth = 30
 
 instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => DisplayI (Inst ty) where
     displayI depth inst =
-        case inst of
-            (IBranch{}) -> displayed
-            _ -> justifyLeft instructionWidth ' ' displayed <> " # " <> display (getIState inst)
+        justifyLeft instructionWidth ' ' displayed <> " # " <> display (getIState inst)
       where
         displayed = withoutState inst depth
 
-        withoutState :: (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Inst ty -> Int -> Text
+        withoutState :: (RegIDTy ty ~ RegID) => Inst ty -> Int -> Text
         withoutState (ICompOp _ op lhs rhs1@(Register rTy _) rhs2) _ =
             case rhs2 of
                 (Reg rhs2') ->
@@ -435,34 +404,6 @@ instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => DisplayI (Inst ty) wh
             name
                 <> " "
                 <> Data.Text.intercalate ", " (display ret : Prelude.map display iArgs ++ Prelude.map display fArgs)
-        withoutState (IBranch _ op lhs rhs thenInst elseInst) depth' =
-            toOp op
-                <> " "
-                <> display lhs
-                <> ", "
-                <> display rhs
-                <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth' + 1) <> displayI (depth' + 1) i) thenInst)
-                <> "\n"
-                <> insertIndent depth'
-                <> "else!"
-                <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth' + 1) <> displayI (depth' + 1) i) elseInst)
-          where
-            toOp :: RelationBinOp -> Text
-            toOp Eq = "ifeq!"
-            toOp Ne = "ifne!"
-            toOp Ge = "ifge!"
-            toOp Lt = "iflt!"
-        withoutState (ILoop _ iArgs fArgs iValues fValues body) depth' =
-            "loop! "
-                <> Data.Text.intercalate
-                    ", "
-                    ( Prelude.zipWith (\a v -> display a <> " := " <> display v) iArgs iValues
-                        ++ Prelude.zipWith (\a v -> display a <> " := " <> display v) fArgs fValues
-                    )
-                <> Data.Text.intercalate "" (Prelude.map (\i -> "\n" <> insertIndent (depth' + 1) <> displayI (depth' + 1) i) body)
-        withoutState (IContinue _ iArgs fArgs) _ =
-            "continue! "
-                <> Data.Text.intercalate ", " (Prelude.map display iArgs ++ Prelude.map display fArgs)
         withoutState (IPhi _ dest choices) _ =
             "phi! " <> display dest <> ", " <> Data.Text.intercalate ", " (Prelude.map (\(l, r) -> l <> ": " <> display r) choices)
 
@@ -483,15 +424,7 @@ getIState (ICallReg state _) = state
 getIState (ILoad state _ _ _) = state
 getIState (IStore state _ _ _) = state
 getIState (IRawInst state _ _ _ _) = state
-getIState (IBranch state _ _ _ _ _) = state
-getIState (ILoop state _ _ _ _ _) = state
-getIState (IContinue state _ _) = state
 getIState (IPhi state _ _) = state
-
-getAllIState :: Inst ty -> [InstStateTy ty]
-getAllIState (IBranch state _ _ _ thenInst elseInst) =
-    state : (concatMap getAllIState thenInst ++ concatMap getAllIState elseInst)
-getAllIState inst = [getIState inst]
 
 substIState ::
     (RegIDTy a ~ RegIDTy b, AllowInstBranch a ~ AllowInstBranch b) =>
@@ -511,32 +444,6 @@ substIState f (ICallReg state reg) = ICallReg (f state) reg
 substIState f (ILoad state dest src offset) = ILoad (f state) dest src offset
 substIState f (IStore state dest src offset) = IStore (f state) dest src offset
 substIState f (IRawInst state inst retTy iArgs fArgs) = IRawInst (f state) inst retTy iArgs fArgs
-substIState f (IBranch state op left right thenExpr elseExpr) =
-    IBranch
-        (f state)
-        op
-        left
-        right
-        ( map
-            (substIState f)
-            thenExpr
-        )
-        ( map
-            (substIState f)
-            elseExpr
-        )
-substIState f (ILoop state iArgs fArgs iImmArgs fImmArgs loopExpr) =
-    ILoop
-        (f state)
-        iArgs
-        fArgs
-        iImmArgs
-        fImmArgs
-        ( map
-            (substIState f)
-            loopExpr
-        )
-substIState f (IContinue state iArgs fArgs) = IContinue (f state) iArgs fArgs
 substIState f (IPhi state dest choices) = IPhi (f state) dest choices
 
 weakSubstReg :: (Eq idTy) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
@@ -584,33 +491,6 @@ mapReg substR (IStore state dest src offset) =
     IStore state (substR dest) (substR src) offset
 mapReg substR (IRawInst state inst retReg iArgs fArgs) =
     IRawInst state inst (substR retReg) (map (coverImm substR) iArgs) (map substR fArgs)
-mapReg substR (IBranch state op left right thenExpr elseExpr) =
-    IBranch
-        state
-        op
-        (substR left)
-        (substR right)
-        ( map
-            (mapReg substR)
-            thenExpr
-        )
-        ( map
-            (mapReg substR)
-            elseExpr
-        )
-mapReg substR (ILoop state iArgs fArgs iValues fValues loopExpr) =
-    ILoop
-        state
-        (map substR iArgs)
-        (map substR fArgs)
-        (map (coverImm substR) iValues)
-        (map (coverImm substR) fValues)
-        ( map
-            (mapReg substR)
-            loopExpr
-        )
-mapReg substR (IContinue state iValues fValues) =
-    IContinue state (map (coverImm substR) iValues) (map (coverImm substR) fValues)
 mapReg substR (IPhi state dest choices) =
     IPhi state (substR dest) (Prelude.map (second substR) choices)
 

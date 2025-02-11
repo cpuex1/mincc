@@ -178,22 +178,3 @@ liveness inst = reverse $ evalState (mapM liveness' $ reverse inst) $ RegVariant
         mapM_ markUsedImm iArgs
         mapM_ markUsed fArgs
         pure $ IRawInst state' name retTy iArgs fArgs
-    liveness' (IBranch state op left right thenInst elseInst) = do
-        env <- get
-        thenInst' <- mapM liveness' $ reverse thenInst
-        thenEnv <- get
-        put env
-        elseInst' <- mapM liveness' $ reverse elseInst
-        elseEnv <- get
-        put $ thenEnv <> elseEnv
-        state' <- getState state
-        markUsed left
-        markUsed right
-        pure $
-            IBranch
-                state'
-                op
-                left
-                right
-                (reverse thenInst')
-                (reverse elseInst')

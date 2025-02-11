@@ -12,7 +12,7 @@ import qualified Data.Set as S
 import IR (
     AbstCodeBlock,
     HCodeBlock (hInst),
-    getAllIState,
+    getIState,
     mapReg,
     substIState,
  )
@@ -97,7 +97,7 @@ assignRegister block =
     enforceMapped reg = reg
 
     inst = hInst block
-    graph = toGraph $ concatMap (map livenessProp . getAllIState) inst
+    graph = toGraph $ map (livenessProp . getIState) inst
     mapped = runRegisterAlloc #$ graph
     used = VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap #$ mapped
     spillTarget = selectSpilt #$ graph

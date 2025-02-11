@@ -103,14 +103,6 @@ replaceRegWithMem rTy vars reg (IRawInst state inst dest iArgs fArgs) = do
     let fInst' = concatMap snd fArgs'
     (dest', inst'') <- storeNewReg rTy vars reg dest
     pure $ iInst' ++ fInst' ++ [IRawInst state inst dest' (map fst iArgs') (map fst fArgs')] ++ inst''
-replaceRegWithMem rTy vars reg (IBranch state op src1 src2 inst1 inst2) = do
-    (src1', inst1') <- loadNewReg rTy vars reg src1
-    (src2', inst2') <- loadNewReg rTy vars reg src2
-    inst3 <- mapM (replaceRegWithMem rTy vars reg) inst1
-    let inst3' = concat inst3
-    inst4 <- mapM (replaceRegWithMem rTy vars reg) inst2
-    let inst4' = concat inst4
-    pure $ inst1' ++ inst2' ++ [IBranch state op src1' src2' inst3' inst4']
 
 -- | Store the value of the register to the stack and replace it with a new one.
 spill :: (Monad m) => RegType a -> RegID -> AbstCodeBlock -> BackendStateT m AbstCodeBlock

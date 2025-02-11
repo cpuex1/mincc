@@ -62,21 +62,6 @@ saveRegBeyondCall rTy (IRichCall (LivenessLoc loc l) label iArgs fArgs) = do
 saveRegBeyondCall rTy (IClosureCall (LivenessLoc loc l) cl iArgs fArgs) = do
     (prologue, epilogue) <- genPrologueAndEpilogue rTy l
     pure $ prologue <> singleton (IClosureCall (LivenessLoc loc l) cl iArgs fArgs) <> epilogue
-saveRegBeyondCall rTy (IBranch state op left right thenBlock elseBlock) = do
-    thenBlock' <- toList <$> saveRegBeyondCallAll thenBlock
-    elseBlock' <- toList <$> saveRegBeyondCallAll elseBlock
-    pure $
-        singleton $
-            IBranch
-                state
-                op
-                left
-                right
-                thenBlock'
-                elseBlock'
-  where
-    saveRegBeyondCallAll :: [LivenessInst] -> FunctionCallState (Seq LivenessInst)
-    saveRegBeyondCallAll = foldM (\already block -> (already <>) <$> saveRegBeyondCall rTy block) empty
 saveRegBeyondCall _ i = pure $ singleton i
 
 -- | Saves registers on the stack before a function call and restores them after the call.

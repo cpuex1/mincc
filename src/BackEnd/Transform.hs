@@ -150,57 +150,6 @@ transformCodeBlock (HCodeBlock label localVars' inst) =
 
     traverseInst :: (Monad m) => [AbstInst] -> CodeBlockGenStateT m ()
     traverseInst [] = flushBuf
-    traverseInst (IBranch state op left right thenInst elseInst : rest) = do
-        term <- gets currentTerm
-        case (isTerm term, rest) of
-            (True, []) -> do
-                -- We can distribute the terminator.
-                elseLabel <- genLabel "else"
-                thenLabel <- genLabel "then"
-                modify $ \e ->
-                    e
-                        { currentTerm = Branch state op left right thenLabel
-                        }
-                flushBuf
-                modify $ \e ->
-                    e
-                        { currentLabel = elseLabel
-                        , currentTerm = term
-                        }
-                traverseInst elseInst
-                modify $ \e ->
-                    e
-                        { currentLabel = thenLabel
-                        , currentTerm = term
-                        }
-                traverseInst thenInst
-            _ -> do
-                elseLabel <- genLabel "else"
-                thenLabel <- genLabel "then"
-                endLabel <- genLabel "end"
-                modify $ \e ->
-                    e
-                        { currentTerm = Branch state op left right thenLabel
-                        }
-                flushBuf
-                modify $ \e ->
-                    e
-                        { currentLabel = elseLabel
-                        , currentTerm = Jmp endLabel
-                        }
-                traverseInst elseInst
-                modify $ \e ->
-                    e
-                        { currentLabel = thenLabel
-                        , currentTerm = Nop
-                        }
-                traverseInst thenInst
-                modify $ \e ->
-                    e
-                        { currentLabel = endLabel
-                        , currentTerm = term
-                        }
-                traverseInst rest
     traverseInst [IRichCall state label' iArgs fArgs] = do
         -- Check whether tail recursion optimization can be applied.
         mainLabel' <- gets mainLabel
@@ -306,4 +255,3 @@ transformCodeBlock (HCodeBlock label localVars' inst) =
         insertBuf $ IStore state dest src offset
     transformInst (IRawInst state name ret iArgs fArgs) =
         insertBuf $ IRawInst state name ret iArgs fArgs
-    transformInst (IBranch{}) = undefined
