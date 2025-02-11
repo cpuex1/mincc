@@ -28,7 +28,7 @@ data Terminator ty where
         InstLabel ->
         InstLabel ->
         Terminator ty
-    TReturn :: Terminator tyy
+    TReturn :: Terminator ty
 
 instance Display (Terminator ty) where
     display (TJmp l) = "jmp " <> l

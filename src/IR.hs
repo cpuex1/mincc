@@ -19,6 +19,7 @@ module IR (
     isTerm,
     Inst (..),
     AbstInst,
+    AbstInstKind,
     AbstCodeBlock,
     RawInst,
     RawCodeBlock,
@@ -31,6 +32,7 @@ module IR (
     replaceReg,
 ) where
 
+import Data.Bifunctor (Bifunctor (second))
 import Data.Kind (Type)
 import Data.Text (Text, intercalate, justifyLeft, pack)
 import Display (Display (display), DisplayI (displayI), insertIndent)
@@ -274,6 +276,12 @@ data Inst ty where
         [RegOrImm (RegIDTy ty) Int] ->
         [RegOrImm (RegIDTy ty) Float] ->
         Inst ty
+    IPhi ::
+        (AllowInstBranch ty ~ True) =>
+        InstStateTy ty ->
+        Register (RegIDTy ty) a ->
+        [(InstLabel, Register (RegIDTy ty) a)] ->
+        Inst ty
 
 deriving instance (Show (InstStateTy ty), Show (RegIDTy ty)) => Show (Inst ty)
 
@@ -455,6 +463,8 @@ instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => DisplayI (Inst ty) wh
         withoutState (IContinue _ iArgs fArgs) _ =
             "continue! "
                 <> Data.Text.intercalate ", " (Prelude.map display iArgs ++ Prelude.map display fArgs)
+        withoutState (IPhi _ dest choices) _ =
+            "phi! " <> display dest <> ", " <> Data.Text.intercalate ", " (Prelude.map (\(l, r) -> l <> ": " <> display r) choices)
 
 instance (Display (InstStateTy ty), RegIDTy ty ~ RegID) => Display (Inst ty) where
     display = displayI 0
@@ -476,6 +486,7 @@ getIState (IRawInst state _ _ _ _) = state
 getIState (IBranch state _ _ _ _ _) = state
 getIState (ILoop state _ _ _ _ _) = state
 getIState (IContinue state _ _) = state
+getIState (IPhi state _ _) = state
 
 getAllIState :: Inst ty -> [InstStateTy ty]
 getAllIState (IBranch state _ _ _ thenInst elseInst) =
@@ -526,6 +537,7 @@ substIState f (ILoop state iArgs fArgs iImmArgs fImmArgs loopExpr) =
             loopExpr
         )
 substIState f (IContinue state iArgs fArgs) = IContinue (f state) iArgs fArgs
+substIState f (IPhi state dest choices) = IPhi (f state) dest choices
 
 weakSubstReg :: (Eq idTy) => Register idTy ty -> Register idTy ty -> Register idTy ty -> Register idTy ty
 weakSubstReg beforeReg afterReg victim =
@@ -599,6 +611,8 @@ mapReg substR (ILoop state iArgs fArgs iValues fValues loopExpr) =
         )
 mapReg substR (IContinue state iValues fValues) =
     IContinue state (map (coverImm substR) iValues) (map (coverImm substR) fValues)
+mapReg substR (IPhi state dest choices) =
+    IPhi state (substR dest) (Prelude.map (second substR) choices)
 
 replaceReg ::
     (Eq (RegIDTy ty)) =>
