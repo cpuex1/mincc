@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module CodeBlock (
@@ -15,7 +14,7 @@ module CodeBlock (
 
 import Data.Text (Text, intercalate)
 import Display (Display (display), DisplayI (displayI), insertIndent)
-import IR (Inst, InstKind (InstStateTy), InstLabel)
+import IR (AbstInstKind, Inst, InstKind (InstStateTy), InstLabel)
 import Registers (RegType (RFloat, RInt), Register (Register))
 import Syntax (RelationBinOp (..))
 
@@ -102,3 +101,6 @@ asMermaidGraph graph =
         <> "```"
   where
     blockToNode block = intercalate "\n" $ map (\n -> blockName block <> "-->" <> n) $ nextBlocks block
+
+type VirtualBlock = CodeBlock AbstInstKind
+type VirtualBlockGraph = BlockGraph AbstInstKind

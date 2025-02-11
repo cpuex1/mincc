@@ -61,7 +61,7 @@ fromIntBinOp Div = PDiv
 -- | Higher-level code block.
 data HCodeBlock ty where
     HCodeBlock ::
-        (AllowInstBranch ty ~ True) =>
+        (AllowPseudoCall ty ~ True) =>
         { hLabel :: InstLabel
         , localVars :: Int
         , hInst :: [Inst ty]
@@ -80,7 +80,7 @@ instance (Display (InstStateTy ty)) => Display (HCodeBlock ty) where
 -- | Lower-level code block.
 data LCodeBlock ty where
     LCodeBlock ::
-        (AllowInstBranch ty ~ False) =>
+        (AllowPseudoCall ty ~ False) =>
         { lGetLabel :: InstLabel
         , lInst :: [Inst ty]
         , lTerm :: InstTerm ty
@@ -101,7 +101,7 @@ instance (Display (InstStateTy ty)) => Display (LCodeBlock ty) where
                )
 
 -- | The last block to be executed.
-exitBlock :: (AllowInstBranch ty ~ False) => LCodeBlock ty
+exitBlock :: (AllowPseudoCall ty ~ False) => LCodeBlock ty
 exitBlock = LCodeBlock "__exit" [] Nop
 
 data InstTerm ty where
@@ -143,13 +143,15 @@ isTerm _ = True
 
 class InstKind ty where
     type InstStateTy ty :: Type
-    type AllowInstBranch ty :: Bool
+    type AllowPseudoCall ty :: Bool
+    type AllowPhi ty :: Bool
 
 data AbstInstKind
 
 instance InstKind AbstInstKind where
     type InstStateTy AbstInstKind = Loc
-    type AllowInstBranch AbstInstKind = True
+    type AllowPseudoCall AbstInstKind = True
+    type AllowPhi AbstInstKind = True
 
 type AbstInst = Inst AbstInstKind
 type AbstCodeBlock = HCodeBlock AbstInstKind
@@ -158,7 +160,8 @@ data RawInstKind
 
 instance InstKind RawInstKind where
     type InstStateTy RawInstKind = Loc
-    type AllowInstBranch RawInstKind = False
+    type AllowPseudoCall RawInstKind = False
+    type AllowPhi RawInstKind = False
 
 type RawInst = Inst RawInstKind
 type RawCodeBlock = LCodeBlock RawInstKind
@@ -191,28 +194,22 @@ data Inst ty where
         Register a ->
         RegOrImm a ->
         Inst ty
-    ILMov ::
-        (AllowInstBranch ty ~ False) =>
-        InstStateTy ty ->
-        Register Int ->
-        InstLabel ->
-        Inst ty
     IRichCall ::
-        (AllowInstBranch ty ~ True) =>
+        (AllowPseudoCall ty ~ True) =>
         InstStateTy ty ->
         InstLabel ->
         [RegOrImm Int] ->
         [Register Float] ->
         Inst ty
     IClosureCall ::
-        (AllowInstBranch ty ~ True) =>
+        (AllowPseudoCall ty ~ True) =>
         InstStateTy ty ->
         Register Int ->
         [RegOrImm Int] ->
         [Register Float] ->
         Inst ty
     IMakeClosure ::
-        (AllowInstBranch ty ~ True) =>
+        (AllowPseudoCall ty ~ True) =>
         InstStateTy ty ->
         Register Int ->
         InstLabel ->
@@ -220,12 +217,18 @@ data Inst ty where
         [Register Float] ->
         Inst ty
     ICall ::
-        (AllowInstBranch ty ~ False) =>
+        (AllowPseudoCall ty ~ False) =>
         InstStateTy ty ->
         InstLabel ->
         Inst ty
+    ILMov ::
+        (AllowPseudoCall ty ~ False) =>
+        InstStateTy ty ->
+        Register Int ->
+        InstLabel ->
+        Inst ty
     ICallReg ::
-        (AllowInstBranch ty ~ False) =>
+        (AllowPseudoCall ty ~ False) =>
         InstStateTy ty ->
         Register Int ->
         Inst ty
@@ -249,7 +252,7 @@ data Inst ty where
         [Register Float] ->
         Inst ty
     IPhi ::
-        (AllowInstBranch ty ~ True) =>
+        (AllowPhi ty ~ True) =>
         InstStateTy ty ->
         Register a ->
         [(InstLabel, Register a)] ->
@@ -424,7 +427,7 @@ getIState (IRawInst state _ _ _ _) = state
 getIState (IPhi state _ _) = state
 
 substIState ::
-    (AllowInstBranch a ~ AllowInstBranch b) =>
+    (AllowPseudoCall a ~ AllowPseudoCall b, AllowPhi a ~ AllowPhi b) =>
     (InstStateTy a -> InstStateTy b) ->
     Inst a ->
     Inst b
