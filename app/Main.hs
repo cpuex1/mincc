@@ -160,14 +160,14 @@ execArgsWithBackend functions = do
 
         liftIO $ TIO.writeFile (changeExt "ir.md" outputFile) $ intercalate "\n" $ map asMermaidGraph blocks
         liftB' $ printLog Debug "Intermediate representation code was saved"
-  where
-    -- optimBlocks <- optimInstIO blocks
-    -- liftB' $ printLog Done "Backend optimization succeeded"
-    -- emitOptim <- liftB' $ asks cEmitOptim
-    -- when emitOptim $ do
-    --     liftIO $ TIO.writeFile (changeExt "optim.s" outputFile) $ intercalate "\n" $ map display optimBlocks
-    --     liftB' $ printLog Debug "Optimized IR was saved"
 
+    optimBlocks <- optimInstIO blocks
+    liftB' $ printLog Done "Backend optimization succeeded"
+    emitOptim <- liftB' $ asks cEmitOptim
+    when emitOptim $ do
+        liftIO $ TIO.writeFile (changeExt "optim.s" outputFile) $ intercalate "\n" $ map display optimBlocks
+        liftB' $ printLog Debug "Optimized IR was saved"
+  where
     -- liveness <- livenessIO optimBlocks
     -- liftB' $ printLog Done "Liveness analysis succeeded"
     -- when emitIR $ do

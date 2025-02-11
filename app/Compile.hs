@@ -30,6 +30,7 @@ import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndO
 import BackEnd.RegisterAlloc (assignRegister)
 import BackEnd.Spill (spill)
 import BackEnd.Transform (transformCodeBlock)
+import CodeBlock (VirtualBlockGraph)
 import CommandLine (
     BackendIdentStateIO,
     CompilerConfig (cActivatedBackEndOptim, cActivatedOptim, cEmitOptim, cInliningSize, cMaxInlining, cRecInliningSize),
@@ -200,11 +201,11 @@ extractGlobalsIO expr =
 getFunctionsIO :: KExpr -> IdentEnvIO [Function]
 getFunctionsIO = getFunctions
 
-optimInstIO :: [AbstCodeBlock] -> BackendIdentStateIO [AbstCodeBlock]
+optimInstIO :: [VirtualBlockGraph] -> BackendIdentStateIO [VirtualBlockGraph]
 optimInstIO inst = do
     evalStateT (mapM (optimInstIOLoop 1) inst) BackEndOptimContext
   where
-    optimInstIOLoop :: Int -> AbstCodeBlock -> BackEndOptimStateT (IdentEnvT ConfigIO) AbstCodeBlock
+    optimInstIOLoop :: Int -> VirtualBlockGraph -> BackEndOptimStateT (IdentEnvT ConfigIO) VirtualBlockGraph
     optimInstIOLoop roundCount beforeInst = do
         lift $ liftB $ lift $ printTextLog Debug $ "Optimization round " <> pack (show roundCount) <> " started"
 

@@ -297,6 +297,10 @@ instance (Eq (InstStateTy ty)) => Eq (Inst ty) where
         state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
     (IRawInst state1 inst1 retTy1@(Register RFloat _) iArgs1 fArgs1) == (IRawInst state2 inst2 retTy2@(Register RFloat _) iArgs2 fArgs2) =
         state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
+    (IPhi state1 dest1@(Register RInt _) choices1) == (IPhi state2 dest2@(Register RInt _) choices2) =
+        state1 == state2 && dest1 == dest2 && choices1 == choices2
+    (IPhi state1 dest1@(Register RFloat _) choices1) == (IPhi state2 dest2@(Register RFloat _) choices2) =
+        state1 == state2 && dest1 == dest2 && choices1 == choices2
     _ == _ = False
 
 instructionWidth :: Int

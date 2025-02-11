@@ -15,7 +15,7 @@ module BackEnd.Liveness (
     toGraph,
 ) where
 
-import Control.Monad.State (MonadState (get, put), State, evalState, gets, modify)
+import Control.Monad.State (State, evalState, gets, modify)
 import Data.Map (Map, fromList)
 import Data.Set (Set, delete, empty, insert, toAscList, union, unions)
 import Data.Text (intercalate)

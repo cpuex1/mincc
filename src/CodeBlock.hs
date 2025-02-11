@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module CodeBlock (
@@ -10,6 +11,8 @@ module CodeBlock (
     nextBlocks,
     lookupBlock,
     asMermaidGraph,
+    VirtualBlock,
+    VirtualBlockGraph,
 ) where
 
 import Data.Text (Text, intercalate)
@@ -29,6 +32,17 @@ data Terminator ty where
         InstLabel ->
         Terminator ty
     TReturn :: Terminator ty
+
+deriving instance (Show (InstStateTy ty)) => Show (Terminator ty)
+
+instance (Eq (InstStateTy ty)) => Eq (Terminator ty) where
+    TJmp l1 == TJmp l2 = l1 == l2
+    TBranch op1 r1@(Register RInt _) r2 l1 l2 == TBranch op2 r3@(Register RInt _) r4 l3 l4 =
+        op1 == op2 && r1 == r3 && r2 == r4 && l1 == l3 && l2 == l4
+    TBranch op1 r1@(Register RFloat _) r2 l1 l2 == TBranch op2 r3@(Register RFloat _) r4 l3 l4 =
+        op1 == op2 && r1 == r3 && r2 == r4 && l1 == l3 && l2 == l4
+    TReturn == TReturn = True
+    _ == _ = False
 
 instance DisplayI (Terminator ty) where
     displayI _ (TJmp l) = "jmp " <> l
@@ -65,6 +79,9 @@ data CodeBlock ty = CodeBlock
     , terminator :: Terminator ty
     }
 
+deriving instance (Show (InstStateTy ty)) => Show (CodeBlock ty)
+deriving instance (Eq (InstStateTy ty)) => Eq (CodeBlock ty)
+
 instance (Display (InstStateTy ty)) => Display (CodeBlock ty) where
     display (CodeBlock l inst _ term) =
         l
@@ -84,6 +101,9 @@ data BlockGraph ty = BlockGraph
     { blocks :: [CodeBlock ty]
     , entryBlock :: InstLabel
     }
+
+deriving instance (Show (InstStateTy ty)) => Show (BlockGraph ty)
+deriving instance (Eq (InstStateTy ty)) => Eq (BlockGraph ty)
 
 instance (Display (InstStateTy ty)) => Display (BlockGraph ty) where
     display (BlockGraph b _) = intercalate "\n" $ map display b

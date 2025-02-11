@@ -8,8 +8,8 @@ module BackEnd.Optim (
 
 import BackEnd.Optim.Common (BackEndOptimStateT)
 import BackEnd.Optim.MulElim (elimMul)
+import CodeBlock (VirtualBlockGraph)
 import Display (Display (display))
-import IR (AbstCodeBlock)
 
 -- | List of optimizations.
 data BackEndOptimKind
@@ -17,7 +17,7 @@ data BackEndOptimKind
     deriving (Show, Ord, Eq)
 
 -- | Run the optimization.
-runBackEndOptim :: (Monad m) => BackEndOptimKind -> AbstCodeBlock -> BackEndOptimStateT m AbstCodeBlock
+runBackEndOptim :: (Monad m) => BackEndOptimKind -> VirtualBlockGraph -> BackEndOptimStateT m VirtualBlockGraph
 runBackEndOptim MulElim = elimMul
 
 instance Display BackEndOptimKind where
