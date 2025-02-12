@@ -26,7 +26,7 @@ type IdentEnvIO = IdentEnvT ConfigIO
 type BackendIdentStateIO = BackendIdentState ConfigIO
 
 defaultMaxInlining :: Int
-defaultMaxInlining = 1
+defaultMaxInlining = 0
 
 data CompilerConfig = CompilerConfig
     { cInput :: [String]

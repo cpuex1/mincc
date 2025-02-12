@@ -79,7 +79,7 @@ withFreshVars (Loop state args values body) = do
                 (\e (from, to) -> subst from to e)
                 body
             $ zip args freshArgs
-    pure $ Loop state args values body'
+    pure $ Loop state freshArgs values body'
 withFreshVars expr = pure expr
 
 -- | Purges all location information.
