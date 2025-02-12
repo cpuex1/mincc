@@ -31,8 +31,9 @@ module IR (
     replaceReg,
 ) where
 
-import Data.Bifunctor (Bifunctor (second))
 import Data.Kind (Type)
+import Data.Map (Map, toAscList)
+import qualified Data.Map as M
 import Data.Text (Text, intercalate, justifyLeft, pack)
 import Display (Display (display), DisplayI (displayI), insertIndent)
 import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register))
@@ -255,7 +256,7 @@ data Inst ty where
         (AllowPhi ty ~ True) =>
         InstStateTy ty ->
         Register a ->
-        [(InstLabel, Register a)] ->
+        Map InstLabel (Register a) ->
         Inst ty
 
 deriving instance (Show (InstStateTy ty)) => Show (Inst ty)
@@ -370,17 +371,17 @@ instance (Display (InstStateTy ty)) => DisplayI (Inst ty) where
             "call! "
                 <> func
                 <> ", ["
-                <> Data.Text.intercalate ", " (Prelude.map display args)
+                <> intercalate ", " (map display args)
                 <> "], ["
-                <> Data.Text.intercalate ", " (Prelude.map display fArgs)
+                <> intercalate ", " (map display fArgs)
                 <> "]"
         withoutState (IClosureCall _ func args fArgs) _ =
             "clcall! "
                 <> display func
                 <> ", ["
-                <> Data.Text.intercalate ", " (Prelude.map display args)
+                <> intercalate ", " (map display args)
                 <> "], ["
-                <> Data.Text.intercalate ", " (Prelude.map display fArgs)
+                <> intercalate ", " (map display fArgs)
                 <> "]"
         withoutState (IMakeClosure _ dest func args fArgs) _ =
             "clmake! "
@@ -388,9 +389,9 @@ instance (Display (InstStateTy ty)) => DisplayI (Inst ty) where
                 <> ", "
                 <> func
                 <> ", ["
-                <> Data.Text.intercalate "," (Prelude.map display args)
+                <> intercalate "," (map display args)
                 <> "], ["
-                <> Data.Text.intercalate "," (Prelude.map display fArgs)
+                <> intercalate "," (map display fArgs)
                 <> "]"
         withoutState (ICall _ func) _ =
             "call " <> func
@@ -407,9 +408,9 @@ instance (Display (InstStateTy ty)) => DisplayI (Inst ty) where
         withoutState (IRawInst _ name ret iArgs fArgs) _ =
             name
                 <> " "
-                <> Data.Text.intercalate ", " (display ret : Prelude.map display iArgs ++ Prelude.map display fArgs)
+                <> intercalate ", " (display ret : map display iArgs ++ map display fArgs)
         withoutState (IPhi _ dest choices) _ =
-            "phi! " <> display dest <> ", " <> Data.Text.intercalate ", " (Prelude.map (\(l, r) -> l <> ": " <> display r) choices)
+            "phi! " <> display dest <> ", " <> intercalate ", " (map (\(l, r) -> l <> ": " <> display r) $ toAscList choices)
 
 instance (Display (InstStateTy ty)) => Display (Inst ty) where
     display = displayI 0
@@ -496,7 +497,7 @@ mapReg substR (IStore state dest src offset) =
 mapReg substR (IRawInst state inst retReg iArgs fArgs) =
     IRawInst state inst (substR retReg) (map (coverImm substR) iArgs) (map substR fArgs)
 mapReg substR (IPhi state dest choices) =
-    IPhi state (substR dest) (Prelude.map (second substR) choices)
+    IPhi state (substR dest) (M.map substR choices)
 
 replaceReg ::
     Register regTy ->

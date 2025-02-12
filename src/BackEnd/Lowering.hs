@@ -10,18 +10,21 @@ module BackEnd.Lowering (
 
 import BackEnd.Analysis.CodeBlock (fillInPrevBlocks)
 import BackEnd.BackendEnv
+import BackEnd.Optim.Common (insertPhi)
 import Builtin (BuiltinFunction (builtinInst), builtinMakeTuple, findBuiltin)
 import CodeBlock (
     BlockGraph (BlockGraph),
-    CodeBlock (CodeBlock),
+    CodeBlock (CodeBlock, blockInst, blockName),
     Terminator (TBranch, TJmp, TReturn),
  )
 import Control.Monad (filterM, when)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (MonadTrans (lift), StateT, execStateT, gets, modify)
 import Data.Foldable (Foldable (toList))
+import Data.Map (insert)
+import qualified Data.Map as M
 import Data.Sequence (Seq, fromList, (|>))
-import Data.Text (Text)
+import Data.Text (Text, singleton)
 import Display (display)
 import Error (CompilerError (OtherError))
 import IR
@@ -157,6 +160,33 @@ terminate term = do
                     ++ [CodeBlock (currentLabel ctx) (toList $ instBuf ctx) (prevLabels ctx) term]
             }
 
+-- | Add a phi instruction to the loop.
+addLoopPhi :: (Monad m) => Register a -> Register a -> CodeBlockStateT m ()
+addLoopPhi target src = do
+    loop <- gets loopLabel
+    current <- gets currentLabel
+    if current == loop
+        then do
+            -- A loop is generating.
+            -- Add a phi instruction to the current block.
+            buffer <- gets (toList . instBuf)
+            let newBuffer = insertPhi dummyLoc target current src buffer
+            modify $ \ctx -> ctx{instBuf = fromList newBuffer}
+        else do
+            -- A loop is already generated.
+            generated <- gets generatedBlocks
+            let generated' =
+                    map
+                        ( \block ->
+                            if blockName block == loop
+                                then
+                                    let newInst = insertPhi dummyLoc target current src (blockInst block)
+                                     in block{blockInst = newInst}
+                                else block
+                        )
+                        generated
+            modify $ \ctx -> ctx{generatedBlocks = generated'}
+
 genNewLabelId :: (Monad m) => CodeBlockStateT m Text
 genNewLabelId = do
     labelID <- gets generatedID
@@ -264,11 +294,11 @@ generateInstructions iReg fReg (If state cond thenExpr elseExpr) = do
             withRegType branchType $
                 \case
                     RInt ->
-                        addInst $ IPhi (getLoc state) iReg [(thenLabel, iThenReg), (elseLabel, iElseReg)]
+                        addInst $ IPhi (getLoc state) iReg (insert thenLabel iThenReg $ M.singleton elseLabel iElseReg)
                     RFloat ->
-                        addInst $ IPhi (getLoc state) fReg [(thenLabel, fThenReg), (elseLabel, fElseReg)]
+                        addInst $ IPhi (getLoc state) fReg (insert thenLabel fThenReg $ M.singleton elseLabel fElseReg)
   where
-    branchType = getType $ state
+    branchType = getType state
 generateInstructions _ _ (Let _ (PRec _ _) _ _) =
     throwError $ OtherError "The function should be removed during closure conversion."
 generateInstructions iReg fReg (Let _ PUnit expr body) = do
@@ -564,13 +594,11 @@ generateInstructions iReg fReg (Loop state args values body) = do
     iValues' <- mapM (takeReg RInt) iValues
     fValues' <- mapM (takeReg RFloat) fValues
 
-    iLoopReg <- mapM (\_ -> lift $ genTempReg RInt) args
-    fLoopReg <- mapM (\_ -> lift $ genTempReg RFloat) args
     modify $ \ctx ->
         ctx
             { loopLabel = loopLabel'
-            , iLoopArgs = iLoopReg
-            , fLoopArgs = fLoopReg
+            , iLoopArgs = iArgs'
+            , fLoopArgs = fArgs'
             }
 
     terminate $ TJmp loopLabel'
@@ -579,9 +607,9 @@ generateInstructions iReg fReg (Loop state args values body) = do
 
     case loopType of
         TFloat ->
-            mapM_ (\(a, b, c) -> addInst $ IPhi (getLoc state) a [(current, b), ("unknown", c)]) $ zip3 fArgs' fValues' fLoopReg
+            mapM_ (\(a, b) -> addInst $ IPhi (getLoc state) a $ M.singleton current b) $ zip fArgs' fValues'
         _ ->
-            mapM_ (\(a, b, c) -> addInst $ IPhi (getLoc state) a [(current, b), ("unknown", c)]) $ zip3 iArgs' iValues' iLoopReg
+            mapM_ (\(a, b) -> addInst $ IPhi (getLoc state) a $ M.singleton current b) $ zip iArgs' iValues'
     generateInstructions iReg fReg body
 
     modify $ \ctx ->
@@ -592,7 +620,7 @@ generateInstructions iReg fReg (Loop state args values body) = do
             }
   where
     loopType = getType state
-generateInstructions _ _ (Continue state args) = do
+generateInstructions _ _ (Continue _ args) = do
     iLoopReg <- gets iLoopArgs
     fLoopReg <- gets fLoopArgs
     label <- gets loopLabel
@@ -600,11 +628,11 @@ generateInstructions _ _ (Continue state args) = do
     iArgs <- lift $ filterVars RInt args
     fArgs <- lift $ filterVars RFloat args
 
-    iArgs' <- mapM (lift . findRegOrImm RInt) iArgs
-    fArgs' <- mapM (lift . findRegOrImm RFloat) fArgs
+    iArgs' <- mapM (takeReg RInt) iArgs
+    fArgs' <- mapM (takeReg RFloat) fArgs
 
-    mapM_ (\(a, b) -> addInst $ IMov (getLoc state) a b) $ zip iLoopReg iArgs'
-    mapM_ (\(a, b) -> addInst $ IMov (getLoc state) a b) $ zip fLoopReg fArgs'
+    mapM_ (uncurry addLoopPhi) $ zip iLoopReg iArgs'
+    mapM_ (uncurry addLoopPhi) $ zip fLoopReg fArgs'
 
     terminate $ TJmp label
 
