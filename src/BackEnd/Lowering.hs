@@ -24,7 +24,7 @@ import Data.Foldable (Foldable (toList))
 import Data.Map (insert)
 import qualified Data.Map as M
 import Data.Sequence (Seq, fromList, (|>))
-import Data.Text (Text, singleton)
+import Data.Text (Text)
 import Display (display)
 import Error (CompilerError (OtherError))
 import IR
@@ -281,6 +281,9 @@ generateInstructions iReg fReg (If state cond thenExpr elseExpr) = do
 
             genNewBlock elseLabel [label]
             generateInstructions iElseReg fElseReg elseExpr
+
+            -- There are no guarantee that the label has not been changed.
+            currentThenLabel <- gets currentLabel
             terminate $ TJmp endIfLabel
 
             iThenReg <- lift $ genTempReg RInt
@@ -288,15 +291,18 @@ generateInstructions iReg fReg (If state cond thenExpr elseExpr) = do
 
             genNewBlock thenLabel [label]
             generateInstructions iThenReg fThenReg thenExpr
+
+            -- There are no guarantee that the label has not been changed.
+            currentElseLabel <- gets currentLabel
             terminate $ TJmp endIfLabel
 
-            genNewBlock endIfLabel [thenLabel, elseLabel]
+            genNewBlock endIfLabel [currentThenLabel, currentElseLabel]
             withRegType branchType $
                 \case
                     RInt ->
-                        addInst $ IPhi (getLoc state) iReg (insert thenLabel iThenReg $ M.singleton elseLabel iElseReg)
+                        addInst $ IPhi (getLoc state) iReg (insert currentThenLabel iThenReg $ M.singleton currentElseLabel iElseReg)
                     RFloat ->
-                        addInst $ IPhi (getLoc state) fReg (insert thenLabel fThenReg $ M.singleton elseLabel fElseReg)
+                        addInst $ IPhi (getLoc state) fReg (insert currentThenLabel fThenReg $ M.singleton currentElseLabel fElseReg)
   where
     branchType = getType state
 generateInstructions _ _ (Let _ (PRec _ _) _ _) =
