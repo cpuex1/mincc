@@ -5,16 +5,19 @@
 module BackEnd.Optim.Common (
     mapPhi,
     insertPhi,
+    updatePhi,
     BackEndOptimContext (..),
     BackEndOptimStateT,
 ) where
 
 import BackEnd.BackendEnv (BackendStateT)
+import CodeBlock (CodeBlock (blockInst, prevBlocks))
 import Control.Monad.State (MonadState (put), StateT, runState)
-import Data.Map (Map, insert, singleton)
+import Data.Map (Map, fromList, insert, singleton, toAscList)
 import Data.Maybe (catMaybes)
-import IR (Inst (IPhi), InstKind (AllowPhi, InstStateTy), InstLabel)
-import Registers (RegType (RFloat, RInt), Register (Register))
+import qualified Data.Set as S
+import IR (Inst (IMov, IPhi), InstKind (AllowPhi, InstStateTy), InstLabel)
+import Registers (RegOrImm (Reg), RegType (RFloat, RInt), Register (Register))
 
 -- | Search for a phi instruction and apply a function to it if found.
 mapPhi ::
@@ -60,6 +63,31 @@ insertPhi newState dest fromLabel src block =
 
     -- Create a new phi instruction if it does not exist.
     newPhi = IPhi newState dest $ singleton fromLabel src
+
+-- | Update phi instructions with previous blocks.
+updatePhi :: CodeBlock ty -> CodeBlock ty
+updatePhi block = block{blockInst = map modifyPhi $ blockInst block}
+  where
+    prev = S.fromList $ prevBlocks block
+
+    modifyPhi :: Inst ty -> Inst ty
+    modifyPhi (IPhi state dest srcs) =
+        if length srcs' == 1
+            then
+                IMov
+                    state
+                    dest
+                    ( Reg
+                        ( case srcs' of
+                            [(_, src)] -> src
+                            _ -> error "The length of sources should be 1."
+                        )
+                    )
+            else
+                IPhi state dest (fromList srcs')
+      where
+        srcs' = filter (\(label, _) -> S.member label prev) $ toAscList srcs
+    modifyPhi expr = expr
 
 data BackEndOptimContext = BackEndOptimContext
     deriving (Show, Eq)
