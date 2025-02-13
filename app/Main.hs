@@ -156,8 +156,6 @@ execArgsWithBackend functions = do
     emitIR <- liftB' $ asks cEmitIR
     when emitIR $ do
         liftIO $ TIO.writeFile (changeExt "ir.s" outputFile) $ intercalate "\n" $ map display blocks
-        liftB' $ printLog Debug "Intermediate representation code was saved"
-
         liftIO $ TIO.writeFile (changeExt "ir.md" outputFile) $ intercalate "\n" $ map asMermaidGraph blocks
         liftB' $ printLog Debug "Intermediate representation code was saved"
 
@@ -166,6 +164,7 @@ execArgsWithBackend functions = do
     emitOptim <- liftB' $ asks cEmitOptim
     when emitOptim $ do
         liftIO $ TIO.writeFile (changeExt "optim.s" outputFile) $ intercalate "\n" $ map display optimBlocks
+        liftIO $ TIO.writeFile (changeExt "optim.md" outputFile) $ intercalate "\n" $ map asMermaidGraph optimBlocks
         liftB' $ printLog Debug "Optimized IR was saved"
   where
     -- liveness <- livenessIO optimBlocks

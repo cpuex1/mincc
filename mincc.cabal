@@ -32,6 +32,7 @@ library
       BackEnd.Lowering
       BackEnd.Optim
       BackEnd.Optim.Common
+      BackEnd.Optim.Merging
       BackEnd.Optim.MulElim
       BackEnd.Optim.Unreachable
       BackEnd.RegisterAlloc
