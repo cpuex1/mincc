@@ -283,7 +283,7 @@ generateInstructions iReg fReg (If state cond thenExpr elseExpr) = do
             generateInstructions iElseReg fElseReg elseExpr
 
             -- There are no guarantee that the label has not been changed.
-            currentThenLabel <- gets currentLabel
+            currentElseLabel <- gets currentLabel
             terminate $ TJmp endIfLabel
 
             iThenReg <- lift $ genTempReg RInt
@@ -293,7 +293,7 @@ generateInstructions iReg fReg (If state cond thenExpr elseExpr) = do
             generateInstructions iThenReg fThenReg thenExpr
 
             -- There are no guarantee that the label has not been changed.
-            currentElseLabel <- gets currentLabel
+            currentThenLabel <- gets currentLabel
             terminate $ TJmp endIfLabel
 
             genNewBlock endIfLabel [currentThenLabel, currentElseLabel]
