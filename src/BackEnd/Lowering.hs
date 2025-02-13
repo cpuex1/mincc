@@ -151,7 +151,7 @@ genNewBlock label prevLabels' = do
             , instBuf = mempty
             }
 
-terminate :: (Monad m) => Terminator AbstInstKind -> CodeBlockStateT m ()
+terminate :: (Monad m) => Terminator -> CodeBlockStateT m ()
 terminate term = do
     modify $ \ctx ->
         ctx
@@ -310,11 +310,13 @@ generateInstructions _ _ (Let _ (PRec _ _) _ _) =
 generateInstructions iReg fReg (Let _ PUnit expr body) = do
     generateInstructions iReg fReg expr
     generateInstructions iReg fReg body
-generateInstructions iReg fReg (Let _ (PVar v) (Const _ (LInt 0)) body) = do
-    lift $ registerReg v (zeroReg RInt)
+generateInstructions iReg fReg (Let state (PVar v) (Const _ (LInt 0)) body) = do
+    reg <- lift $ genReg RInt v
+    addInst $ IMov (getLoc state) reg (Reg $ zeroReg RInt)
     generateInstructions iReg fReg body
-generateInstructions iReg fReg (Let _ (PVar v) (Const _ (LFloat 0)) body) = do
-    lift $ registerReg v (zeroReg RFloat)
+generateInstructions iReg fReg (Let state (PVar v) (Const _ (LFloat 0)) body) = do
+    reg <- lift $ genReg RFloat v
+    addInst $ IMov (getLoc state) reg (Reg $ zeroReg RFloat)
     generateInstructions iReg fReg body
 generateInstructions iReg fReg (Let _ (PVar v) expr body) = do
     vTy <- lift $ liftB $ getTyOf v

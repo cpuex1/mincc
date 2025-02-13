@@ -6,7 +6,7 @@ import CommandLine
 import Compile
 import Control.Monad (when)
 import Control.Monad.Trans.Reader
-import Data.Text (intercalate, unpack)
+import Data.Text (intercalate)
 import qualified Data.Text.IO as TIO
 import Display
 import Options.Applicative (
@@ -19,19 +19,20 @@ import Options.Applicative (
     (<**>),
  )
 
+import BackEnd.Analysis.Liveness (runGraphLiveness)
 import BackEnd.BackendEnv (createBackendConfig, liftB, runBackendStateT)
 import BackEnd.Lowering (generateBlockGraph)
-import CodeBlock (BlockGraph (entryBlock), CodeBlock (blockName), asMermaidGraph)
+import CodeBlock (asMermaidGraph)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.State (evalStateT)
-import Control.Monad.Trans.Class
-import Error
-import Log
+import Control.Monad.Trans (lift)
+import Error (CompilerError (OtherError), displayError)
+import Log (LogLevel (Debug, Done, Error), printLog, printTextLog)
 import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (defaultIdentContext, reportEnv)
-import Path
-import Syntax (Function (funcName), ResolvedExpr)
+import Path (changeExt, getExt)
+import Syntax (Function, ResolvedExpr)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 
 main :: IO ()
@@ -166,13 +167,13 @@ execArgsWithBackend functions = do
         liftIO $ TIO.writeFile (changeExt "optim.s" outputFile) $ intercalate "\n" $ map display optimBlocks
         liftIO $ TIO.writeFile (changeExt "optim.md" outputFile) $ intercalate "\n" $ map asMermaidGraph optimBlocks
         liftB' $ printLog Debug "Optimized IR was saved"
-  where
-    -- liveness <- livenessIO optimBlocks
-    -- liftB' $ printLog Done "Liveness analysis succeeded"
-    -- when emitIR $ do
-    --     liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display liveness
-    --     liftB' $ printLog Debug "The result of liveness analysis was saved"
 
+    let livenessBlocks = map runGraphLiveness optimBlocks
+    liftB' $ printLog Done "Liveness analysis succeeded"
+    when emitIR $ do
+        liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display livenessBlocks
+        liftB' $ printLog Debug "The result of liveness analysis was saved"
+  where
     -- assignedBlocks <- assignRegisterIO liveness
     -- liftB' $ printLog Done "Register allocation succeeded"
     -- when emitIR $ do

@@ -2,7 +2,7 @@
 
 module BackEnd.RegisterAlloc (assignRegister) where
 
-import BackEnd.Liveness (LivenessCodeBlock, LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
+import BackEnd.Liveness (LivenessInstKind, LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Map (Map, findWithDefault)
 import qualified Data.Map as M
@@ -83,7 +83,7 @@ runRegisterAlloc graph = execState (registerAlloc graph) (RegAllocEnv M.empty)
         sorted = sortByDegree graph'
 
 -- | Allocates registers.
-assignRegister :: LivenessCodeBlock -> (RegVariant' Int, RegVariant' (Maybe RegID), AbstCodeBlock)
+assignRegister :: HCodeBlock LivenessInstKind -> (RegVariant' Int, RegVariant' (Maybe RegID), AbstCodeBlock)
 assignRegister block =
     -- Accept the register allocation.
     (used, spillTarget, block{hInst = map (substIState livenessLoc) mappedInst})

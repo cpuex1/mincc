@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       BackEnd.Analysis.CodeBlock
+      BackEnd.Analysis.Liveness
       BackEnd.BackendEnv
       BackEnd.FunctionCall
       BackEnd.Liveness

@@ -1,8 +1,7 @@
 module BackEnd.Optim.Merging (mergeBlocks) where
 
 import BackEnd.Optim.Common (BackEndOptimStateT)
-import CodeBlock (BlockGraph (blocks), CodeBlock (CodeBlock, blockName), Terminator (TJmp))
-import Data.List (find)
+import CodeBlock (BlockGraph (blocks), CodeBlock (CodeBlock, blockName), Terminator (TJmp), lookupBlock)
 
 mergeBlocks :: (Monad m) => BlockGraph a -> BackEndOptimStateT m (BlockGraph a)
 mergeBlocks graph =
@@ -18,6 +17,6 @@ mergeBlocks graph =
                  in mergeBlockLoop (newBlock : removed)
             _ -> block : mergeBlockLoop remains
       where
-        nextBlock = find (\block' -> blockName block' == nextLabel) remains
+        nextBlock = lookupBlock nextLabel remains
         removed = filter (\block' -> blockName block' /= nextLabel) remains
     mergeBlockLoop (block : remains) = block : mergeBlockLoop remains

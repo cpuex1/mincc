@@ -1,4 +1,8 @@
-module BackEnd.Analysis.CodeBlock (fillInPrevBlocks) where
+{-# LANGUAGE GADTs #-}
+
+module BackEnd.Analysis.CodeBlock (
+    fillInPrevBlocks,
+) where
 
 import CodeBlock (
     BlockGraph (BlockGraph),

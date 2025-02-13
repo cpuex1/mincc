@@ -12,7 +12,6 @@ module Compile (
     getFunctionsIO,
     optimInstIO,
     transformCodeBlockIO,
-    livenessIO,
     assignRegisterIO,
 ) where
 
@@ -24,7 +23,7 @@ import BackEnd.BackendEnv (
     liftB,
  )
 import BackEnd.FunctionCall (saveRegisters)
-import BackEnd.Liveness (LivenessCodeBlock, LivenessLoc (livenessLoc), liveness)
+import BackEnd.Liveness (LivenessInstKind, LivenessLoc (livenessLoc), liveness)
 import BackEnd.Optim (runBackEndOptim)
 import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndOptimStateT)
 import BackEnd.RegisterAlloc (assignRegister)
@@ -242,15 +241,7 @@ transformCodeBlockIO blocks =
             )
             blocks
 
-livenessIO :: [AbstCodeBlock] -> BackendIdentStateIO [LivenessCodeBlock]
-livenessIO = mapM livenessIO'
-  where
-    livenessIO' :: AbstCodeBlock -> BackendIdentStateIO LivenessCodeBlock
-    livenessIO' block =
-        pure $
-            block{hInst = liveness $ hInst block}
-
-assignRegisterIO :: [LivenessCodeBlock] -> BackendIdentStateIO [AbstCodeBlock]
+assignRegisterIO :: [HCodeBlock LivenessInstKind] -> BackendIdentStateIO [AbstCodeBlock]
 assignRegisterIO blocks = do
     -- Report used registers.
     usedIRegLen' <- gets (generatedReg . (#!! RInt) . regContext)
@@ -279,7 +270,7 @@ assignRegisterIO blocks = do
 
     pure blocks''
   where
-    assignRegisterLoop :: LivenessCodeBlock -> BackendIdentStateIO AbstCodeBlock
+    assignRegisterLoop :: HCodeBlock LivenessInstKind -> BackendIdentStateIO AbstCodeBlock
     assignRegisterLoop block = do
         let ~(used, spillTarget, block') = assignRegister block
         let usedI = unwrap $ used #!! RInt

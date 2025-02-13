@@ -15,6 +15,7 @@ module CodeBlock (
     VirtualBlockGraph,
 ) where
 
+import Data.List (find)
 import Data.Text (Text, intercalate)
 import Display (Display (display), DisplayI (displayI), insertIndent)
 import IR (AbstInstKind, Inst, InstKind (InstStateTy), InstLabel)
@@ -22,20 +23,20 @@ import Registers (RegType (RFloat, RInt), Register (Register))
 import Syntax (RelationBinOp (..))
 
 -- | The last instruction of a block
-data Terminator ty where
-    TJmp :: InstLabel -> Terminator ty
+data Terminator where
+    TJmp :: InstLabel -> Terminator
     TBranch ::
         RelationBinOp ->
         Register a ->
         Register a ->
         InstLabel ->
         InstLabel ->
-        Terminator ty
-    TReturn :: Terminator ty
+        Terminator
+    TReturn :: Terminator
 
-deriving instance (Show (InstStateTy ty)) => Show (Terminator ty)
+deriving instance Show Terminator
 
-instance (Eq (InstStateTy ty)) => Eq (Terminator ty) where
+instance Eq Terminator where
     TJmp l1 == TJmp l2 = l1 == l2
     TBranch op1 r1@(Register RInt _) r2 l1 l2 == TBranch op2 r3@(Register RInt _) r4 l3 l4 =
         op1 == op2 && r1 == r3 && r2 == r4 && l1 == l3 && l2 == l4
@@ -44,7 +45,7 @@ instance (Eq (InstStateTy ty)) => Eq (Terminator ty) where
     TReturn == TReturn = True
     _ == _ = False
 
-instance DisplayI (Terminator ty) where
+instance DisplayI Terminator where
     displayI _ (TJmp l) = "jmp " <> l
     displayI depth (TBranch op r1 r2 l1 l2) =
         "b"
@@ -76,7 +77,7 @@ data CodeBlock ty = CodeBlock
     { blockName :: InstLabel
     , blockInst :: [Inst ty]
     , prevBlocks :: [InstLabel]
-    , terminator :: Terminator ty
+    , terminator :: Terminator
     }
 
 deriving instance (Show (InstStateTy ty)) => Show (CodeBlock ty)
@@ -108,8 +109,8 @@ deriving instance (Eq (InstStateTy ty)) => Eq (BlockGraph ty)
 instance (Display (InstStateTy ty)) => Display (BlockGraph ty) where
     display (BlockGraph b _) = intercalate "\n" $ map display b
 
-lookupBlock :: InstLabel -> BlockGraph ty -> Maybe (CodeBlock ty)
-lookupBlock l block = lookup l $ map (\b -> (blockName b, b)) $ blocks block
+lookupBlock :: InstLabel -> [CodeBlock ty] -> Maybe (CodeBlock ty)
+lookupBlock l = find (\b -> blockName b == l)
 
 asMermaidGraph :: BlockGraph ty -> Text
 asMermaidGraph graph =
