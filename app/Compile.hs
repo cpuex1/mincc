@@ -261,7 +261,7 @@ assignRegisterIO blocks = do
             blocks
 
     -- Report used registers.
-    usedRegLen' <- gets ((VariantItem . generatedReg #$) . regContext)
+    usedRegLen' <- gets (((\_ -> VariantItem . generatedReg) #$) . regContext)
     liftB $ lift $ printLog Debug $ "After: int: " <> show (usedRegLen' #!! RInt) <> ", float: " <> show (usedRegLen' #!! RFloat)
 
     -- Perform register saving.

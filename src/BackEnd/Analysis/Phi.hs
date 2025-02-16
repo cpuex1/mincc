@@ -6,14 +6,17 @@ module BackEnd.Analysis.Phi (
     addGroup,
     phiGroups,
     toPhiMapping,
-    phiMapping,
+    applyMapping,
+    applyMappingToLiveness,
 ) where
 
+import BackEnd.Liveness (Liveness (Liveness))
 import CodeBlock (BlockGraph, visitBlock, visitInst)
 import Control.Monad.State (MonadState (get, put), State, execState)
 import Data.Map (Map, elems, insert, lookup)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Set (Set, disjoint, fromList, lookupMin, union)
+import qualified Data.Set as S
 import IR (Inst (IPhi))
 import Registers (
     RegID,
@@ -53,7 +56,7 @@ newtype PhiMapping a = PhiMapping {pMapping :: Map RegID RegID}
 -- | Convert the phi groups to a mapping from the registers to the single register.
 toPhiMapping :: RegVariant PhiGroups -> RegVariant PhiMapping
 toPhiMapping groups =
-    ( \(PhiGroups group) ->
+    ( \_ (PhiGroups group) ->
         PhiMapping $
             foldr
                 ( \group' mapping ->
@@ -67,9 +70,14 @@ toPhiMapping groups =
         #$ groups
 
 -- | Apply the phi mapping to a register.
-phiMapping :: RegType a -> RegVariant PhiMapping -> RegID -> RegID
-phiMapping rTy mapping reg =
+applyMapping :: RegType a -> RegVariant PhiMapping -> RegID -> RegID
+applyMapping rTy mapping reg =
     fromMaybe reg $ lookup reg $ pMapping (mapping #!! rTy)
+
+-- | Apply the phi mapping to the liveness information.
+applyMappingToLiveness :: RegVariant PhiMapping -> RegVariant Liveness -> RegVariant Liveness
+applyMappingToLiveness mapping live =
+    (\rTy (Liveness live') -> Liveness $ S.map (applyMapping rTy mapping) live') #$ live
 
 type GroupState = State (RegVariant PhiGroups)
 

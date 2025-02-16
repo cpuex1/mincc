@@ -38,7 +38,12 @@ type LivenessState = State LivenessContext
 
 markUsed :: Register a -> LivenessState ()
 markUsed (Register rTy (SavedReg regId)) = do
-    modify $ \ctx -> ctx{currentLiveness = updateVariant rTy (Liveness . insert regId . alive) $ currentLiveness ctx}
+    modify $ \ctx ->
+        ctx
+            { currentLiveness =
+                updateVariant rTy (Liveness . insert regId . alive) $
+                    currentLiveness ctx
+            }
 markUsed _ = pure ()
 
 markUsedImm :: RegOrImm a -> LivenessState ()
@@ -47,7 +52,12 @@ markUsedImm _ = pure ()
 
 remove :: Register a -> LivenessState ()
 remove (Register rTy (SavedReg regId)) = do
-    modify $ \ctx -> ctx{currentLiveness = updateVariant rTy (Liveness . delete regId . alive) $ currentLiveness ctx}
+    modify $ \ctx ->
+        ctx
+            { currentLiveness =
+                updateVariant rTy (Liveness . delete regId . alive) $
+                    currentLiveness ctx
+            }
 remove _ = pure ()
 
 getState :: Loc -> LivenessState LivenessLoc

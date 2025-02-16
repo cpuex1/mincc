@@ -98,7 +98,7 @@ assignRegister block =
 
     inst = hInst block
     graph = toGraph $ map (livenessProp . getIState) inst
-    mapped = runRegisterAlloc #$ graph
-    used = VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap #$ mapped
-    spillTarget = selectSpilt #$ graph
+    mapped = const runRegisterAlloc #$ graph
+    used = const (VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap) #$ mapped
+    spillTarget = const selectSpilt #$ graph
     mappedInst = map (mapReg enforceMapped) inst

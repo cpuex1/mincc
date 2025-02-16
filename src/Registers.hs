@@ -92,12 +92,9 @@ updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
 updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}
 updateVariant RFloat func variant = variant{fVariant = func $ fVariant variant}
 
-mapVariant :: (forall a. f a -> g a) -> RegVariant f -> RegVariant g
-mapVariant f (RegVariant i f') = RegVariant (f i) (f f')
-
 infixl 4 #$
-(#$) :: (forall a. f a -> g a) -> RegVariant f -> RegVariant g
-(#$) = mapVariant
+(#$) :: (forall a. RegType a -> f a -> g a) -> RegVariant f -> RegVariant g
+f #$ (RegVariant i f') = RegVariant (f RInt i) (f RFloat f')
 
 data RegisterKind ty where
     ZeroReg :: RegisterKind ty
