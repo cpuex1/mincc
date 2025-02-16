@@ -7,9 +7,7 @@
 module BackEnd.Liveness (
     liveness,
     Liveness (..),
-    RegGraph (..),
     LivenessLoc (..),
-    LivenessGraph,
     LivenessInst,
     LivenessCodeBlock,
     LivenessBlockGraph,
@@ -17,8 +15,9 @@ module BackEnd.Liveness (
     toGraph,
 ) where
 
+import BackEnd.Algorithm.Graph (RegGraph (RegGraph))
 import CodeBlock (BlockGraph, CodeBlock)
-import Data.Map (Map, fromList)
+import Data.Map (fromList)
 import Data.Set (Set, empty, toAscList, union, unions)
 import Data.Text (intercalate)
 import Display (Display (display))
@@ -33,6 +32,7 @@ import Registers (
     RegVariant (RegVariant),
     Register (Register),
     RegisterKind (SavedReg),
+    createVariant,
     (#!!),
  )
 import Syntax (Loc)
@@ -77,26 +77,15 @@ type LivenessInst = Inst LivenessInstKind
 type LivenessCodeBlock = CodeBlock LivenessInstKind
 type LivenessBlockGraph = BlockGraph LivenessInstKind
 
-data RegGraph a = RegGraph
-    { vertices :: Set RegID
-    , edges :: Map RegID (Set RegID)
-    }
-    deriving (Show, Eq)
-
-type LivenessGraph = RegVariant RegGraph
-
 toGraph :: [RegVariant Liveness] -> RegVariant RegGraph
-toGraph l = RegVariant iGraph fGraph
+toGraph l = createVariant (\rTy -> toGraphEach (map (#!! rTy) l))
   where
-    iGraph = toGraphEach $ map (#!! RInt) l
-    fGraph = toGraphEach $ map (#!! RFloat) l
-
     toGraphEach :: [Liveness a] -> RegGraph a
-    toGraphEach states = RegGraph iV iE
+    toGraphEach states = RegGraph vertices' edges'
       where
-        iState = map alive states
-        iV = unions iState
-        iE = fromList $ map (\v -> (v, unions (filter (elem v) iState))) (toAscList iV)
+        aliveSet = map alive states
+        vertices' = unions aliveSet
+        edges' = fromList $ map (\v -> (v, unions (filter (elem v) aliveSet))) (toAscList vertices')
 
 -- | Calculates liveness information for each instruction.
 liveness :: [AbstInst] -> [LivenessInst]

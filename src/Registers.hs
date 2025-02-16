@@ -12,6 +12,7 @@ module Registers (
     RegVariant (..),
     RegVariant',
     VariantItem (..),
+    createVariant,
     updateVariant,
     (#$),
     (#!!),
@@ -85,13 +86,13 @@ instance (Monoid b) => Monoid (VariantItem b a) where
 
 type RegVariant' a = RegVariant (VariantItem a)
 
-selectVariant :: RegType a -> RegVariant f -> f a
-selectVariant RInt (RegVariant i _) = i
-selectVariant RFloat (RegVariant _ f) = f
+createVariant :: (forall a. RegType a -> f a) -> RegVariant f
+createVariant f = RegVariant (f RInt) (f RFloat)
 
 infixl 9 #!!
 (#!!) :: RegVariant f -> RegType a -> f a
-(#!!) = flip selectVariant
+(RegVariant i _) #!! RInt = i
+(RegVariant _ f) #!! RFloat = f
 
 updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
 updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}

@@ -2,7 +2,8 @@
 
 module BackEnd.RegisterAlloc (assignRegister) where
 
-import BackEnd.Liveness (Liveness (Liveness), LivenessInstKind, LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
+import BackEnd.Algorithm.Graph (RegGraph (RegGraph, edges))
+import BackEnd.Liveness (Liveness (Liveness), LivenessInstKind, LivenessLoc (livenessLoc, livenessProp), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Map (Map, findWithDefault)
 import qualified Data.Map as M

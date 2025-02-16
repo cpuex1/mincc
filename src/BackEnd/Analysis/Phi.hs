@@ -9,7 +9,7 @@ module BackEnd.Analysis.Phi (
 ) where
 
 import CodeBlock (BlockGraph, visitBlock, visitInst)
-import Control.Monad.State (MonadState (get, put), State, execState)
+import Control.Monad.State (State, execState, modify)
 import Data.Map (elems, insert)
 import Data.Maybe (mapMaybe)
 import Data.Set (Set, disjoint, fromList, lookupMin, union)
@@ -21,8 +21,9 @@ import Registers (
     RegVariant',
     Register (Register),
     RegisterKind (SavedReg),
-    VariantItem (VariantItem),
+    VariantItem (VariantItem, unwrap),
     updateVariant,
+    (#!!),
     (#$),
  )
 import Prelude hiding (lookup)
@@ -53,7 +54,9 @@ toPhiMapping groups =
             foldr
                 ( \group' mapping ->
                     case lookupMin group' of
-                        Just dest -> foldr (`insert` dest) mapping group'
+                        Just minReg ->
+                            -- Maps registers to the one with the minimum register ID.
+                            foldr (`insert` minReg) mapping group'
                         Nothing -> mapping
                 )
                 mempty
@@ -64,9 +67,8 @@ toPhiMapping groups =
 type GroupState = State (RegVariant PhiGroups)
 
 registerGroup :: RegVariant' (Set RegID) -> GroupState ()
-registerGroup (RegVariant (VariantItem iGroup) (VariantItem fGroup)) = do
-    (RegVariant iGroups fGroups) <- get
-    put $ RegVariant (addGroup iGroup iGroups) (addGroup fGroup fGroups)
+registerGroup group = do
+    modify $ \groups -> (\rTy groups' -> addGroup (unwrap (group #!! rTy)) groups') #$ groups
 
 -- | Calculate the phi groups in the block graph
 phiGroups :: BlockGraph ty -> RegVariant PhiGroups

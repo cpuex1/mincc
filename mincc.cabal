@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      BackEnd.Algorithm.Graph
       BackEnd.Analysis.CodeBlock
       BackEnd.Analysis.Liveness
       BackEnd.Analysis.Phi
