@@ -599,8 +599,26 @@ generateInstructions iReg fReg (Loop state args values body) = do
     iValues <- lift $ filterVars RInt values
     fValues <- lift $ filterVars RFloat values
 
-    iValues' <- mapM (takeReg RInt) iValues
-    fValues' <- mapM (takeReg RFloat) fValues
+    -- To avoid different registers being merged by phi instructions,
+    -- we need to create new registers.
+    iValues' <-
+        mapM
+            ( \val -> do
+                dest <- lift $ genTempReg RInt
+                src <- lift $ findRegOrImm RInt val
+                addInst $ IMov (getLoc state) dest src
+                pure dest
+            )
+            iValues
+    fValues' <-
+        mapM
+            ( \val -> do
+                dest <- lift $ genTempReg RFloat
+                src <- lift $ findRegOrImm RFloat val
+                addInst $ IMov (getLoc state) dest src
+                pure dest
+            )
+            fValues
 
     modify $ \ctx ->
         ctx
