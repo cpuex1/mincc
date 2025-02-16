@@ -29,11 +29,16 @@ module Registers (
     RegOrImm (..),
     compareReg,
     compareRegOrImm,
+    RegMapping (..),
+    applyMapping,
 ) where
 
+import Data.Map (Map, compose, lookup, union)
+import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 import Display (Display (display))
 import Typing (Ty, TypeKind (TFloat))
+import Prelude hiding (lookup)
 
 type RegID = Int
 
@@ -200,3 +205,25 @@ compareRegOrImm (Reg reg1) (Reg reg2) = compareReg reg1 reg2
 compareRegOrImm (Imm RInt imm1) (Imm RInt imm2) = imm1 == imm2
 compareRegOrImm (Imm RFloat imm1) (Imm RFloat imm2) = imm1 == imm2
 compareRegOrImm _ _ = False
+
+{- | Represents a mapping from registers to registers.
+This mapping can be partial.
+-}
+newtype RegMapping ty
+    = RegMapping
+    { regMap :: Map RegID RegID
+    }
+    deriving (Show, Eq)
+
+instance Semigroup (RegMapping ty) where
+    RegMapping a <> RegMapping b =
+        -- It behaves like a composition of functions.
+        RegMapping $ compose a b `union` a
+
+instance Monoid (RegMapping ty) where
+    mempty = RegMapping mempty
+
+-- | Apply the register mapping to a register.
+applyMapping :: RegType a -> RegVariant RegMapping -> RegID -> RegID
+applyMapping rTy mapping reg =
+    fromMaybe reg $ lookup reg $ regMap (mapping #!! rTy)

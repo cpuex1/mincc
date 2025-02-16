@@ -2,7 +2,7 @@
 
 module BackEnd.RegisterAlloc (assignRegister) where
 
-import BackEnd.Liveness (LivenessInstKind, LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
+import BackEnd.Liveness (Liveness (Liveness), LivenessInstKind, LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Map (Map, findWithDefault)
 import qualified Data.Map as M
@@ -18,10 +18,13 @@ import IR (
  )
 import Registers (
     RegID,
+    RegMapping,
+    RegVariant,
     RegVariant',
     Register (Register),
     RegisterKind (SavedReg),
     VariantItem (VariantItem),
+    applyMapping,
     savedReg,
     zeroReg,
     (#!!),
@@ -102,3 +105,8 @@ assignRegister block =
     used = const (VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap) #$ mapped
     spillTarget = const selectSpilt #$ graph
     mappedInst = map (mapReg enforceMapped) inst
+
+-- | Apply the phi mapping to the liveness information.
+applyMappingToLiveness :: RegVariant RegMapping -> RegVariant Liveness -> RegVariant Liveness
+applyMappingToLiveness mapping live =
+    (\rTy (Liveness live') -> Liveness $ S.map (applyMapping rTy mapping) live') #$ live
