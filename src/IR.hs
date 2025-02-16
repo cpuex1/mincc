@@ -21,6 +21,8 @@ module IR (
     AbstInst,
     AbstInstKind,
     AbstCodeBlock,
+    PhiFreeInst,
+    PhiFreeInstKind,
     RawInst,
     RawCodeBlock,
     RawInstTerm,
@@ -156,6 +158,15 @@ instance InstKind AbstInstKind where
 
 type AbstInst = Inst AbstInstKind
 type AbstCodeBlock = HCodeBlock AbstInstKind
+
+data PhiFreeInstKind
+
+instance InstKind PhiFreeInstKind where
+    type InstStateTy PhiFreeInstKind = Loc
+    type AllowPseudoCall PhiFreeInstKind = True
+    type AllowPhi PhiFreeInstKind = False
+
+type PhiFreeInst = Inst PhiFreeInstKind
 
 data RawInstKind
 

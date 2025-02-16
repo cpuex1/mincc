@@ -12,7 +12,6 @@ module Compile (
     getFunctionsIO,
     optimInstIO,
     transformCodeBlockIO,
-    assignRegisterIO,
 ) where
 
 import BackEnd.BackendEnv (
@@ -26,7 +25,7 @@ import BackEnd.FunctionCall (saveRegisters)
 import BackEnd.Liveness (LivenessInstKind, LivenessLoc (livenessLoc), liveness)
 import BackEnd.Optim (runBackEndOptim)
 import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndOptimStateT)
-import BackEnd.RegisterAlloc (assignRegister)
+import BackEnd.RegisterAlloc (assignReg)
 import BackEnd.Spill (spill)
 import BackEnd.Transform (transformCodeBlock)
 import CodeBlock (VirtualBlockGraph)
@@ -240,86 +239,3 @@ transformCodeBlockIO blocks =
                 pure blocks'
             )
             blocks
-
-assignRegisterIO :: [HCodeBlock LivenessInstKind] -> BackendIdentStateIO [AbstCodeBlock]
-assignRegisterIO blocks = do
-    -- Report used registers.
-    usedIRegLen' <- gets (generatedReg . (#!! RInt) . regContext)
-    usedFRegLen' <- gets (generatedReg . (#!! RFloat) . regContext)
-    liftB $ lift $ printLog Debug $ "Before: int: " <> show usedIRegLen' <> ", float: " <> show usedFRegLen'
-
-    blocks' <-
-        mapM
-            ( \block -> do
-                liftB $ lift $ printTextLog Debug $ "Allocating registers for " <> hLabel block
-
-                block' <- assignRegisterLoop block
-
-                liftB $ lift $ printTextLog Debug $ "Allocated registers for " <> hLabel block
-                pure block'
-            )
-            blocks
-
-    -- Report used registers.
-    usedRegLen' <- gets (((\_ -> VariantItem . generatedReg) #$) . regContext)
-    liftB $ lift $ printLog Debug $ "After: int: " <> show (usedRegLen' #!! RInt) <> ", float: " <> show (usedRegLen' #!! RFloat)
-
-    -- Perform register saving.
-    let blocks'' = map saveRegisters blocks'
-    liftB $ lift $ printLog Debug "Refuge registers beyond function calls"
-
-    pure blocks''
-  where
-    assignRegisterLoop :: HCodeBlock LivenessInstKind -> BackendIdentStateIO AbstCodeBlock
-    assignRegisterLoop block = do
-        let ~(used, spillTarget, block') = assignRegister block
-        let usedI = unwrap $ used #!! RInt
-        let usedF = unwrap $ used #!! RFloat
-        let iSpillTarget = unwrap $ spillTarget #!! RInt
-        let fSpillTarget = unwrap $ spillTarget #!! RFloat
-
-        liftB $
-            lift $
-                printTextLog Debug $
-                    "Required registers: "
-                        <> pack (show (used #!! RInt))
-                        <> ", "
-                        <> pack (show (used #!! RFloat))
-
-        iLimit <- asks (regLimit . (#!! RInt) . regConfig)
-        if iLimit < usedI
-            then do
-                case iSpillTarget of
-                    Just target -> do
-                        let livenessRemoved = map (substIState livenessLoc) $ hInst block
-                        spilt <- spill RInt target block{hInst = livenessRemoved}
-
-                        liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (savedReg RInt target)
-
-                        assignRegisterLoop spilt{hInst = liveness $ hInst spilt}
-                    Nothing -> do
-                        throwError $ OtherError "Failed to find a spill target for int registers."
-            else do
-                fLimit <- asks (regLimit . (#!! RFloat) . regConfig)
-                if fLimit < usedF
-                    then do
-                        case fSpillTarget of
-                            Just target -> do
-                                let livenessRemoved = map (substIState livenessLoc) $ hInst block
-                                spilt <- spill RFloat target block{hInst = livenessRemoved}
-
-                                liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (savedReg RFloat target)
-
-                                assignRegisterLoop spilt{hInst = liveness $ hInst spilt}
-                            Nothing -> do
-                                throwError $ OtherError "Failed to find a spill target for float registers."
-                    else do
-                        modify $ \env ->
-                            env
-                                { regContext = updateVariant RInt (\ctx -> ctx{usedRegLen = max usedI (usedRegLen ctx)}) $ regContext env
-                                }
-                        modify $ \env ->
-                            env
-                                { regContext = updateVariant RFloat (\ctx -> ctx{usedRegLen = max usedF (usedRegLen ctx)}) $ regContext env
-                                }
-                        pure block'

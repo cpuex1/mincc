@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -11,16 +12,20 @@ module CodeBlock (
     nextBlocks,
     visitInst,
     lookupBlock,
+    mapRegBlock,
+    mapRegGraph,
     asMermaidGraph,
     visitBlock,
     VirtualBlock,
     VirtualBlockGraph,
+    PhiFreeBlock,
+    PhiFreeGraph,
 ) where
 
 import Data.List (find)
 import Data.Text (Text, intercalate)
 import Display (Display (display), DisplayI (displayI), insertIndent)
-import IR (AbstInstKind, Inst, InstKind (InstStateTy), InstLabel)
+import IR (AbstInstKind, Inst, InstKind (InstStateTy), InstLabel, PhiFreeInstKind, mapReg)
 import Registers (RegType (RFloat, RInt), Register (Register))
 import Syntax (RelationBinOp (..))
 
@@ -106,6 +111,18 @@ visitInst f (CodeBlock l inst prev term) = do
     inst' <- mapM f inst
     return $ CodeBlock l inst' prev term
 
+-- | Map registers in a block.
+mapRegBlock ::
+    (forall regTy1. Register regTy1 -> Register regTy1) ->
+    CodeBlock ty ->
+    CodeBlock ty
+mapRegBlock f (CodeBlock l inst prev term) =
+    CodeBlock l (map (mapReg f) inst) prev (mapRegTerm term)
+  where
+    mapRegTerm :: Terminator -> Terminator
+    mapRegTerm (TBranch op r1 r2 l1 l2) = TBranch op (f r1) (f r2) l1 l2
+    mapRegTerm t = t
+
 data BlockGraph ty = BlockGraph
     { blocks :: [CodeBlock ty]
     , entryBlock :: InstLabel
@@ -127,6 +144,10 @@ visitBlock f (BlockGraph b e) = do
     b' <- mapM f b
     return $ BlockGraph b' e
 
+-- | Map registers in a block graph.
+mapRegGraph :: (forall regTy1. Register regTy1 -> Register regTy1) -> BlockGraph ty -> BlockGraph ty
+mapRegGraph f (BlockGraph b e) = BlockGraph (map (mapRegBlock f) b) e
+
 -- | Export a block graph as a Mermaid-style graph.
 asMermaidGraph :: BlockGraph ty -> Text
 asMermaidGraph graph =
@@ -141,3 +162,6 @@ asMermaidGraph graph =
 
 type VirtualBlock = CodeBlock AbstInstKind
 type VirtualBlockGraph = BlockGraph AbstInstKind
+
+type PhiFreeBlock = CodeBlock PhiFreeInstKind
+type PhiFreeGraph = BlockGraph PhiFreeInstKind

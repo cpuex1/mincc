@@ -4,7 +4,7 @@ module BackEnd.Analysis.Liveness (
     runGraphLiveness,
 ) where
 
-import BackEnd.Liveness (Liveness (Liveness, alive), LivenessBlockGraph, LivenessCodeBlock, LivenessInst, LivenessLoc (LivenessLoc))
+import BackEnd.Liveness (Liveness (Liveness, alive), LivenessBlock, LivenessGraph, LivenessInst, LivenessLoc (LivenessLoc))
 import CodeBlock (BlockGraph (BlockGraph, blocks, entryBlock), CodeBlock (CodeBlock, blockInst, blockName, prevBlocks, terminator), Terminator (TBranch), VirtualBlock, VirtualBlockGraph, lookupBlock, nextBlocks)
 import Control.Monad.State (State, evalState, gets, modify)
 import Data.Map (Map, lookup)
@@ -64,16 +64,16 @@ getState :: Loc -> LivenessState LivenessLoc
 getState loc' =
     gets $ LivenessLoc loc' . currentLiveness
 
-runGraphLiveness :: VirtualBlockGraph -> LivenessBlockGraph
+runGraphLiveness :: VirtualBlockGraph -> LivenessGraph
 runGraphLiveness graph = evalState (graphLiveness graph) (LivenessContext mempty mempty)
 
-graphLiveness :: VirtualBlockGraph -> LivenessState LivenessBlockGraph
+graphLiveness :: VirtualBlockGraph -> LivenessState LivenessGraph
 graphLiveness graph = do
     -- Visit each block in reverse order.
     blocks' <- reverse <$> mapM (blockLiveness graph) (reverse $ blocks graph)
     pure $ BlockGraph blocks' (entryBlock graph)
 
-blockLiveness :: VirtualBlockGraph -> VirtualBlock -> LivenessState LivenessCodeBlock
+blockLiveness :: VirtualBlockGraph -> VirtualBlock -> LivenessState LivenessBlock
 blockLiveness graph block = do
     -- Retrieve the liveness information from next blocks.
     already <- gets analyzed

@@ -5,18 +5,20 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module BackEnd.Liveness (
-    liveness,
     Liveness (..),
     LivenessLoc (..),
     LivenessInst,
-    LivenessCodeBlock,
-    LivenessBlockGraph,
+    LivenessBlock,
+    LivenessGraph,
     LivenessInstKind,
-    toGraph,
+    constructGraph,
+    allLivenessInfo,
+    liveness,
 ) where
 
 import BackEnd.Algorithm.Graph (RegGraph (RegGraph))
-import CodeBlock (BlockGraph, CodeBlock)
+import CodeBlock (BlockGraph, CodeBlock, visitBlock, visitInst)
+import Control.Monad.State (execState, modify)
 import Data.Map (fromList)
 import Data.Set (Set, empty, toAscList, union, unions)
 import Data.Text (intercalate)
@@ -25,6 +27,7 @@ import IR (
     AbstInst,
     Inst (..),
     InstKind (..),
+    getIState,
  )
 import Registers (
     RegID,
@@ -74,11 +77,12 @@ instance InstKind LivenessInstKind where
     type AllowPhi LivenessInstKind = True
 
 type LivenessInst = Inst LivenessInstKind
-type LivenessCodeBlock = CodeBlock LivenessInstKind
-type LivenessBlockGraph = BlockGraph LivenessInstKind
+type LivenessBlock = CodeBlock LivenessInstKind
+type LivenessGraph = BlockGraph LivenessInstKind
 
-toGraph :: [RegVariant Liveness] -> RegVariant RegGraph
-toGraph l = createVariant (\rTy -> toGraphEach (map (#!! rTy) l))
+-- | Constructs a registers graph from a list of liveness information.
+constructGraph :: [RegVariant Liveness] -> RegVariant RegGraph
+constructGraph l = createVariant (\rTy -> toGraphEach (map (#!! rTy) l))
   where
     toGraphEach :: [Liveness a] -> RegGraph a
     toGraphEach states = RegGraph vertices' edges'
@@ -87,8 +91,20 @@ toGraph l = createVariant (\rTy -> toGraphEach (map (#!! rTy) l))
         vertices' = unions aliveSet
         edges' = fromList $ map (\v -> (v, unions (filter (elem v) aliveSet))) (toAscList vertices')
 
--- | Calculates liveness information for each instruction.
+-- | Gets liveness information from the code block.
+allLivenessInfo :: LivenessGraph -> [RegVariant Liveness]
+allLivenessInfo graph =
+    execState
+        ( visitBlock
+            ( visitInst
+                ( \inst -> do
+                    modify $ \ctx -> livenessProp (getIState inst) : ctx
+                    pure inst
+                )
+            )
+            graph
+        )
+        []
+
 liveness :: [AbstInst] -> [LivenessInst]
 liveness _ = undefined
-
--- reverse $ evalState (mapM instLiveness $ reverse inst) $ RegVariant (Liveness empty) (Liveness empty)
