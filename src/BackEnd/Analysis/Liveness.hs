@@ -5,7 +5,7 @@ module BackEnd.Analysis.Liveness (
 ) where
 
 import BackEnd.Liveness (Liveness (Liveness, alive), LivenessBlockGraph, LivenessCodeBlock, LivenessInst, LivenessLoc (LivenessLoc))
-import CodeBlock (BlockGraph (BlockGraph, blocks, entryBlock), CodeBlock (CodeBlock, blockInst, blockName, prevBlocks, terminator), VirtualBlock, VirtualBlockGraph, lookupBlock, nextBlocks)
+import CodeBlock (BlockGraph (BlockGraph, blocks, entryBlock), CodeBlock (CodeBlock, blockInst, blockName, prevBlocks, terminator), Terminator (TBranch), VirtualBlock, VirtualBlockGraph, lookupBlock, nextBlocks)
 import Control.Monad.State (State, evalState, gets, modify)
 import Data.Map (Map, lookup)
 import qualified Data.Map as M
@@ -71,6 +71,9 @@ blockLiveness graph block = do
     let startLiveness = nextLiveness <> phiLiveness
     modify $ \ctx -> ctx{currentLiveness = startLiveness}
 
+    -- Visit the terminator instruction.
+    terminatorLiveness $ terminator block
+
     -- Visit each instruction in the block in reverse order.
     instWithLiveness <- reverse <$> mapM instLiveness (reverse $ blockInst block)
 
@@ -85,6 +88,12 @@ blockLiveness graph block = do
 
     -- Consider phi instructions.
     phiLiveness = mconcat $ map (\b -> phiFromLabel (blockInst b) (blockName block)) nextBlocks'
+
+terminatorLiveness :: Terminator -> LivenessState ()
+terminatorLiveness (TBranch _ lhs rhs _ _) = do
+    markUsed lhs
+    markUsed rhs
+terminatorLiveness _ = pure ()
 
 instLiveness :: AbstInst -> LivenessState LivenessInst
 instLiveness (ICompOp state op dest src1 src2) = do
