@@ -59,12 +59,24 @@ data RegVariant f
 deriving instance (Show (f Int), Show (f Float)) => Show (RegVariant f)
 deriving instance (Eq (f Int), Eq (f Float)) => Eq (RegVariant f)
 
+instance (Semigroup (f Int), Semigroup (f Float)) => Semigroup (RegVariant f) where
+    RegVariant i1 f1 <> RegVariant i2 f2 = RegVariant (i1 <> i2) (f1 <> f2)
+
+instance (Monoid (f Int), Monoid (f Float)) => Monoid (RegVariant f) where
+    mempty = RegVariant mempty mempty
+
 newtype VariantItem b a
     = VariantItem {unwrap :: b}
     deriving (Eq)
 
 instance (Show b) => Show (VariantItem b a) where
     show (VariantItem item) = show item
+
+instance (Semigroup b) => Semigroup (VariantItem b a) where
+    VariantItem a <> VariantItem b = VariantItem (a <> b)
+
+instance (Monoid b) => Monoid (VariantItem b a) where
+    mempty = VariantItem mempty
 
 type RegVariant' a = RegVariant (VariantItem a)
 
@@ -86,12 +98,6 @@ mapVariant f (RegVariant i f') = RegVariant (f i) (f f')
 infixl 4 #$
 (#$) :: (forall a. f a -> g a) -> RegVariant f -> RegVariant g
 (#$) = mapVariant
-
-instance (Semigroup (f Int), Semigroup (f Float)) => Semigroup (RegVariant f) where
-    RegVariant i1 f1 <> RegVariant i2 f2 = RegVariant (i1 <> i2) (f1 <> f2)
-
-instance (Monoid (f Int), Monoid (f Float)) => Monoid (RegVariant f) where
-    mempty = RegVariant mempty mempty
 
 data RegisterKind ty where
     ZeroReg :: RegisterKind ty

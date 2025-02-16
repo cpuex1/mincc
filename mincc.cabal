@@ -27,6 +27,7 @@ library
   exposed-modules:
       BackEnd.Analysis.CodeBlock
       BackEnd.Analysis.Liveness
+      BackEnd.Analysis.Phi
       BackEnd.BackendEnv
       BackEnd.FunctionCall
       BackEnd.Liveness
@@ -121,6 +122,7 @@ test-suite mincc-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      BackEnd.Analysis.PhiSpec
       BackEnd.ShuffleSpec
       BackEnd.SpillSpec
       ParserSpec

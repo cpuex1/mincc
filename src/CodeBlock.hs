@@ -9,8 +9,10 @@ module CodeBlock (
     BlockGraph (..),
     Terminator (..),
     nextBlocks,
+    visitInst,
     lookupBlock,
     asMermaidGraph,
+    visitBlock,
     VirtualBlock,
     VirtualBlockGraph,
 ) where
@@ -92,11 +94,17 @@ instance (Display (InstStateTy ty)) => Display (CodeBlock ty) where
             <> insertIndent 1
             <> displayI 1 term
 
--- | Get the next blocks from a block
+-- | Get the next blocks from a block.
 nextBlocks :: CodeBlock ty -> [InstLabel]
 nextBlocks (CodeBlock _ _ _ TReturn) = []
 nextBlocks (CodeBlock _ _ _ (TJmp l)) = [l]
 nextBlocks (CodeBlock _ _ _ (TBranch _ _ _ l1 l2)) = [l1, l2]
+
+-- | Visit each instruction in a block.
+visitInst :: (Monad m) => (Inst ty1 -> m (Inst ty2)) -> CodeBlock ty1 -> m (CodeBlock ty2)
+visitInst f (CodeBlock l inst prev term) = do
+    inst' <- mapM f inst
+    return $ CodeBlock l inst' prev term
 
 data BlockGraph ty = BlockGraph
     { blocks :: [CodeBlock ty]
@@ -109,9 +117,17 @@ deriving instance (Eq (InstStateTy ty)) => Eq (BlockGraph ty)
 instance (Display (InstStateTy ty)) => Display (BlockGraph ty) where
     display (BlockGraph b _) = intercalate "\n" $ map display b
 
+-- | Lookup a block by its label.
 lookupBlock :: InstLabel -> [CodeBlock ty] -> Maybe (CodeBlock ty)
 lookupBlock l = find (\b -> blockName b == l)
 
+-- | Visit each block in a graph.
+visitBlock :: (Monad m) => (CodeBlock ty1 -> m (CodeBlock ty2)) -> BlockGraph ty1 -> m (BlockGraph ty2)
+visitBlock f (BlockGraph b e) = do
+    b' <- mapM f b
+    return $ BlockGraph b' e
+
+-- | Export a block graph as a Mermaid-style graph.
 asMermaidGraph :: BlockGraph ty -> Text
 asMermaidGraph graph =
     "# "
