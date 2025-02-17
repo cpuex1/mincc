@@ -37,6 +37,7 @@ import Registers (
     Register (Register),
     RegisterKind (DCReg),
     argsReg,
+    dcReg,
     heapReg,
     retReg,
     withRegType,
@@ -74,6 +75,7 @@ import Syntax (
     TypedState (getLoc, getType),
     UnaryOp (FNeg, Neg, Not),
     dummyLoc,
+    getExprState,
  )
 import Typing (TypeKind (TFloat, TInt, TUnit))
 
@@ -675,10 +677,27 @@ generateCodeBlock (Function _ _ _ freeVars boundedVars body) = do
     iArgsLength <- lift $ gets (argsLength . (#!! RInt) . regContext)
     freeVarsInstructions iArgsLength
 
-    generateInstructions (retReg RInt) (retReg RFloat) body
+    -- Generate function body.
+    -- To prevent return registers from being merged by phi instructions,
+    -- we need to create new registers.
+    case functionBodyTy of
+        TUnit -> do
+            generateInstructions (dcReg RInt) (dcReg RFloat) body
+        TFloat -> do
+            fOut <- lift $ genTempReg RFloat
+            generateInstructions (dcReg RInt) fOut body
+
+            addInst $ IMov dummyLoc (retReg RFloat) (Reg fOut)
+        _ -> do
+            iOut <- lift $ genTempReg RInt
+            generateInstructions iOut (dcReg RFloat) body
+
+            addInst $ IMov dummyLoc (retReg RInt) (Reg iOut)
 
     terminate TReturn
   where
+    functionBodyTy = getType $ getExprState body
+
     freeVarsInstructions :: (Monad m) => Int -> CodeBlockStateT m ()
     freeVarsInstructions closureArg = do
         iFreeRegisters <- lift $ genRegisters RInt freeVars

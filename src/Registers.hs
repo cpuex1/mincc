@@ -32,6 +32,7 @@ module Registers (
     compareRegOrImm,
     RegMapping (..),
     applyMapping,
+    dcReg,
 ) where
 
 import Data.Map (Map, compose, lookup, union)
@@ -177,6 +178,9 @@ savedReg rTy i = Register rTy (SavedReg i)
 
 generalReg :: RegType ty -> RegID -> Register ty
 generalReg rTy i = Register rTy (GeneralReg i)
+
+dcReg :: RegType ty -> Register ty
+dcReg rTy = Register rTy DCReg
 
 data RegOrImm ty where
     Reg :: Register ty -> RegOrImm ty
