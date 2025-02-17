@@ -724,7 +724,7 @@ generateBlockGraph func = do
                 , iLoopArgs = []
                 , fLoopArgs = []
                 }
-    let graph = BlockGraph (generatedBlocks ctx) funcLabel
+    let graph = BlockGraph (generatedBlocks ctx) funcLabel 0
     pure $ fillInPrevBlocks graph
   where
     funcLabel = display $ funcName func

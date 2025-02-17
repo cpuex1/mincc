@@ -124,15 +124,16 @@ mapRegBlock f (CodeBlock l inst prev term) =
     mapRegTerm t = t
 
 data BlockGraph ty = BlockGraph
-    { blocks :: [CodeBlock ty]
+    { graphBlocks :: [CodeBlock ty]
     , entryBlock :: InstLabel
+    , localVars :: Int
     }
 
 deriving instance (Show (InstStateTy ty)) => Show (BlockGraph ty)
 deriving instance (Eq (InstStateTy ty)) => Eq (BlockGraph ty)
 
 instance (Display (InstStateTy ty)) => Display (BlockGraph ty) where
-    display (BlockGraph b _) = intercalate "\n" $ map display b
+    display graph = intercalate "\n" $ map display $ graphBlocks graph
 
 -- | Lookup a block by its label.
 lookupBlock :: InstLabel -> [CodeBlock ty] -> Maybe (CodeBlock ty)
@@ -140,13 +141,13 @@ lookupBlock l = find (\b -> blockName b == l)
 
 -- | Visit each block in a graph.
 visitBlock :: (Monad m) => (CodeBlock ty1 -> m (CodeBlock ty2)) -> BlockGraph ty1 -> m (BlockGraph ty2)
-visitBlock f (BlockGraph b e) = do
+visitBlock f (BlockGraph b e l) = do
     b' <- mapM f b
-    return $ BlockGraph b' e
+    return $ BlockGraph b' e l
 
 -- | Map registers in a block graph.
 mapRegGraph :: (forall regTy1. Register regTy1 -> Register regTy1) -> BlockGraph ty -> BlockGraph ty
-mapRegGraph f (BlockGraph b e) = BlockGraph (map (mapRegBlock f) b) e
+mapRegGraph f (BlockGraph b e l) = BlockGraph (map (mapRegBlock f) b) e l
 
 -- | Export a block graph as a Mermaid-style graph.
 asMermaidGraph :: BlockGraph ty -> Text
@@ -154,7 +155,7 @@ asMermaidGraph graph =
     "# "
         <> entryBlock graph
         <> "\n```mermaid\ngraph TD\n"
-        <> intercalate "\n" (map blockToNode $ blocks graph)
+        <> intercalate "\n" (map blockToNode $ graphBlocks graph)
         <> "\n"
         <> "```"
   where

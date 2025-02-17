@@ -4,14 +4,14 @@ module BackEnd.Optim.Merging (mergeBlocks) where
 
 import BackEnd.Analysis.CodeBlock (fillInPrevBlocks)
 import BackEnd.Optim.Common (BackEndOptimStateT)
-import CodeBlock (BlockGraph (blocks), CodeBlock (CodeBlock, blockInst, blockName), Terminator (TJmp), lookupBlock)
+import CodeBlock (BlockGraph (graphBlocks), CodeBlock (CodeBlock, blockInst, blockName), Terminator (TJmp), lookupBlock)
 import Data.Map (delete, insert, lookup)
 import IR (Inst (IPhi), InstLabel)
 import Prelude hiding (lookup)
 
 mergeBlocks :: (Monad m) => BlockGraph a -> BackEndOptimStateT m (BlockGraph a)
 mergeBlocks graph =
-    pure $ fillInPrevBlocks graph{blocks = mergeBlockLoop (blocks graph)}
+    pure $ fillInPrevBlocks graph{graphBlocks = mergeBlockLoop (graphBlocks graph)}
   where
     mergeBlockLoop :: [CodeBlock a] -> [CodeBlock a]
     mergeBlockLoop [] = []

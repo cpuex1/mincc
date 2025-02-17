@@ -5,20 +5,20 @@ module BackEnd.Analysis.CodeBlock (
 ) where
 
 import CodeBlock (
-    BlockGraph (BlockGraph),
-    CodeBlock (blockName, prevBlocks),
+    BlockGraph (graphBlocks),
+    blockName,
     nextBlocks,
+    prevBlocks,
  )
 import Data.Map (adjust, fromList, lookup)
 import Prelude hiding (lookup)
 
 -- | Fill in the previous blocks fields.
 fillInPrevBlocks :: BlockGraph a -> BlockGraph a
-fillInPrevBlocks (BlockGraph blocks entryLabel) =
-    BlockGraph
-        (map (\block -> block{prevBlocks = concat $ lookup (blockName block) previousBlocks}) blocks)
-        entryLabel
+fillInPrevBlocks graph =
+    graph{graphBlocks = map (\block -> block{prevBlocks = concat $ lookup (blockName block) previousBlocks}) blocks}
   where
+    blocks = graphBlocks graph
     emptyMap = fromList $ map (\b -> (blockName b, [])) blocks
     previousBlocks =
         foldl

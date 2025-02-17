@@ -5,7 +5,15 @@ module BackEnd.Analysis.Liveness (
 ) where
 
 import BackEnd.Liveness (Liveness (Liveness, alive), LivenessBlock, LivenessGraph, LivenessInst, LivenessLoc (LivenessLoc))
-import CodeBlock (BlockGraph (BlockGraph, blocks, entryBlock), CodeBlock (CodeBlock, blockInst, blockName, prevBlocks, terminator), Terminator (TBranch), VirtualBlock, VirtualBlockGraph, lookupBlock, nextBlocks)
+import CodeBlock (
+    BlockGraph (BlockGraph, entryBlock, graphBlocks, localVars),
+    CodeBlock (..),
+    Terminator (TBranch),
+    VirtualBlock,
+    VirtualBlockGraph,
+    lookupBlock,
+    nextBlocks,
+ )
 import Control.Monad.State (State, evalState, gets, modify)
 import Data.Map (Map, lookup)
 import qualified Data.Map as M
@@ -70,8 +78,8 @@ runGraphLiveness graph = evalState (graphLiveness graph) (LivenessContext mempty
 graphLiveness :: VirtualBlockGraph -> LivenessState LivenessGraph
 graphLiveness graph = do
     -- Visit each block in reverse order.
-    blocks' <- reverse <$> mapM (blockLiveness graph) (reverse $ blocks graph)
-    pure $ BlockGraph blocks' (entryBlock graph)
+    blocks' <- reverse <$> mapM (blockLiveness graph) (reverse $ graphBlocks graph)
+    pure $ BlockGraph blocks' (entryBlock graph) (localVars graph)
 
 blockLiveness :: VirtualBlockGraph -> VirtualBlock -> LivenessState LivenessBlock
 blockLiveness graph block = do
@@ -94,7 +102,7 @@ blockLiveness graph block = do
     pure $ CodeBlock (blockName block) instWithLiveness (prevBlocks block) (terminator block)
   where
     next = nextBlocks block
-    nextBlocks' = mapMaybe (`lookupBlock` blocks graph) next
+    nextBlocks' = mapMaybe (`lookupBlock` graphBlocks graph) next
 
     -- Consider phi instructions.
     phiLiveness = mconcat $ map (\b -> phiFromLabel (blockInst b) (blockName block)) nextBlocks'

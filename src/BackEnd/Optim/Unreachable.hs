@@ -2,12 +2,12 @@ module BackEnd.Optim.Unreachable (removeUnreachable) where
 
 import BackEnd.Analysis.CodeBlock (fillInPrevBlocks)
 import BackEnd.Optim.Common (BackEndOptimStateT, updatePhi)
-import CodeBlock (BlockGraph (BlockGraph, blocks), CodeBlock (blockName, prevBlocks))
+import CodeBlock (BlockGraph (BlockGraph, graphBlocks), CodeBlock (blockName, prevBlocks))
 
 -- | Remove unreachable blocks.
 removeUnreachable :: (Monad m) => BlockGraph a -> BackEndOptimStateT m (BlockGraph a)
-removeUnreachable (BlockGraph blocks' entryLabel) =
-    pure $ filled{blocks = map updatePhi (blocks filled)}
+removeUnreachable (BlockGraph blocks' entryLabel localVars) =
+    pure $ filled{graphBlocks = map updatePhi (graphBlocks filled)}
   where
     graph =
         BlockGraph
@@ -18,4 +18,5 @@ removeUnreachable (BlockGraph blocks' entryLabel) =
                 blocks'
             )
             entryLabel
+            localVars
     filled = fillInPrevBlocks graph

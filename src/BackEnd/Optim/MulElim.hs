@@ -3,7 +3,7 @@
 module BackEnd.Optim.MulElim (elimMul) where
 
 import BackEnd.Optim.Common (BackEndOptimStateT)
-import CodeBlock (BlockGraph (BlockGraph), CodeBlock (blockInst), VirtualBlockGraph)
+import CodeBlock (BlockGraph (graphBlocks), VirtualBlockGraph, blockInst)
 import IR (
     Inst (IIntOp),
     PrimitiveIntOp (PDiv, PMul, PShiftL, PShiftR),
@@ -18,8 +18,8 @@ log2 n
     | otherwise = (+ 1) <$> log2 (n `div` 2)
 
 elimMul :: (Monad m) => VirtualBlockGraph -> BackEndOptimStateT m VirtualBlockGraph
-elimMul (BlockGraph blocks entry) =
-    pure $ BlockGraph (map (\block -> block{blockInst = map elimMul' (blockInst block)}) blocks) entry
+elimMul graph =
+    pure $ graph{graphBlocks = map (\block -> block{blockInst = map elimMul' (blockInst block)}) $ graphBlocks graph}
   where
     elimMul' :: Inst ty -> Inst ty
     elimMul' (IIntOp state PMul dest src (Imm _ i)) =
