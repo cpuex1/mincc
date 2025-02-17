@@ -22,6 +22,7 @@ import Options.Applicative (
 import BackEnd.Analysis.Liveness (runGraphLiveness)
 import BackEnd.BackendEnv (createBackendConfig, liftB, runBackendStateT)
 import BackEnd.Lowering (generateBlockGraph)
+import BackEnd.RegisterAlloc (assignReg)
 import CodeBlock (asMermaidGraph)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
@@ -173,6 +174,12 @@ execArgsWithBackend functions = do
     when emitIR $ do
         liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display livenessBlocks
         liftB' $ printLog Debug "The result of liveness analysis was saved"
+
+    let phiFreeBlocks = map (snd . assignReg) livenessBlocks
+    liftB' $ printLog Done "Register allocation succeeded"
+    when emitIR $ do
+        liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display phiFreeBlocks
+        liftB' $ printLog Debug "The result of register allocation was saved"
   where
     -- assignedBlocks <- assignRegisterIO liveness
     -- liftB' $ printLog Done "Register allocation succeeded"
