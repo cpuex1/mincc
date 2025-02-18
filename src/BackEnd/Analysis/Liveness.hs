@@ -4,6 +4,7 @@ module BackEnd.Analysis.Liveness (
     runGraphLiveness,
 ) where
 
+import BackEnd.Analysis.IR (InOutSet (inSet, outSet), inOutRegisters)
 import BackEnd.Liveness (Liveness (Liveness, alive), LivenessBlock, LivenessGraph, LivenessInst, LivenessLoc (LivenessLoc))
 import CodeBlock (
     BlockGraph (BlockGraph, entryBlock, graphBlocks, localVars),
@@ -18,28 +19,31 @@ import Control.Monad.State (State, evalState, gets, modify)
 import Data.Map (Map, lookup)
 import qualified Data.Map as M
 import Data.Maybe (mapMaybe)
-import Data.Set (delete, insert, singleton)
+import Data.Set (delete, insert, singleton, union, (\\))
 import IR (
     AbstInst,
     Inst (..),
     InstLabel,
+    getIState,
+    substIState,
  )
 import Registers (
-    RegOrImm (Reg),
+    RegMultiple,
     RegTuple (createRT),
     RegType (RFloat, RInt),
-    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
     updateRT,
+    (#!!),
+    (#$),
  )
 import Syntax (Loc)
 import Prelude hiding (lookup)
 
 -- | Holds liveness information.
 data LivenessContext = LivenessContext
-    { currentLiveness :: RegVariant Liveness
-    , analyzed :: Map InstLabel (RegVariant Liveness)
+    { currentLiveness :: RegMultiple Liveness
+    , analyzed :: Map InstLabel (RegMultiple Liveness)
     }
     deriving (Show, Eq)
 
@@ -54,10 +58,6 @@ markUsed (Register rTy (SavedReg regId)) = do
                     currentLiveness ctx
             }
 markUsed _ = pure ()
-
-markUsedImm :: RegOrImm a -> LivenessState ()
-markUsedImm (Reg reg) = markUsed reg
-markUsedImm _ = pure ()
 
 remove :: Register a -> LivenessState ()
 remove (Register rTy (SavedReg regId)) = do
@@ -115,65 +115,34 @@ terminatorLiveness (TBranch _ lhs rhs _ _) = do
 terminatorLiveness _ = pure ()
 
 instLiveness :: AbstInst -> LivenessState LivenessInst
-instLiveness (ICompOp state op dest src1 src2) = do
-    state' <- getState state
-    remove dest
-    markUsed src1
-    markUsedImm src2
-    pure $ ICompOp state' op dest src1 src2
-instLiveness (IIntOp state op dest src1 src2) = do
-    state' <- getState state
-    remove dest
-    markUsed src1
-    markUsedImm src2
-    pure $ IIntOp state' op dest src1 src2
-instLiveness (IFOp state op dest src1 src2) = do
-    state' <- getState state
-    remove dest
-    markUsed src1
-    markUsed src2
-    pure $ IFOp state' op dest src1 src2
-instLiveness (IMov state dest src) = do
-    state' <- getState state
-    remove dest
-    markUsedImm src
-    pure $ IMov state' dest src
-instLiveness (ICall state func) = do
-    state' <- getState state
-    pure $ ICall state' func
-instLiveness (ICallReg state cl) = do
-    state' <- getState state
-    markUsed cl
-    pure $ ICallReg state' cl
-instLiveness (ILMov state dest label) = do
-    state' <- getState state
-    remove dest
-    pure $ ILMov state' dest label
-instLiveness (ILoad state dest src offset) = do
-    state' <- getState state
-    remove dest
-    markUsed src
-    pure $ ILoad state' dest src offset
-instLiveness (IStore state dest src offset) = do
-    state' <- getState state
-    markUsed dest
-    markUsed src
-    pure $ IStore state' dest src offset
-instLiveness (IRawInst state name retTy iArgs fArgs) = do
-    state' <- getState state
-    remove retTy
-    mapM_ markUsedImm iArgs
-    mapM_ markUsed fArgs
-    pure $ IRawInst state' name retTy iArgs fArgs
 instLiveness (IPhi state dest srcs) = do
     -- We should avoid to mark source registers as used
     -- because it should be resolved at higher level.
     state' <- getState state
     remove dest
     pure $ IPhi state' dest srcs
+instLiveness inst = do
+    state <- getState $ getIState inst
+    modify $ \ctx ->
+        ctx
+            { currentLiveness =
+                ( \rTy (Liveness live) ->
+                    -- The liveness information should be updated as follows:
+                    -- ```
+                    -- LIVE := (LIVE \ OUT) /\ IN
+                    -- ```
+                    let outS = outSet (inOut #!! rTy)
+                     in let inS = inSet (inOut #!! rTy)
+                         in Liveness $ (live \\ outS) `union` inS
+                )
+                    #$ currentLiveness ctx
+            }
+    pure $ substIState (const state) inst
+  where
+    inOut = inOutRegisters inst
 
 -- | Get all registers from the label.
-phiFromLabel :: [Inst ty] -> InstLabel -> RegVariant Liveness
+phiFromLabel :: [Inst ty] -> InstLabel -> RegMultiple Liveness
 phiFromLabel [] _ = mempty
 phiFromLabel (IPhi _ _ srcs : remains) fromLabel =
     case lookup fromLabel srcs of

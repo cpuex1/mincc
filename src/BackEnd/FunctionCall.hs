@@ -16,8 +16,8 @@ import IR (
     substIState,
  )
 import Registers (
+    RegMultiple,
     RegType (RFloat, RInt),
-    RegVariant,
     savedReg,
     stackReg,
     (#!!),
@@ -35,7 +35,7 @@ genLocalVar = do
 dummyLivenessLoc :: LivenessLoc
 dummyLivenessLoc = LivenessLoc dummyLoc mempty
 
-genPrologueAndEpilogue :: RegType a -> RegVariant Liveness -> FunctionCallState (Seq LivenessInst, Seq LivenessInst)
+genPrologueAndEpilogue :: RegType a -> RegMultiple Liveness -> FunctionCallState (Seq LivenessInst, Seq LivenessInst)
 genPrologueAndEpilogue rTy l = do
     foldM
         ( \(prologue, epilogue) reg -> do

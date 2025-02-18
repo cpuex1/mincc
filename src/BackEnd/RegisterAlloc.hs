@@ -35,6 +35,7 @@ import IR (
 import Registers (
     RegID,
     RegMapping (regMap),
+    RegMultiple,
     RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
@@ -136,6 +137,6 @@ removePhi block =
     toPhiFree IPhi{} = Nothing
 
 -- | Apply the phi mapping to the liveness information.
-applyMappingToLiveness :: RegVariant RegMapping -> RegVariant Liveness -> RegVariant Liveness
+applyMappingToLiveness :: RegVariant RegMapping -> RegMultiple Liveness -> RegMultiple Liveness
 applyMappingToLiveness mapping live =
     (\rTy (Liveness live') -> Liveness $ S.map (applyMapping rTy mapping) live') #$ live

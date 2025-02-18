@@ -31,6 +31,7 @@ import IR (
  )
 import Registers (
     RegID,
+    RegMultiple,
     RegType (RFloat, RInt),
     RegVariant,
     Register (Register),
@@ -41,18 +42,18 @@ import Registers (
 import Syntax (Loc)
 import Prelude hiding (lookup)
 
-newtype Liveness a = Liveness
+newtype Liveness = Liveness
     { alive :: Set RegID
     }
     deriving (Show, Eq)
 
-instance Semigroup (Liveness a) where
+instance Semigroup Liveness where
     Liveness a <> Liveness b = Liveness $ a `union` b
 
-instance Monoid (Liveness a) where
+instance Monoid Liveness where
     mempty = Liveness empty
 
-instance Display (RegVariant Liveness) where
+instance Display (RegMultiple Liveness) where
     display live =
         "["
             <> intercalate "," (map (display . Register RInt . SavedReg) (toAscList (alive $ live #!! RInt)))
@@ -62,7 +63,7 @@ instance Display (RegVariant Liveness) where
 
 data LivenessLoc = LivenessLoc
     { livenessLoc :: Loc
-    , livenessProp :: RegVariant Liveness
+    , livenessProp :: RegMultiple Liveness
     }
     deriving (Show, Eq)
 
@@ -80,10 +81,10 @@ type LivenessBlock = CodeBlock LivenessInstKind
 type LivenessGraph = BlockGraph LivenessInstKind
 
 -- | Constructs a registers graph from a list of liveness information.
-constructGraph :: [RegVariant Liveness] -> RegVariant RegGraph
+constructGraph :: [RegMultiple Liveness] -> RegVariant RegGraph
 constructGraph l = buildRT (\rTy -> toGraphEach (map (#!! rTy) l))
   where
-    toGraphEach :: [Liveness a] -> RegGraph a
+    toGraphEach :: [Liveness] -> RegGraph a
     toGraphEach states = RegGraph vertices' edges'
       where
         aliveSet = map alive states
@@ -91,7 +92,7 @@ constructGraph l = buildRT (\rTy -> toGraphEach (map (#!! rTy) l))
         edges' = fromList $ map (\v -> (v, unions (filter (elem v) aliveSet))) (toAscList vertices')
 
 -- | Gets liveness information from the code block.
-allLivenessInfo :: LivenessGraph -> [RegVariant Liveness]
+allLivenessInfo :: LivenessGraph -> [RegMultiple Liveness]
 allLivenessInfo graph =
     execState
         ( visitBlock

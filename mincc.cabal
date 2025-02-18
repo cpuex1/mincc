@@ -27,6 +27,7 @@ library
   exposed-modules:
       BackEnd.Algorithm.Graph
       BackEnd.Analysis.CodeBlock
+      BackEnd.Analysis.IR
       BackEnd.Analysis.Liveness
       BackEnd.Analysis.Phi
       BackEnd.BackendEnv
