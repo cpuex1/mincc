@@ -39,7 +39,7 @@ import Registers (
     Register (Register),
     RegisterKind (SavedReg),
     applyMapping,
-    createVariant,
+    buildRT,
     savedReg,
     zeroReg,
     (#!!),
@@ -74,7 +74,7 @@ allocateReg graph = result
     finalMapping = mapping <> phiMapping
 
     -- Create the result.
-    result = createVariant $ \rTy ->
+    result = buildRT $ \rTy ->
         RegAllocResult
             { numReg =
                 1 + foldl max (-1) (elems $ regMap $ finalMapping #!! rTy)
@@ -90,7 +90,7 @@ assignReg graph = (result, phiFreeGraph)
     result = allocateReg graph
 
     -- Get register mapping.
-    mapping = const allocated #$ result
+    mapping = const allocated #$ result :: RegVariant RegMapping
 
     -- Apply register mapping.
     mappedGraph =

@@ -33,11 +33,13 @@ import Error (CompilerError (OtherError))
 import MiddleEnd.Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
 import Registers (
     RegOrImm (Imm, Reg),
+    RegTuple (createRT),
     RegType (RInt),
-    RegVariant (..),
+    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
-    updateVariant,
+    buildRT,
+    updateRT,
     (#!!),
  )
 import Syntax (Ident (ExternalIdent))
@@ -73,10 +75,7 @@ newtype BackendConfig = BackendConfig
 createBackendConfig :: Int -> Int -> BackendConfig
 createBackendConfig iLimit fLimit =
     BackendConfig $
-        RegVariant
-            { iVariant = RegConfig iLimit
-            , fVariant = RegConfig fLimit
-            }
+        createRT (RegConfig iLimit) (RegConfig fLimit)
 
 data BackendEnv = BackendEnv
     { globals :: GlobalTable
@@ -89,10 +88,7 @@ defaultBackendEnv table =
     BackendEnv
         { globals = table
         , regContext =
-            RegVariant
-                { iVariant = defaultRegContext
-                , fVariant = defaultRegContext
-                }
+            buildRT (const defaultRegContext)
         }
 
 type BackendStateT m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv m))
@@ -111,7 +107,7 @@ genTempReg rTy = do
     modify $ \ctx' ->
         ctx'
             { regContext =
-                updateVariant
+                updateRT
                     rTy
                     ( \ctx'' ->
                         ctx''
@@ -128,7 +124,7 @@ genReg rTy ident = do
     modify $ \ctx ->
         ctx
             { regContext =
-                updateVariant
+                updateRT
                     rTy
                     ( \ctx' ->
                         ctx'
@@ -157,7 +153,7 @@ registerReg ident (Register rTy kind) = do
     modify $ \ctx ->
         ctx
             { regContext =
-                updateVariant
+                updateRT
                     rTy
                     ( \ctx' ->
                         ctx'
@@ -173,7 +169,7 @@ updateRegContext rTy f = do
     modify $ \ctx ->
         ctx
             { regContext =
-                updateVariant rTy f $ regContext ctx
+                updateRT rTy f $ regContext ctx
             }
 
 -- | Finds a global variable by its name.

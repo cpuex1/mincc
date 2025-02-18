@@ -76,9 +76,7 @@ import MiddleEnd.Validator (validate)
 import Path (changeExt)
 import Registers (
     RegType (RFloat, RInt),
-    VariantItem (VariantItem, unwrap),
     savedReg,
-    updateVariant,
     (#!!),
     (#$),
  )

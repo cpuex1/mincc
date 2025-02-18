@@ -32,10 +32,10 @@ import IR (
 import Registers (
     RegID,
     RegType (RFloat, RInt),
-    RegVariant (RegVariant),
+    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
-    createVariant,
+    buildRT,
     (#!!),
  )
 import Syntax (Loc)
@@ -53,11 +53,11 @@ instance Monoid (Liveness a) where
     mempty = Liveness empty
 
 instance Display (RegVariant Liveness) where
-    display (RegVariant (Liveness iAlive) (Liveness fAlive)) =
+    display live =
         "["
-            <> intercalate "," (map (display . Register RInt . SavedReg) (toAscList iAlive))
+            <> intercalate "," (map (display . Register RInt . SavedReg) (toAscList (alive $ live #!! RInt)))
             <> "], ["
-            <> intercalate "," (map (display . Register RFloat . SavedReg) (toAscList fAlive))
+            <> intercalate "," (map (display . Register RFloat . SavedReg) (toAscList (alive $ live #!! RFloat)))
             <> "]"
 
 data LivenessLoc = LivenessLoc
@@ -81,7 +81,7 @@ type LivenessGraph = BlockGraph LivenessInstKind
 
 -- | Constructs a registers graph from a list of liveness information.
 constructGraph :: [RegVariant Liveness] -> RegVariant RegGraph
-constructGraph l = createVariant (\rTy -> toGraphEach (map (#!! rTy) l))
+constructGraph l = buildRT (\rTy -> toGraphEach (map (#!! rTy) l))
   where
     toGraphEach :: [Liveness a] -> RegGraph a
     toGraphEach states = RegGraph vertices' edges'

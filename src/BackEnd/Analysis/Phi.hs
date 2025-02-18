@@ -17,12 +17,12 @@ import IR (Inst (IPhi))
 import Registers (
     RegID,
     RegMapping (RegMapping),
-    RegVariant (RegVariant),
-    RegVariant',
+    RegMultiple,
+    RegTuple (createRT),
+    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
-    VariantItem (VariantItem, unwrap),
-    updateVariant,
+    updateRT,
     (#!!),
     (#$),
  )
@@ -66,9 +66,9 @@ toPhiMapping groups =
 
 type GroupState = State (RegVariant PhiGroups)
 
-registerGroup :: RegVariant' (Set RegID) -> GroupState ()
+registerGroup :: RegMultiple (Set RegID) -> GroupState ()
 registerGroup group = do
-    modify $ \groups -> (\rTy groups' -> addGroup (unwrap (group #!! rTy)) groups') #$ groups
+    modify $ \groups -> (\rTy groups' -> addGroup (group #!! rTy) groups') #$ groups
 
 -- | Calculate the phi groups in the block graph
 phiGroups :: BlockGraph ty -> RegVariant PhiGroups
@@ -85,11 +85,11 @@ phiGroups graph =
         )
         emptyGroups
   where
-    emptyGroups = RegVariant (PhiGroups []) (PhiGroups [])
+    emptyGroups = createRT (PhiGroups []) (PhiGroups [])
 
-    toGroup :: Inst ty -> RegVariant' (Set RegID)
+    toGroup :: Inst ty -> RegMultiple (Set RegID)
     toGroup (IPhi _ (Register rTy (SavedReg dest)) srcs) =
-        updateVariant rTy (\_ -> VariantItem srcRegIDs) mempty
+        updateRT rTy (const srcRegIDs) mempty
       where
         srcs' = elems srcs
         srcRegIDs =

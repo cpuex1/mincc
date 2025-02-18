@@ -26,11 +26,12 @@ import IR (
  )
 import Registers (
     RegOrImm (Reg),
+    RegTuple (createRT),
     RegType (RFloat, RInt),
-    RegVariant (RegVariant),
+    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
-    updateVariant,
+    updateRT,
  )
 import Syntax (Loc)
 import Prelude hiding (lookup)
@@ -49,7 +50,7 @@ markUsed (Register rTy (SavedReg regId)) = do
     modify $ \ctx ->
         ctx
             { currentLiveness =
-                updateVariant rTy (Liveness . insert regId . alive) $
+                updateRT rTy (Liveness . insert regId . alive) $
                     currentLiveness ctx
             }
 markUsed _ = pure ()
@@ -63,7 +64,7 @@ remove (Register rTy (SavedReg regId)) = do
     modify $ \ctx ->
         ctx
             { currentLiveness =
-                updateVariant rTy (Liveness . delete regId . alive) $
+                updateRT rTy (Liveness . delete regId . alive) $
                     currentLiveness ctx
             }
 remove _ = pure ()
@@ -176,8 +177,8 @@ phiFromLabel :: [Inst ty] -> InstLabel -> RegVariant Liveness
 phiFromLabel [] _ = mempty
 phiFromLabel (IPhi _ _ srcs : remains) fromLabel =
     case lookup fromLabel srcs of
-        Just (Register RInt (SavedReg reg)) -> RegVariant (Liveness $ singleton reg) mempty <> remains'
-        Just (Register RFloat (SavedReg reg)) -> RegVariant mempty (Liveness $ singleton reg) <> remains'
+        Just (Register RInt (SavedReg reg)) -> createRT (Liveness $ singleton reg) mempty <> remains'
+        Just (Register RFloat (SavedReg reg)) -> createRT mempty (Liveness $ singleton reg) <> remains'
         _ -> remains'
   where
     remains' = phiFromLabel remains fromLabel

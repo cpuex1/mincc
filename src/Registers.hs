@@ -1,21 +1,22 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Registers (
     RegID,
     RegType (..),
     withRegType,
-    RegVariant (..),
-    RegVariant',
-    VariantItem (..),
-    createVariant,
-    updateVariant,
+    RegVariant,
+    RegMultiple,
+    RegTuple (..),
+    buildRT,
+    updateRT,
     (#$),
-    (#!!),
     RegisterKind (..),
     Register (..),
     zeroReg,
@@ -57,51 +58,72 @@ withRegType TFloat f = f RFloat
 withRegType _ f = f RInt
 
 -- | Holds two objects - one is for integer registers and the other is for float registers.
+class RegTuple f where
+    type RegTupleMap f rTy
+
+    infixl 9 #!!
+    (#!!) :: f -> RegType rTy -> RegTupleMap f rTy
+    createRT :: RegTupleMap f Int -> RegTupleMap f Float -> f
+
+buildRT :: (RegTuple f) => (forall rTy. RegType rTy -> RegTupleMap f rTy) -> f
+buildRT f = createRT (f RInt) (f RFloat)
+
+updateRT :: (RegTuple f) => RegType rTy -> (RegTupleMap f rTy -> RegTupleMap f rTy) -> f -> f
+updateRT RInt func rt = createRT (func $ rt #!! RInt) (rt #!! RFloat)
+updateRT RFloat func rt = createRT (rt #!! RInt) (func $ rt #!! RFloat)
+
+infixl 4 #$
+(#$) :: (RegTuple f, RegTuple g) => (forall rTy. RegType rTy -> RegTupleMap f rTy -> RegTupleMap g rTy) -> f -> g
+f #$ rt = buildRT $ \regTy -> f regTy $ rt #!! regTy
+
+infixl 6 #<>
+(#<>) :: (RegTuple f, Semigroup (RegTupleMap f Int), Semigroup (RegTupleMap f Float)) => f -> f -> f
+a #<> b = createRT (a #!! RInt <> b #!! RInt) (a #!! RFloat <> b #!! RFloat)
+
+memptyRT :: (RegTuple f, Monoid (RegTupleMap f Int), Monoid (RegTupleMap f Float)) => f
+memptyRT = createRT mempty mempty
+
+-- | Holds the same type of objects for both integer and float registers.
+data RegMultiple a
+    = RegMultiple a a
+
+deriving instance (Show a) => Show (RegMultiple a)
+deriving instance (Eq a) => Eq (RegMultiple a)
+
+instance (RegTuple (RegMultiple a)) where
+    type RegTupleMap (RegMultiple a) rTy = a
+
+    RegMultiple i _ #!! RInt = i
+    RegMultiple _ f #!! RFloat = f
+
+    createRT = RegMultiple
+
+instance (Semigroup a) => Semigroup (RegMultiple a) where
+    a <> b = a #<> b
+
+instance (Monoid a) => Monoid (RegMultiple a) where
+    mempty = memptyRT
+
+-- | Holds two objects - one is for integer registers and the other is for float registers.
 data RegVariant f
-    = RegVariant
-    { iVariant :: f Int
-    , fVariant :: f Float
-    }
+    = RegVariant (f Int) (f Float)
 
 deriving instance (Show (f Int), Show (f Float)) => Show (RegVariant f)
 deriving instance (Eq (f Int), Eq (f Float)) => Eq (RegVariant f)
 
+instance RegTuple (RegVariant f) where
+    type RegTupleMap (RegVariant f) rTy = f rTy
+
+    RegVariant i _ #!! RInt = i
+    RegVariant _ f #!! RFloat = f
+
+    createRT = RegVariant
+
 instance (Semigroup (f Int), Semigroup (f Float)) => Semigroup (RegVariant f) where
-    RegVariant i1 f1 <> RegVariant i2 f2 = RegVariant (i1 <> i2) (f1 <> f2)
+    a <> b = a #<> b
 
 instance (Monoid (f Int), Monoid (f Float)) => Monoid (RegVariant f) where
-    mempty = RegVariant mempty mempty
-
-newtype VariantItem b a
-    = VariantItem {unwrap :: b}
-    deriving (Eq)
-
-instance (Show b) => Show (VariantItem b a) where
-    show (VariantItem item) = show item
-
-instance (Semigroup b) => Semigroup (VariantItem b a) where
-    VariantItem a <> VariantItem b = VariantItem (a <> b)
-
-instance (Monoid b) => Monoid (VariantItem b a) where
-    mempty = VariantItem mempty
-
-type RegVariant' a = RegVariant (VariantItem a)
-
-createVariant :: (forall a. RegType a -> f a) -> RegVariant f
-createVariant f = RegVariant (f RInt) (f RFloat)
-
-infixl 9 #!!
-(#!!) :: RegVariant f -> RegType a -> f a
-(RegVariant i _) #!! RInt = i
-(RegVariant _ f) #!! RFloat = f
-
-updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
-updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}
-updateVariant RFloat func variant = variant{fVariant = func $ fVariant variant}
-
-infixl 4 #$
-(#$) :: (forall a. RegType a -> f a -> g a) -> RegVariant f -> RegVariant g
-f #$ (RegVariant i f') = RegVariant (f RInt i) (f RFloat f')
+    mempty = memptyRT
 
 data RegisterKind ty where
     ZeroReg :: RegisterKind ty
