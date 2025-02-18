@@ -68,26 +68,6 @@ replaceRegWithMem rTy vars reg (IMov state dest src) = do
     (src', inst1) <- loadNewRegOrImm rTy vars reg src
     (dest', inst2) <- storeNewReg rTy vars reg dest
     pure $ inst1 ++ [IMov state dest' src'] ++ inst2
-replaceRegWithMem rTy vars reg (IRichCall state label iArgs fArgs) = do
-    iArgs' <- mapM (loadNewRegOrImm rTy vars reg) iArgs
-    fArgs' <- mapM (loadNewReg rTy vars reg) fArgs
-    let iInst = concatMap snd iArgs'
-    let fInst = concatMap snd fArgs'
-    pure $ iInst ++ fInst ++ [IRichCall state label (map fst iArgs') (map fst fArgs')]
-replaceRegWithMem rTy vars reg (IClosureCall state cl iArgs fArgs) = do
-    (cl', inst1) <- loadNewReg rTy vars reg cl
-    iArgs' <- mapM (loadNewRegOrImm rTy vars reg) iArgs
-    fArgs' <- mapM (loadNewReg rTy vars reg) fArgs
-    let iInst2 = concatMap snd iArgs'
-    let fInst2 = concatMap snd fArgs'
-    pure $ inst1 ++ iInst2 ++ fInst2 ++ [IClosureCall state cl' (map fst iArgs') (map fst fArgs')]
-replaceRegWithMem rTy vars reg (IMakeClosure state dest label iArgs fArgs) = do
-    iArgs' <- mapM (loadNewRegOrImm rTy vars reg) iArgs
-    fArgs' <- mapM (loadNewReg rTy vars reg) fArgs
-    let iInst = concatMap snd iArgs'
-    let fInst = concatMap snd fArgs'
-    (dest', inst') <- storeNewReg rTy vars reg dest
-    pure $ iInst ++ fInst ++ [IMakeClosure state dest' label (map fst iArgs') (map fst fArgs')] ++ inst'
 replaceRegWithMem rTy vars reg (ILoad state dest src offset) = do
     (src', inst) <- loadNewReg rTy vars reg src
     (dest', inst') <- storeNewReg rTy vars reg dest

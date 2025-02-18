@@ -56,12 +56,12 @@ genPrologueAndEpilogue rTy l = do
 
 -- | Saves registers on the stack before a function call and restores them after the call.
 saveRegBeyondCall :: RegType a -> LivenessInst -> FunctionCallState (Seq LivenessInst)
-saveRegBeyondCall rTy (IRichCall (LivenessLoc loc l) label iArgs fArgs) = do
+saveRegBeyondCall rTy (ICall (LivenessLoc loc l) label) = do
     (prologue, epilogue) <- genPrologueAndEpilogue rTy l
-    pure $ prologue <> singleton (IRichCall (LivenessLoc loc l) label iArgs fArgs) <> epilogue
-saveRegBeyondCall rTy (IClosureCall (LivenessLoc loc l) cl iArgs fArgs) = do
+    pure $ prologue <> singleton (ICall (LivenessLoc loc l) label) <> epilogue
+saveRegBeyondCall rTy (ICallReg (LivenessLoc loc l) cl) = do
     (prologue, epilogue) <- genPrologueAndEpilogue rTy l
-    pure $ prologue <> singleton (IClosureCall (LivenessLoc loc l) cl iArgs fArgs) <> epilogue
+    pure $ prologue <> singleton (ICallReg (LivenessLoc loc l) cl) <> epilogue
 saveRegBeyondCall _ i = pure $ singleton i
 
 -- | Saves registers on the stack before a function call and restores them after the call.

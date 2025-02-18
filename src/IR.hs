@@ -64,7 +64,6 @@ fromIntBinOp Div = PDiv
 -- | Higher-level code block.
 data HCodeBlock ty where
     HCodeBlock ::
-        (AllowPseudoCall ty ~ True) =>
         { hLabel :: InstLabel
         , localVars :: Int
         , hInst :: [Inst ty]
@@ -83,7 +82,6 @@ instance (Display (InstStateTy ty)) => Display (HCodeBlock ty) where
 -- | Lower-level code block.
 data LCodeBlock ty where
     LCodeBlock ::
-        (AllowPseudoCall ty ~ False) =>
         { lGetLabel :: InstLabel
         , lInst :: [Inst ty]
         , lTerm :: InstTerm ty
@@ -104,7 +102,7 @@ instance (Display (InstStateTy ty)) => Display (LCodeBlock ty) where
                )
 
 -- | The last block to be executed.
-exitBlock :: (AllowPseudoCall ty ~ False) => LCodeBlock ty
+exitBlock :: LCodeBlock ty
 exitBlock = LCodeBlock "__exit" [] Nop
 
 data InstTerm ty where
@@ -146,14 +144,12 @@ isTerm _ = True
 
 class InstKind ty where
     type InstStateTy ty :: Type
-    type AllowPseudoCall ty :: Bool
     type AllowPhi ty :: Bool
 
 data AbstInstKind
 
 instance InstKind AbstInstKind where
     type InstStateTy AbstInstKind = Loc
-    type AllowPseudoCall AbstInstKind = True
     type AllowPhi AbstInstKind = True
 
 type AbstInst = Inst AbstInstKind
@@ -163,7 +159,6 @@ data PhiFreeInstKind
 
 instance InstKind PhiFreeInstKind where
     type InstStateTy PhiFreeInstKind = Loc
-    type AllowPseudoCall PhiFreeInstKind = True
     type AllowPhi PhiFreeInstKind = False
 
 type PhiFreeInst = Inst PhiFreeInstKind
@@ -172,7 +167,6 @@ data RawInstKind
 
 instance InstKind RawInstKind where
     type InstStateTy RawInstKind = Loc
-    type AllowPseudoCall RawInstKind = False
     type AllowPhi RawInstKind = False
 
 type RawInst = Inst RawInstKind
@@ -206,41 +200,16 @@ data Inst ty where
         Register a ->
         RegOrImm a ->
         Inst ty
-    IRichCall ::
-        (AllowPseudoCall ty ~ True) =>
-        InstStateTy ty ->
-        InstLabel ->
-        [RegOrImm Int] ->
-        [Register Float] ->
-        Inst ty
-    IClosureCall ::
-        (AllowPseudoCall ty ~ True) =>
-        InstStateTy ty ->
-        Register Int ->
-        [RegOrImm Int] ->
-        [Register Float] ->
-        Inst ty
-    IMakeClosure ::
-        (AllowPseudoCall ty ~ True) =>
-        InstStateTy ty ->
-        Register Int ->
-        InstLabel ->
-        [RegOrImm Int] ->
-        [Register Float] ->
-        Inst ty
     ICall ::
-        (AllowPseudoCall ty ~ False) =>
         InstStateTy ty ->
         InstLabel ->
         Inst ty
     ILMov ::
-        (AllowPseudoCall ty ~ False) =>
         InstStateTy ty ->
         Register Int ->
         InstLabel ->
         Inst ty
     ICallReg ::
-        (AllowPseudoCall ty ~ False) =>
         InstStateTy ty ->
         Register Int ->
         Inst ty
@@ -287,12 +256,6 @@ instance (Eq (InstStateTy ty)) => Eq (Inst ty) where
         state1 == state2 && dest1 == dest2 && src1 == src2
     (ILMov state1 dest1 label1) == (ILMov state2 dest2 label2) =
         state1 == state2 && dest1 == dest2 && label1 == label2
-    (IRichCall state1 label1 iArgs1 fArgs1) == (IRichCall state2 label2 iArgs2 fArgs2) =
-        state1 == state2 && label1 == label2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
-    (IClosureCall state1 dest1 iArgs1 fArgs1) == (IClosureCall state2 dest2 iArgs2 fArgs2) =
-        state1 == state2 && dest1 == dest2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
-    (IMakeClosure state1 dest1 label1 iArgs1 fArgs1) == (IMakeClosure state2 dest2 label2 iArgs2 fArgs2) =
-        state1 == state2 && dest1 == dest2 && label1 == label2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
     (ICall state1 label1) == (ICall state2 label2) =
         state1 == state2 && label1 == label2
     (ICallReg state1 reg1) == (ICallReg state2 reg2) =
@@ -378,32 +341,6 @@ instance (Display (InstStateTy ty)) => DisplayI (Inst ty) where
             "fmovi " <> display lhs <> ", " <> display rhs
         withoutState (ILMov _ lhs rhs) _ =
             "movi " <> display lhs <> ", " <> rhs
-        withoutState (IRichCall _ func args fArgs) _ =
-            "call! "
-                <> func
-                <> ", ["
-                <> intercalate ", " (map display args)
-                <> "], ["
-                <> intercalate ", " (map display fArgs)
-                <> "]"
-        withoutState (IClosureCall _ func args fArgs) _ =
-            "clcall! "
-                <> display func
-                <> ", ["
-                <> intercalate ", " (map display args)
-                <> "], ["
-                <> intercalate ", " (map display fArgs)
-                <> "]"
-        withoutState (IMakeClosure _ dest func args fArgs) _ =
-            "clmake! "
-                <> display dest
-                <> ", "
-                <> func
-                <> ", ["
-                <> intercalate "," (map display args)
-                <> "], ["
-                <> intercalate "," (map display fArgs)
-                <> "]"
         withoutState (ICall _ func) _ =
             "call " <> func
         withoutState (ICallReg _ reg) _ =
@@ -432,9 +369,6 @@ getIState (IIntOp state _ _ _ _) = state
 getIState (IFOp state _ _ _ _) = state
 getIState (IMov state _ _) = state
 getIState (ILMov state _ _) = state
-getIState (IRichCall state _ _ _) = state
-getIState (IClosureCall state _ _ _) = state
-getIState (IMakeClosure state _ _ _ _) = state
 getIState (ICall state _) = state
 getIState (ICallReg state _) = state
 getIState (ILoad state _ _ _) = state
@@ -443,7 +377,7 @@ getIState (IRawInst state _ _ _ _) = state
 getIState (IPhi state _ _) = state
 
 substIState ::
-    (AllowPseudoCall a ~ AllowPseudoCall b, AllowPhi a ~ AllowPhi b) =>
+    (AllowPhi a ~ AllowPhi b) =>
     (InstStateTy a -> InstStateTy b) ->
     Inst a ->
     Inst b
@@ -452,9 +386,6 @@ substIState f (IIntOp state op dest src1 src2) = IIntOp (f state) op dest src1 s
 substIState f (IFOp state op dest src1 src2) = IFOp (f state) op dest src1 src2
 substIState f (IMov state dest src) = IMov (f state) dest src
 substIState f (ILMov state dest src) = ILMov (f state) dest src
-substIState f (IRichCall state label iArgs fArgs) = IRichCall (f state) label iArgs fArgs
-substIState f (IClosureCall state dest iArgs fArgs) = IClosureCall (f state) dest iArgs fArgs
-substIState f (IMakeClosure state dest label iArgs fArgs) = IMakeClosure (f state) dest label iArgs fArgs
 substIState f (ICall state label) = ICall (f state) label
 substIState f (ICallReg state reg) = ICallReg (f state) reg
 substIState f (ILoad state dest src offset) = ILoad (f state) dest src offset
@@ -491,12 +422,6 @@ mapReg substR (IMov state dest src) =
     IMov state (substR dest) (coverImm substR src)
 mapReg substR (ILMov state dest src) =
     ILMov state (substR dest) src
-mapReg substR (IRichCall state label iArgs fArgs) =
-    IRichCall state label (map (coverImm substR) iArgs) (map substR fArgs)
-mapReg substR (IClosureCall state dest iArgs fArgs) =
-    IClosureCall state (substR dest) (map (coverImm substR) iArgs) (map substR fArgs)
-mapReg substR (IMakeClosure state dest label iArgs fArgs) =
-    IMakeClosure state (substR dest) label (map (coverImm substR) iArgs) (map substR fArgs)
 mapReg _ (ICall state label) =
     ICall state label
 mapReg substR (ICallReg state reg) =

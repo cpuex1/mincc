@@ -103,21 +103,8 @@ genRegisters rTy vars = do
 
 resolveArgs :: (Monad m) => [Ident] -> BackendIdentState m ([RegOrImm Int], [Register Float])
 resolveArgs args = do
-    iArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty /= TFloat
-            )
-            args
-    fArgs <-
-        filterM
-            ( \arg -> do
-                ty <- liftB $ getTyOf arg
-                pure $ ty == TFloat
-            )
-            args
-    -- TODO: Supports global variables.
+    iArgs <- filterVars RInt args
+    fArgs <- filterVars RFloat args
     iArgs' <- mapM (findRegOrImm RInt) iArgs
     fArgs' <- mapM (findReg RFloat) fArgs
     pure (iArgs', fArgs')
@@ -502,84 +489,119 @@ generateInstructions _ _ (Put state dest idx src) = do
                     addInst $ IIntOp (getLoc state) PAdd addr reg (Reg index')
                     addInst $ IStore (getLoc state) srcReg addr 0
 generateInstructions iReg _ (MakeClosure state func freeV) = do
-    iFreeV <- lift $ filterVars RInt freeV
-    fFreeV <- lift $ filterVars RFloat freeV
-    -- Need to proof iFreeV and fFreeV don't contain any global variables.
-    iFreeV' <- mapM (lift . findRegOrImm RInt) iFreeV
-    fFreeV' <- mapM (lift . findReg RFloat) fFreeV
-    addInst $ IMakeClosure (getLoc state) iReg (display func) iFreeV' fFreeV'
-generateInstructions iReg fReg (DirectApp state func args) = do
-    case args of
-        (ExternalIdent tuple) : values -> do
-            if func == builtinMakeTuple
-                then
-                    mkTuple tuple values
-                else
-                    simpleApp
-        _ -> simpleApp
-  where
-    mkTuple :: (Monad m) => Text -> [Ident] -> CodeBlockStateT m ()
-    mkTuple tuple values = do
-        prop <- lift $ findGlobal tuple
-        let offset = globalOffset prop
-        mapM_
-            ( \(idx, val) -> do
-                ty <- lift $ liftB $ getTyOf val
-                withRegType ty $
-                    \rTy -> do
-                        reg <- lift $ findRegOrImm rTy val
-                        case reg of
-                            Reg reg' -> do
-                                addInst $ IStore (getLoc state) reg' (zeroReg RInt) (offset + idx)
-                            Imm RInt imm -> do
-                                temp' <- lift $ genTempReg RInt
-                                addInst $ IMov (getLoc state) temp' (Imm RInt imm)
-                                addInst $ IStore (getLoc state) temp' (zeroReg RInt) (offset + idx)
-                            Imm RFloat _ -> do
-                                throwError $ OtherError "The address cannot be float."
-            )
-            ( zip
-                [0 ..]
-                values
-            )
+    -- Store the function label.
+    labelReg <- lift $ genTempReg RInt
+    addInst $ ILMov (getLoc state) labelReg (display func)
+    addInst $ IStore (getLoc state) labelReg heapReg 0
 
-    simpleApp ::
-        (Monad m) =>
-        CodeBlockStateT m ()
-    simpleApp = do
-        (iArgs', fArgs') <- lift $ resolveArgs args
-        case getType state of
-            TUnit -> do
-                case findBuiltin func of
-                    Just builtin -> do
-                        addInst $ IRawInst (getLoc state) (builtinInst builtin) (Register RInt DCReg) iArgs' fArgs'
-                    Nothing -> do
-                        addInst $ IRichCall (getLoc state) (display func) iArgs' fArgs'
-            TFloat -> do
-                case findBuiltin func of
-                    Just builtin -> do
-                        addInst $ IRawInst (getLoc state) (builtinInst builtin) fReg iArgs' fArgs'
-                    Nothing -> do
-                        addInst $ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                        addInst $ IMov (getLoc state) fReg (Reg $ retReg RFloat)
-            _ -> do
-                case findBuiltin func of
-                    Just builtin -> do
-                        addInst $ IRawInst (getLoc state) (builtinInst builtin) iReg iArgs' fArgs'
-                    Nothing -> do
-                        addInst $ IRichCall (getLoc state) (display func) iArgs' fArgs'
-                        addInst $ IMov (getLoc state) iReg (Reg $ retReg RInt)
-generateInstructions iReg fReg (ClosureApp state func args) = do
-    func' <- lift $ findReg RInt func
+    -- Store the free variables.
+    (iFreeV, fFreeV) <- lift $ resolveArgs freeV
+    mapM_
+        ( \(v, offset) -> do
+            reg <- resolveRegOrImm v
+            addInst $ IStore (getLoc state) reg heapReg offset
+        )
+        $ zip iFreeV [1 ..]
+    mapM_
+        ( \(v, offset) -> do
+            addInst $ IStore (getLoc state) v heapReg offset
+        )
+        $ zip fFreeV [(1 + length iFreeV) ..]
+
+    -- Get the address of the closure.
+    addInst $ IMov (getLoc state) iReg (Reg heapReg)
+    addInst $ IIntOp (getLoc state) PAdd heapReg heapReg (Imm RInt $ 1 + length freeV)
+generateInstructions iReg fReg (DirectApp state func args) = do
+    if func == builtinMakeTuple
+        then do
+            -- The builtin function for initializing global tuples.
+            case args of
+                (ExternalIdent tuple) : values -> do
+                    prop <- lift $ findGlobal tuple
+                    let offset = globalOffset prop
+                    mapM_
+                        ( \(idx, val) -> do
+                            ty <- lift $ liftB $ getTyOf val
+                            withRegType ty $
+                                \rTy -> do
+                                    reg <- lift $ findRegOrImm rTy val
+                                    reg' <- resolveRegOrImm reg
+                                    addInst $ IStore (getLoc state) reg' (zeroReg RInt) (offset + idx)
+                        )
+                        ( zip
+                            [0 ..]
+                            values
+                        )
+                _ -> throwError $ OtherError "The first argument should be a tuple."
+        else do
+            -- A simple function application or a special instruction.
+            (iArgs', fArgs') <- lift $ resolveArgs args
+
+            case findBuiltin func of
+                Just builtin -> do
+                    -- A special instruction.
+                    case getType state of
+                        TUnit -> do
+                            addInst $ IRawInst (getLoc state) (builtinInst builtin) (Register RInt DCReg) iArgs' fArgs'
+                        TFloat -> do
+                            addInst $ IRawInst (getLoc state) (builtinInst builtin) fReg iArgs' fArgs'
+                        _ -> do
+                            addInst $ IRawInst (getLoc state) (builtinInst builtin) iReg iArgs' fArgs'
+                Nothing -> do
+                    -- A simple function application.
+
+                    -- Assign bounded function arguments.
+                    mapM_
+                        ( \(v, num) -> do
+                            addInst $ IMov (getLoc state) (argsReg RInt num) v
+                        )
+                        $ zip iArgs' [0 ..]
+                    mapM_
+                        ( \(v, num) -> do
+                            addInst $ IMov (getLoc state) (argsReg RFloat num) (Reg v)
+                        )
+                        $ zip fArgs' [0 ..]
+
+                    -- Call the function.
+                    addInst $ ICall (getLoc state) (display func)
+
+                    -- Assign the return value.
+                    case getType state of
+                        TUnit -> do
+                            pure ()
+                        TFloat -> do
+                            addInst $ IMov (getLoc state) fReg (Reg $ retReg RFloat)
+                        _ -> do
+                            addInst $ IMov (getLoc state) iReg (Reg $ retReg RInt)
+generateInstructions iReg fReg (ClosureApp state closure args) = do
+    closure' <- lift $ findReg RInt closure
+    func <- lift $ genTempReg RInt
     (iArgs', fArgs') <- lift $ resolveArgs args
+
+    -- Assign bounded function arguments.
+    mapM_
+        ( \(v, num) -> do
+            addInst $ IMov (getLoc state) (argsReg RInt num) v
+        )
+        $ zip iArgs' [0 ..]
+    mapM_
+        ( \(v, num) -> do
+            addInst $ IMov (getLoc state) (argsReg RFloat num) (Reg v)
+        )
+        $ zip fArgs' [0 ..]
+
+    -- Call the closure.
+    addInst $ IIntOp (getLoc state) PAdd (argsReg RInt $ length iArgs') closure' (Imm RInt 1)
+    addInst $ ILoad (getLoc state) func closure' 0
+    addInst $ ICallReg (getLoc state) func
+
+    -- Assign the return value.
     case getType state of
         TUnit -> do
-            addInst $ IClosureCall (getLoc state) func' iArgs' fArgs'
+            pure ()
         TFloat -> do
-            addInst $ IClosureCall (getLoc state) func' iArgs' fArgs'
             addInst $ IMov (getLoc state) fReg (Reg $ retReg RFloat)
         _ -> do
-            addInst $ IClosureCall (getLoc state) func' iArgs' fArgs'
             addInst $ IMov (getLoc state) iReg (Reg $ retReg RInt)
 generateInstructions iReg fReg (Loop state args values body) = do
     prevLoopLabel <- gets loopLabel

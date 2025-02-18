@@ -73,7 +73,6 @@ data LivenessInstKind
 
 instance InstKind LivenessInstKind where
     type InstStateTy LivenessInstKind = LivenessLoc
-    type AllowPseudoCall LivenessInstKind = True
     type AllowPhi LivenessInstKind = True
 
 type LivenessInst = Inst LivenessInstKind

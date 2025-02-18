@@ -129,9 +129,9 @@ removePhi block =
     toPhiFree (ILoad state dest src offset) = Just $ ILoad state dest src offset
     toPhiFree (IStore state dest src offset) = Just $ IStore state dest src offset
     toPhiFree (IMov state dest src) = Just $ IMov state dest src
-    toPhiFree (IRichCall state label iArgs fArgs) = Just $ IRichCall state label iArgs fArgs
-    toPhiFree (IClosureCall state cl iArgs fArgs) = Just $ IClosureCall state cl iArgs fArgs
-    toPhiFree (IMakeClosure state dest label iArgs fArgs) = Just $ IMakeClosure state dest label iArgs fArgs
+    toPhiFree (ICall state func) = Just $ ICall state func
+    toPhiFree (ICallReg state cl) = Just $ ICallReg state cl
+    toPhiFree (ILMov state dest label) = Just $ ILMov state dest label
     toPhiFree (IRawInst state name retTy iArgs fArgs) = Just $ IRawInst state name retTy iArgs fArgs
     toPhiFree IPhi{} = Nothing
 

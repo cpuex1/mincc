@@ -150,47 +150,47 @@ transformCodeBlock (HCodeBlock label localVars' inst) =
 
     traverseInst :: (Monad m) => [AbstInst] -> CodeBlockGenStateT m ()
     traverseInst [] = flushBuf
-    traverseInst [IRichCall state label' iArgs fArgs] = do
-        -- Check whether tail recursion optimization can be applied.
-        mainLabel' <- gets mainLabel
-        term <- gets currentTerm
-        if "__ext_" `isPrefixOf` label'
-            then do
-                -- External functions should be called directly.
-                transformInst $ IRichCall state label' iArgs fArgs
-                flushBuf
-            else case term of
-                Return -> do
-                    if mainLabel' == label'
-                        then do
-                            -- Found a tail rec call!
-                            -- Shuffle arguments.
-                            insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
-                            insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
-                            -- Jump to the rec label of the function instead.
-                            -- The prologue should be skipped.
-                            modify $ \env ->
-                                env
-                                    { currentTerm = Jmp $ tailRecCallLabel $ mainLabel env
-                                    }
-                            flushBuf
-                        else do
-                            -- Found a tail call!
-                            -- Shuffle arguments.
-                            insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
-                            insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
-                            -- Jump to the start label of the function instead.
-                            -- The prologue should be skipped.
-                            insertBuf $ IIntOp state PAdd stackReg stackReg (Imm RInt localVars')
-                            modify $ \env ->
-                                env
-                                    { currentTerm = Jmp $ tailCallLabel label'
-                                    }
-                            flushBuf
-                _ -> do
-                    -- If not, just call a function.
-                    transformInst $ IRichCall state label' iArgs fArgs
-                    flushBuf
+    -- traverseInst [IRichCall state label' iArgs fArgs] = do
+    --     -- Check whether tail recursion optimization can be applied.
+    --     mainLabel' <- gets mainLabel
+    --     term <- gets currentTerm
+    --     if "__ext_" `isPrefixOf` label'
+    --         then do
+    --             -- External functions should be called directly.
+    --             transformInst $ IRichCall state label' iArgs fArgs
+    --             flushBuf
+    --         else case term of
+    --             Return -> do
+    --                 if mainLabel' == label'
+    --                     then do
+    --                         -- Found a tail rec call!
+    --                         -- Shuffle arguments.
+    --                         insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
+    --                         insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
+    --                         -- Jump to the rec label of the function instead.
+    --                         -- The prologue should be skipped.
+    --                         modify $ \env ->
+    --                             env
+    --                                 { currentTerm = Jmp $ tailRecCallLabel $ mainLabel env
+    --                                 }
+    --                         flushBuf
+    --                     else do
+    --                         -- Found a tail call!
+    --                         -- Shuffle arguments.
+    --                         insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
+    --                         insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
+    --                         -- Jump to the start label of the function instead.
+    --                         -- The prologue should be skipped.
+    --                         insertBuf $ IIntOp state PAdd stackReg stackReg (Imm RInt localVars')
+    --                         modify $ \env ->
+    --                             env
+    --                                 { currentTerm = Jmp $ tailCallLabel label'
+    --                                 }
+    --                         flushBuf
+    --             _ -> do
+    --                 -- If not, just call a function.
+    --                 transformInst $ IRichCall state label' iArgs fArgs
+    --                 flushBuf
     traverseInst [inst'] = do
         transformInst inst'
         flushBuf
@@ -208,45 +208,6 @@ transformCodeBlock (HCodeBlock label localVars' inst) =
     transformInst (IMov _ (Register _ ZeroReg) _) = pure ()
     transformInst (IMov state dest src) =
         insertBuf $ IMov state dest src
-    transformInst (IRichCall state label' iArgs fArgs) = do
-        -- Shuffle arguments
-        insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
-        insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
-        insertBuf $ ICall state label'
-    transformInst (IClosureCall state cl iArgs fArgs) = do
-        -- Make sure the closure is not in an argument register.
-        cl' <- case cl of
-            Register _ (ArgsReg _) -> do
-                insertBuf $ IMov state (tempReg RInt 1) (Reg cl)
-                pure $ tempReg RInt 1
-            _ -> pure cl
-
-        -- Shuffle arguments
-        insertIShuffle state $ zipWith (\i a -> (argsReg RInt i, a)) [0 ..] iArgs
-        insertFShuffle state $ zipWith (\i a -> (argsReg RFloat i, a)) [0 ..] fArgs
-        insertBuf $ IIntOp state PAdd (argsReg RInt (length iArgs)) cl' (Imm RInt 1)
-        insertBuf $ ILoad state (tempReg RInt 2) cl' 0
-        insertBuf $ ICallReg state (tempReg RInt 2)
-    transformInst (IMakeClosure state dest label' iFreeV fFreeV) = do
-        insertBuf $ ILMov state (tempReg RInt 0) label'
-        insertBuf $ IStore state (tempReg RInt 0) heapReg 0
-        mapM_
-            ( \(arg, i) -> do
-                case arg of
-                    Reg reg -> do
-                        insertBuf $ IStore state reg heapReg i
-                    Imm _ imm -> do
-                        insertBuf $ IMov state (tempReg RInt 1) (Imm RInt imm)
-                        insertBuf $ IStore state (tempReg RInt 1) heapReg i
-            )
-            $ zip iFreeV [1 ..]
-        mapM_
-            ( \(arg, i) ->
-                insertBuf $ IStore state arg heapReg i
-            )
-            $ zip fFreeV [1 + length iFreeV ..]
-        insertBuf $ IMov state dest (Reg heapReg)
-        insertBuf $ IIntOp state PAdd heapReg heapReg (Imm RInt $ 1 + length iFreeV + length fFreeV)
     transformInst (ILoad _ (Register RInt ZeroReg) _ _) =
         pure ()
     transformInst (ILoad state dest src offset) =

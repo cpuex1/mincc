@@ -137,23 +137,17 @@ instLiveness (IMov state dest src) = do
     remove dest
     markUsedImm src
     pure $ IMov state' dest src
-instLiveness (IRichCall state label iArgs fArgs) = do
+instLiveness (ICall state func) = do
     state' <- getState state
-    mapM_ markUsedImm iArgs
-    mapM_ markUsed fArgs
-    pure $ IRichCall state' label iArgs fArgs
-instLiveness (IClosureCall state cl iArgs fArgs) = do
+    pure $ ICall state' func
+instLiveness (ICallReg state cl) = do
     state' <- getState state
     markUsed cl
-    mapM_ markUsedImm iArgs
-    mapM_ markUsed fArgs
-    pure $ IClosureCall state' cl iArgs fArgs
-instLiveness (IMakeClosure state dest label iArgs fArgs) = do
+    pure $ ICallReg state' cl
+instLiveness (ILMov state dest label) = do
     state' <- getState state
     remove dest
-    mapM_ markUsedImm iArgs
-    mapM_ markUsed fArgs
-    pure $ IMakeClosure state' dest label iArgs fArgs
+    pure $ ILMov state' dest label
 instLiveness (ILoad state dest src offset) = do
     state' <- getState state
     remove dest
