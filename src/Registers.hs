@@ -8,6 +8,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Registers (
+    eachRegType,
     RegID,
     RegType (..),
     withRegType,
@@ -15,6 +16,7 @@ module Registers (
     RegMultiple,
     RegTuple (..),
     buildRT,
+    buildRTM,
     updateRT,
     (#$),
     RegisterKind (..),
@@ -57,6 +59,10 @@ withRegType :: Ty -> (forall a. RegType a -> b) -> b
 withRegType TFloat f = f RFloat
 withRegType _ f = f RInt
 
+-- | Execute a function for each register type.
+eachRegType :: (Monad m) => (forall a. RegType a -> m ()) -> m ()
+eachRegType f = f RInt >> f RFloat
+
 -- | Holds two objects - one is for integer registers and the other is for float registers.
 class RegTuple f where
     type RegTupleMap f rTy
@@ -67,6 +73,12 @@ class RegTuple f where
 
 buildRT :: (RegTuple f) => (forall rTy. RegType rTy -> RegTupleMap f rTy) -> f
 buildRT f = createRT (f RInt) (f RFloat)
+
+buildRTM :: (Monad m, RegTuple f) => (forall rTy. RegType rTy -> m (RegTupleMap f rTy)) -> m f
+buildRTM f = do
+    i' <- f RInt
+    f' <- f RFloat
+    pure $ createRT i' f'
 
 updateRT :: (RegTuple f) => RegType rTy -> (RegTupleMap f rTy -> RegTupleMap f rTy) -> f -> f
 updateRT RInt func rt = createRT (func $ rt #!! RInt) (rt #!! RFloat)

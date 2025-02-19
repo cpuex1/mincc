@@ -21,7 +21,6 @@ import BackEnd.BackendEnv (
     RegContext (generatedReg, usedRegLen),
     liftB,
  )
-import BackEnd.FunctionCall (saveRegisters)
 import BackEnd.Liveness (LivenessInstKind, LivenessLoc (livenessLoc), liveness)
 import BackEnd.Optim (runBackEndOptim)
 import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndOptimStateT)

@@ -22,6 +22,7 @@ import Options.Applicative (
 import BackEnd.Analysis.Liveness (runGraphLiveness)
 import BackEnd.BackendEnv (createBackendConfig, liftB, runBackendStateT)
 import BackEnd.Lowering (generateBlockGraph)
+import BackEnd.Refuge (runRefugeBlock)
 import BackEnd.RegisterAlloc (assignReg)
 import CodeBlock (asMermaidGraph)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
@@ -175,7 +176,13 @@ execArgsWithBackend functions = do
         liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display livenessBlocks
         liftB' $ printLog Debug "The result of liveness analysis was saved"
 
-    let phiFreeBlocks = map (snd . assignReg) livenessBlocks
+    let refuged = map runRefugeBlock livenessBlocks
+    liftB' $ printLog Done "Register refuge succeeded"
+    when emitIR $ do
+        liftIO $ TIO.writeFile (changeExt "refuge.s" outputFile) $ intercalate "\n" $ map display refuged
+        liftB' $ printLog Debug "The result of register refuge was saved"
+
+    let phiFreeBlocks = map (snd . assignReg . runGraphLiveness) refuged
     liftB' $ printLog Done "Register allocation succeeded"
     when emitIR $ do
         liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display phiFreeBlocks

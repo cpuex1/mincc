@@ -31,7 +31,6 @@ library
       BackEnd.Analysis.Liveness
       BackEnd.Analysis.Phi
       BackEnd.BackendEnv
-      BackEnd.FunctionCall
       BackEnd.Liveness
       BackEnd.Lowering
       BackEnd.Optim
@@ -39,6 +38,7 @@ library
       BackEnd.Optim.Merging
       BackEnd.Optim.MulElim
       BackEnd.Optim.Unreachable
+      BackEnd.Refuge
       BackEnd.RegisterAlloc
       BackEnd.Shuffle
       BackEnd.Spill
