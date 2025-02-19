@@ -13,8 +13,9 @@ import BackEnd.Liveness (
 import CodeBlock (BlockGraph (..), CodeBlock (..), VirtualBlock, VirtualBlockGraph)
 import Control.Monad.State (State, gets, modify, runState)
 import Data.Foldable (toList)
-import Data.Map (Map, delete, insert, keys, lookup, notMember)
+import Data.Map (Map, insert, keys, lookup, notMember)
 import Data.Maybe (catMaybes, maybeToList)
+import Data.Set (Set, member)
 import qualified Data.Set as S
 import IR (
     AbstInst,
@@ -39,6 +40,7 @@ import Prelude hiding (lookup)
 
 data RegRefugeContext = RegRefugeContext
     { localVarsMapping :: RegMultiple (Map RegID Int)
+    , loaded :: RegMultiple (Set RegID)
     , localVarsNum :: Int
     }
     deriving (Show, Eq)
@@ -59,30 +61,36 @@ genLocalVar rTy regID = do
 fromLocalVar :: RegType a -> Loc -> RegID -> RegRefugeState (Maybe AbstInst)
 fromLocalVar rTy loc regID = do
     mapping <- gets $ \ctx -> localVarsMapping ctx #!! rTy
-    case lookup regID mapping of
-        Just var -> do
-            -- Bound to a local variable.
+    load <- gets $ \ctx -> loaded ctx #!! rTy
+    case (lookup regID mapping, member regID load) of
+        (Just var, False) -> do
+            -- Is bound to a local variable and has not been loaded yet.
 
-            -- Remove the local variable from the mapping.
-            modify $ \ctx -> ctx{localVarsMapping = updateRT rTy (delete regID) $ localVarsMapping ctx}
+            -- Mark as loaded.
+            modify $ \ctx -> ctx{loaded = updateRT rTy (S.insert regID) $ loaded ctx}
             pure $ Just $ ILoad loc (savedReg rTy regID) stackReg var
-        Nothing -> pure Nothing
+        _ -> pure Nothing
+
+resetLoaded :: RegRefugeState ()
+resetLoaded = modify $ \ctx -> ctx{loaded = mempty}
 
 runRefugeBlock :: LivenessGraph -> VirtualBlockGraph
 runRefugeBlock graph =
     BlockGraph refuged (entryBlock graph) localNum
   where
-    (refuged, RegRefugeContext _ localNum) =
+    (refuged, RegRefugeContext _ _ localNum) =
         runState
             ( mapM
                 ( \block -> do
                     refugedBlock <- refugeBlock block
-                    modify $ \ctx -> ctx{localVarsMapping = mempty}
+
+                    -- Reset the context.
+                    modify $ \ctx -> ctx{localVarsMapping = mempty, loaded = mempty}
                     pure refugedBlock
                 )
                 (graphBlocks graph)
             )
-            $ RegRefugeContext mempty
+            $ RegRefugeContext mempty mempty
             $ localVars graph
 
 refugeBlock :: LivenessBlock -> RegRefugeState VirtualBlock
@@ -102,15 +110,18 @@ refugeBlock block = do
 refugeInst :: LivenessInst -> RegRefugeState [AbstInst]
 refugeInst (ICall (LivenessLoc loc l) label) = do
     inst <- refugeLivings loc l
+    resetLoaded
     pure $ inst <> [ICall loc label]
 refugeInst (ICallReg (LivenessLoc loc l) reg@(Register RInt (SavedReg cl))) = do
     -- The closure can be bound to a local variable.
     prologue <- fromLocalVar RInt loc cl
     inst <- refugeLivings loc l
+    resetLoaded
     pure $ maybeToList prologue <> inst <> [ICallReg loc reg]
 refugeInst (ICallReg (LivenessLoc loc l) reg) = do
     -- The closure cannot be bound to a local variable.
     inst <- refugeLivings loc l
+    resetLoaded
     pure $ inst <> [ICallReg loc reg]
 refugeInst inst = do
     generated <-
