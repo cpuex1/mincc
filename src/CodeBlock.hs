@@ -25,8 +25,8 @@ module CodeBlock (
 import Data.List (find)
 import Data.Text (Text, intercalate)
 import Display (Display (display), DisplayI (displayI), insertIndent)
-import IR (AbstInstKind, Inst, InstKind (InstStateTy), InstLabel, PhiFreeInstKind, mapReg)
-import Registers (RegType (RFloat, RInt), Register (Register))
+import IR (AbstInstKind, Inst, InstKind (InstStateTy), InstLabel, PhiFreeInstKind)
+import Registers (RegReplaceable (mapReg), RegType (RFloat, RInt), Register (Register))
 import Syntax (RelationBinOp (..))
 
 -- | The last instruction of a block
@@ -51,6 +51,10 @@ instance Eq Terminator where
         op1 == op2 && r1 == r3 && r2 == r4 && l1 == l3 && l2 == l4
     TReturn == TReturn = True
     _ == _ = False
+
+instance (RegReplaceable Terminator) where
+    mapReg substR (TBranch op r1 r2 l1 l2) = TBranch op (substR r1) (substR r2) l1 l2
+    mapReg _ t = t
 
 instance DisplayI Terminator where
     displayI _ (TJmp l) = "jmp " <> l

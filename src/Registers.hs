@@ -36,6 +36,11 @@ module Registers (
     RegMapping (..),
     applyMapping,
     dcReg,
+    RegReplaceable (..),
+    weakSubstReg,
+    substReg,
+    coverImm,
+    replaceReg,
 ) where
 
 import Data.Map (Map, compose, lookup, union)
@@ -186,6 +191,21 @@ compareReg (Register RInt rKind1) (Register RInt rKind2) = rKind1 == rKind2
 compareReg (Register RFloat rKind1) (Register RFloat rKind2) = rKind1 == rKind2
 compareReg _ _ = False
 
+weakSubstReg :: Register ty -> Register ty -> Register ty -> Register ty
+weakSubstReg beforeReg afterReg victim =
+    if victim == beforeReg then afterReg else victim
+
+substReg :: Register ty1 -> Register ty1 -> Register ty2 -> Register ty2
+substReg (Register RInt before) afterReg (Register RInt victim) =
+    weakSubstReg (Register RInt before) afterReg (Register RInt victim)
+substReg (Register RFloat before) afterReg (Register RFloat victim) =
+    weakSubstReg (Register RFloat before) afterReg (Register RFloat victim)
+substReg _ _ victim = victim
+
+coverImm :: (Register ty -> Register ty) -> (RegOrImm ty -> RegOrImm ty)
+coverImm _ (Imm rTy imm) = Imm rTy imm
+coverImm substR (Reg reg) = Reg $ substR reg
+
 zeroReg :: RegType ty -> Register ty
 zeroReg rTy = Register rTy ZeroReg
 
@@ -266,3 +286,12 @@ instance Monoid RegMapping where
 applyMapping :: RegType a -> RegMultiple RegMapping -> RegID -> RegID
 applyMapping rTy mapping reg =
     fromMaybe reg $ lookup reg $ regMap (mapping #!! rTy)
+
+-- | A class for replacing registers in a data structure.
+class RegReplaceable a where
+    -- | Map registers in a data structure.
+    mapReg :: (forall regTy1. Register regTy1 -> Register regTy1) -> a -> a
+
+-- | Replace a register with another register.
+replaceReg :: (RegReplaceable a) => Register regTy -> Register regTy -> a -> a
+replaceReg before after = mapReg (substReg before after)

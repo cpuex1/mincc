@@ -1,91 +1,76 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module BackEnd.Spill (spill) where
 
+import BackEnd.Analysis.IR (InOutSet (InOutSet), inOutRegisters)
 import BackEnd.BackendEnv (BackendStateT, genTempReg)
+import CodeBlock (BlockGraph (localVars), CodeBlock (blockInst, terminator), Terminator (TBranch), VirtualBlock, VirtualBlockGraph, visitBlock)
+import Control.Monad.Except (MonadError (throwError))
+import Data.Set (member)
+import Error (CompilerError (UnexpectedError))
 import IR (
-    AbstCodeBlock,
     AbstInst,
-    HCodeBlock (hInst, localVars),
     Inst (..),
+    getIState,
  )
-import Registers (RegID, RegOrImm (Reg), RegType (RFloat, RInt), Register (Register), savedReg, stackReg)
+import Registers (
+    RegID,
+    RegType,
+    compareReg,
+    replaceReg,
+    savedReg,
+    stackReg,
+    (#!!),
+ )
 import Syntax (dummyLoc)
 
-loadNewReg :: (Monad m) => RegType b -> Int -> RegID -> Register a -> BackendStateT m (Register a, [AbstInst])
-loadNewReg RInt vars searching victim@(Register RInt _) =
-    if savedReg RInt searching == victim
-        then do
-            newReg <- genTempReg RInt
-            pure (newReg, [ILoad dummyLoc newReg stackReg vars])
-        else pure (victim, [])
-loadNewReg RFloat vars searching victim@(Register RFloat _) =
-    if savedReg RFloat searching == victim
-        then do
-            newReg <- genTempReg RFloat
-            pure (newReg, [ILoad dummyLoc newReg stackReg vars])
-        else pure (victim, [])
-loadNewReg _ _ _ victim = pure (victim, [])
+-- | Replace the register with a local variable.
+replaceRegWithMem :: (Monad m) => RegType a -> RegID -> Int -> AbstInst -> BackendStateT m [AbstInst]
+replaceRegWithMem rTy reg local inst = do
+    let (InOutSet inSet outSet) = inOutRegisters inst #!! rTy
 
-loadNewRegOrImm :: (Monad m) => RegType b -> Int -> RegID -> RegOrImm a -> BackendStateT m (RegOrImm a, [AbstInst])
-loadNewRegOrImm rTy vars searching (Reg reg) = do
-    (reg', inst) <- loadNewReg rTy vars searching reg
-    pure (Reg reg', inst)
-loadNewRegOrImm _ _ _ imm = pure (imm, [])
+    (prologue, inst', epilogue) <-
+        case (reg `member` inSet, reg `member` outSet) of
+            (True, True) ->
+                throwError $ UnexpectedError "A register cannot be both in and out at the same time."
+            (True, False) -> do
+                -- If the input registers contain the register to be spilled, replace it with a new register.
+                newReg <- genTempReg rTy
+                let inst' = replaceReg (savedReg rTy reg) newReg inst
+                pure ([ILoad (getIState inst) newReg stackReg local], inst', [])
+            (False, True) -> do
+                -- If the output registers contain the register to be spilled, replace it with a new register.
+                newReg <- genTempReg rTy
+                let inst' = replaceReg (savedReg rTy reg) newReg inst
+                pure ([], inst', [IStore (getIState inst) newReg stackReg local])
+            (False, False) -> pure ([], inst, [])
 
-storeNewReg :: (Monad m) => RegType b -> Int -> RegID -> Register a -> BackendStateT m (Register a, [AbstInst])
-storeNewReg RInt vars searching victim@(Register RInt _) =
-    if savedReg RInt searching == victim
-        then do
-            newReg <- genTempReg RInt
-            pure (newReg, [IStore dummyLoc newReg stackReg vars])
-        else pure (victim, [])
-storeNewReg RFloat vars searching victim@(Register RFloat _) =
-    if savedReg RFloat searching == victim
-        then do
-            newReg <- genTempReg RFloat
-            pure (newReg, [IStore dummyLoc newReg stackReg vars])
-        else pure (victim, [])
-storeNewReg _ _ _ victim = pure (victim, [])
+    pure $ prologue <> [inst'] <> epilogue
 
-replaceRegWithMem :: (Monad m) => RegType a -> Int -> RegID -> AbstInst -> BackendStateT m [AbstInst]
-replaceRegWithMem rTy vars reg (ICompOp state op dest src1 src2) = do
-    (src1', inst1) <- loadNewReg rTy vars reg src1
-    (src2', inst2) <- loadNewRegOrImm rTy vars reg src2
-    (dest', inst3) <- storeNewReg rTy vars reg dest
-    pure $ inst1 ++ inst2 ++ [ICompOp state op dest' src1' src2'] ++ inst3
-replaceRegWithMem rTy vars reg (IIntOp state op dest src1 src2) = do
-    (src1', inst1) <- loadNewReg rTy vars reg src1
-    (src2', inst2) <- loadNewRegOrImm rTy vars reg src2
-    (dest', inst3) <- storeNewReg rTy vars reg dest
-    pure $ inst1 ++ inst2 ++ [IIntOp state op dest' src1' src2'] ++ inst3
-replaceRegWithMem rTy vars reg (IFOp state op dest src1 src2) = do
-    (src1', inst1) <- loadNewReg rTy vars reg src1
-    (src2', inst2) <- loadNewReg rTy vars reg src2
-    (dest', inst3) <- storeNewReg rTy vars reg dest
-    pure $ inst1 ++ inst2 ++ [IFOp state op dest' src1' src2'] ++ inst3
-replaceRegWithMem rTy vars reg (IMov state dest src) = do
-    (src', inst1) <- loadNewRegOrImm rTy vars reg src
-    (dest', inst2) <- storeNewReg rTy vars reg dest
-    pure $ inst1 ++ [IMov state dest' src'] ++ inst2
-replaceRegWithMem rTy vars reg (ILoad state dest src offset) = do
-    (src', inst) <- loadNewReg rTy vars reg src
-    (dest', inst') <- storeNewReg rTy vars reg dest
-    pure $ inst ++ [ILoad state dest' src' offset] ++ inst'
-replaceRegWithMem rTy vars reg (IStore state src dest offset) = do
-    (src', inst) <- loadNewReg rTy vars reg src
-    (dest', inst') <- loadNewReg rTy vars reg dest
-    pure $ inst ++ inst' ++ [IStore state src' dest' offset]
-replaceRegWithMem rTy vars reg (IRawInst state inst dest iArgs fArgs) = do
-    iArgs' <- mapM (loadNewRegOrImm rTy vars reg) iArgs
-    fArgs' <- mapM (loadNewReg rTy vars reg) fArgs
-    let iInst' = concatMap snd iArgs'
-    let fInst' = concatMap snd fArgs'
-    (dest', inst'') <- storeNewReg rTy vars reg dest
-    pure $ iInst' ++ fInst' ++ [IRawInst state inst dest' (map fst iArgs') (map fst fArgs')] ++ inst''
+-- | Replace the register with a local variable in the block.
+spillBlock :: (Monad m) => RegType a -> RegID -> Int -> VirtualBlock -> BackendStateT m VirtualBlock
+spillBlock rTy reg local block = do
+    -- Spill the register in each instruction.
+    inst' <- concat <$> mapM (replaceRegWithMem rTy reg local) (blockInst block)
+
+    -- The register may be used in the terminator.
+    (prologue, term') <- case terminator block of
+        term@(TBranch _ lhs rhs _ _) -> do
+            let target = savedReg rTy reg
+            if compareReg lhs target || compareReg rhs target
+                then do
+                    newReg <- genTempReg rTy
+                    pure ([ILoad dummyLoc newReg stackReg local], replaceReg target newReg term)
+                else do
+                    pure ([], term)
+        term -> pure ([], term)
+
+    -- The "prologue" is for the terminator, so it should be placed right before that.
+    pure $ block{blockInst = inst' <> prologue, terminator = term'}
 
 -- | Store the value of the register to the stack and replace it with a new one.
-spill :: (Monad m) => RegType a -> RegID -> AbstCodeBlock -> BackendStateT m AbstCodeBlock
-spill rTy reg block = do
-    inst' <- mapM (replaceRegWithMem rTy (localVars block) reg) (hInst block)
-    pure $ block{localVars = localVars block + 1, hInst = concat inst'}
+spill :: (Monad m) => RegType a -> RegID -> VirtualBlockGraph -> BackendStateT m VirtualBlockGraph
+spill rTy reg graph = do
+    graph' <- visitBlock (spillBlock rTy reg (localVars graph)) graph
+    pure $ graph'{localVars = localVars graph + 1}

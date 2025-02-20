@@ -29,8 +29,6 @@ module IR (
     InstKind (..),
     getIState,
     substIState,
-    mapReg,
-    replaceReg,
 ) where
 
 import Data.Kind (Type)
@@ -38,7 +36,7 @@ import Data.Map (Map, toAscList)
 import qualified Data.Map as M
 import Data.Text (Text, intercalate, justifyLeft, pack)
 import Display (Display (display), DisplayI (displayI), insertIndent)
-import Registers (RegOrImm (Imm, Reg), RegType (RFloat, RInt), Register (Register))
+import Registers (RegOrImm (Imm, Reg), RegReplaceable (..), RegType (RFloat, RInt), Register (Register), coverImm)
 import Syntax (FloatBinOp (..), IntBinOp (..), Loc, RelationBinOp (..))
 
 type InstLabel = Text
@@ -393,51 +391,26 @@ substIState f (IStore state dest src offset) = IStore (f state) dest src offset
 substIState f (IRawInst state inst retTy iArgs fArgs) = IRawInst (f state) inst retTy iArgs fArgs
 substIState f (IPhi state dest choices) = IPhi (f state) dest choices
 
-weakSubstReg :: Register ty -> Register ty -> Register ty -> Register ty
-weakSubstReg beforeReg afterReg victim =
-    if victim == beforeReg then afterReg else victim
-
-substReg :: Register ty1 -> Register ty1 -> Register ty2 -> Register ty2
-substReg (Register RInt before) afterReg (Register RInt victim) =
-    weakSubstReg (Register RInt before) afterReg (Register RInt victim)
-substReg (Register RFloat before) afterReg (Register RFloat victim) =
-    weakSubstReg (Register RFloat before) afterReg (Register RFloat victim)
-substReg _ _ victim = victim
-
-coverImm :: (Register ty -> Register ty) -> (RegOrImm ty -> RegOrImm ty)
-coverImm _ (Imm rTy imm) = Imm rTy imm
-coverImm substR (Reg reg) = Reg $ substR reg
-
-mapReg ::
-    (forall regTy1. Register regTy1 -> Register regTy1) ->
-    Inst ty ->
-    Inst ty
-mapReg substR (ICompOp state op dest left right) =
-    ICompOp state op (substR dest) (substR left) (coverImm substR right)
-mapReg substR (IIntOp state op dest left right) =
-    IIntOp state op (substR dest) (substR left) (coverImm substR right)
-mapReg substR (IFOp state op dest left right) =
-    IFOp state op (substR dest) (substR left) (substR right)
-mapReg substR (IMov state dest src) =
-    IMov state (substR dest) (coverImm substR src)
-mapReg substR (ILMov state dest src) =
-    ILMov state (substR dest) src
-mapReg _ (ICall state label) =
-    ICall state label
-mapReg substR (ICallReg state reg) =
-    ICallReg state (substR reg)
-mapReg substR (ILoad state dest src offset) =
-    ILoad state (substR dest) (substR src) offset
-mapReg substR (IStore state dest src offset) =
-    IStore state (substR dest) (substR src) offset
-mapReg substR (IRawInst state inst retReg iArgs fArgs) =
-    IRawInst state inst (substR retReg) (map (coverImm substR) iArgs) (map substR fArgs)
-mapReg substR (IPhi state dest choices) =
-    IPhi state (substR dest) (M.map substR choices)
-
-replaceReg ::
-    Register regTy ->
-    Register regTy ->
-    Inst ty ->
-    Inst ty
-replaceReg before after = mapReg (substReg before after)
+instance RegReplaceable (Inst ty) where
+    mapReg substR (ICompOp state op dest left right) =
+        ICompOp state op (substR dest) (substR left) (coverImm substR right)
+    mapReg substR (IIntOp state op dest left right) =
+        IIntOp state op (substR dest) (substR left) (coverImm substR right)
+    mapReg substR (IFOp state op dest left right) =
+        IFOp state op (substR dest) (substR left) (substR right)
+    mapReg substR (IMov state dest src) =
+        IMov state (substR dest) (coverImm substR src)
+    mapReg substR (ILMov state dest src) =
+        ILMov state (substR dest) src
+    mapReg _ (ICall state label) =
+        ICall state label
+    mapReg substR (ICallReg state reg) =
+        ICallReg state (substR reg)
+    mapReg substR (ILoad state dest src offset) =
+        ILoad state (substR dest) (substR src) offset
+    mapReg substR (IStore state dest src offset) =
+        IStore state (substR dest) (substR src) offset
+    mapReg substR (IRawInst state inst retReg iArgs fArgs) =
+        IRawInst state inst (substR retReg) (map (coverImm substR) iArgs) (map substR fArgs)
+    mapReg substR (IPhi state dest choices) =
+        IPhi state (substR dest) (M.map substR choices)
