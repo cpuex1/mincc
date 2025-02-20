@@ -45,8 +45,7 @@ import Registers (
 import Syntax (Ident (ExternalIdent))
 import Prelude hiding (lookup)
 
-newtype RegConfig ty
-    = RegConfig {regLimit :: Int}
+data RegConfig ty = RegConfig
     deriving (Show, Eq)
 
 data RegContext ty
@@ -72,10 +71,9 @@ newtype BackendConfig = BackendConfig
     }
     deriving (Show, Eq)
 
-createBackendConfig :: Int -> Int -> BackendConfig
-createBackendConfig iLimit fLimit =
-    BackendConfig $
-        createRT (RegConfig iLimit) (RegConfig fLimit)
+createBackendConfig :: BackendConfig
+createBackendConfig =
+    BackendConfig $ createRT RegConfig RegConfig
 
 data BackendEnv = BackendEnv
     { globals :: GlobalTable

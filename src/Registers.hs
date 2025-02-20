@@ -60,6 +60,10 @@ data RegType ty where
 deriving instance Show (RegType ty)
 deriving instance Eq (RegType ty)
 
+instance Display (RegType a) where
+    display RInt = "int"
+    display RFloat = "float"
+
 withRegType :: Ty -> (forall a. RegType a -> b) -> b
 withRegType TFloat f = f RFloat
 withRegType _ f = f RInt

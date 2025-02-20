@@ -18,6 +18,7 @@ import MiddleEnd.Analysis.Identifier (IdentEnvT)
 import MiddleEnd.Optim (OptimKind (..))
 import MiddleEnd.Optim.Common (Threshold, toThreshold)
 import Options.Applicative
+import Registers (RegMultiple, RegTuple (createRT))
 import System.Console.ANSI (hNowSupportsANSI)
 import System.IO (stdout)
 
@@ -37,8 +38,7 @@ data CompilerConfig = CompilerConfig
     , cMaxInlining :: Int
     , cActivatedOptim :: Set OptimKind
     , cActivatedBackEndOptim :: Set BackEndOptimKind
-    , cILimit :: Int
-    , cFLimit :: Int
+    , cRegLimit :: RegMultiple Int
     , cANSI :: Bool
     , cEmitParsed :: Bool
     , cEmitResolved :: Bool
@@ -228,8 +228,7 @@ toCompilerConfig arg = do
             , cMaxInlining = maxInlining arg
             , cActivatedOptim = selectedOptim
             , cActivatedBackEndOptim = selectedBackEndOptim
-            , cILimit = iLimit arg
-            , cFLimit = fLimit arg
+            , cRegLimit = createRT (iLimit arg) (fLimit arg)
             , cANSI = ansiSupported
             , cEmitParsed = emitAll arg || emitParsed arg
             , cEmitResolved = emitAll arg || emitResolved arg

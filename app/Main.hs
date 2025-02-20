@@ -23,7 +23,6 @@ import BackEnd.Analysis.Liveness (runGraphLiveness)
 import BackEnd.BackendEnv (createBackendConfig, liftB, runBackendStateT)
 import BackEnd.Lowering (generateBlockGraph)
 import BackEnd.Refuge (runRefugeBlock)
-import BackEnd.RegisterAlloc (assignReg)
 import CodeBlock (asMermaidGraph)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
@@ -34,6 +33,7 @@ import Log (LogLevel (Debug, Done, Error), printLog, printTextLog)
 import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (defaultIdentContext, reportEnv)
 import Path (changeExt, getExt)
+import RegisterAlloc (runRegAlloc)
 import Syntax (Function, ResolvedExpr)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 
@@ -143,9 +143,7 @@ execArgsWithIdent resolvedExpr = do
         liftIO $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
         lift $ printLog Debug "Closure expressions are saved"
 
-    iLimit' <- lift $ asks cILimit
-    fLimit' <- lift $ asks cFLimit
-    blocks <- runBackendStateT (execArgsWithBackend functions) (createBackendConfig iLimit' fLimit') globals
+    blocks <- runBackendStateT (execArgsWithBackend functions) createBackendConfig globals
     case blocks of
         Left err -> lift $ throwError err
         Right _ -> pure ()
@@ -182,7 +180,7 @@ execArgsWithBackend functions = do
         liftIO $ TIO.writeFile (changeExt "refuge.s" outputFile) $ intercalate "\n" $ map display refuged
         liftB' $ printLog Debug "The result of register refuge was saved"
 
-    let phiFreeBlocks = map (snd . assignReg . runGraphLiveness) refuged
+    phiFreeBlocks <- mapM runRegAlloc refuged
     liftB' $ printLog Done "Register allocation succeeded"
     when emitIR $ do
         liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display phiFreeBlocks

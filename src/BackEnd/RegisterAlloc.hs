@@ -1,7 +1,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 
-module BackEnd.RegisterAlloc (assignReg) where
+module BackEnd.RegisterAlloc (
+    RegAllocResult (..),
+    assignReg,
+) where
 
 import BackEnd.Algorithm.Graph (RegGraph, coloringByDegree, sortByDegree)
 import BackEnd.Analysis.Phi (phiGroups, toPhiMapping)

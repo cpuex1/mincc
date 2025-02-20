@@ -17,7 +17,6 @@ module Compile (
 import BackEnd.BackendEnv (
     BackendConfig (regConfig),
     BackendEnv (regContext),
-    RegConfig (regLimit),
     RegContext (generatedReg, usedRegLen),
     liftB,
  )
