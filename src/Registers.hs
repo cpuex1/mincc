@@ -248,21 +248,21 @@ compareRegOrImm _ _ = False
 {- | Represents a mapping from registers to registers.
 This mapping can be partial.
 -}
-newtype RegMapping ty
+newtype RegMapping
     = RegMapping
     { regMap :: Map RegID RegID
     }
     deriving (Show, Eq)
 
-instance Semigroup (RegMapping ty) where
+instance Semigroup RegMapping where
     RegMapping a <> RegMapping b =
         -- It behaves like a composition of functions.
         RegMapping $ compose a b `union` a
 
-instance Monoid (RegMapping ty) where
+instance Monoid RegMapping where
     mempty = RegMapping mempty
 
 -- | Apply the register mapping to a register.
-applyMapping :: RegType a -> RegVariant RegMapping -> RegID -> RegID
+applyMapping :: RegType a -> RegMultiple RegMapping -> RegID -> RegID
 applyMapping rTy mapping reg =
     fromMaybe reg $ lookup reg $ regMap (mapping #!! rTy)

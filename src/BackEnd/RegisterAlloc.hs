@@ -3,7 +3,7 @@
 
 module BackEnd.RegisterAlloc (assignReg) where
 
-import BackEnd.Algorithm.Graph (coloringByDegree)
+import BackEnd.Algorithm.Graph (RegGraph, coloringByDegree, sortByDegree)
 import BackEnd.Analysis.Phi (phiGroups, toPhiMapping)
 import BackEnd.Liveness (
     Liveness (Liveness),
@@ -23,8 +23,10 @@ import CodeBlock (
     visitInst,
  )
 import Control.Monad.Identity (Identity (runIdentity))
-import Data.Map (elems, lookup)
+import Data.List (find)
+import Data.Map (elems, keys, lookup)
 import Data.Maybe (mapMaybe)
+import Data.Set (Set, fromList, notMember)
 import qualified Data.Set as S
 import IR (
     AbstInst,
@@ -36,7 +38,6 @@ import Registers (
     RegID,
     RegMapping (regMap),
     RegMultiple,
-    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
     applyMapping,
@@ -48,14 +49,14 @@ import Registers (
  )
 import Prelude hiding (lookup)
 
-data RegAllocResult a = RegAllocResult
+data RegAllocResult = RegAllocResult
     { numReg :: Int
     , spillTarget :: Maybe RegID
-    , allocated :: RegMapping a
+    , allocated :: RegMapping
     }
 
 -- | Perform register allocation.
-allocateReg :: LivenessGraph -> RegVariant RegAllocResult
+allocateReg :: LivenessGraph -> RegMultiple RegAllocResult
 allocateReg graph = result
   where
     -- Get the liveness information.
@@ -74,24 +75,38 @@ allocateReg graph = result
     -- Combine two mappings.
     finalMapping = mapping <> phiMapping
 
+    -- Find spill targets.
+    usedInPhi = const (fromList . keys . regMap) #$ phiMapping
+    target = selectSpillTarget usedInPhi regGraph
+
     -- Create the result.
     result = buildRT $ \rTy ->
         RegAllocResult
             { numReg =
                 1 + foldl max (-1) (elems $ regMap $ finalMapping #!! rTy)
-            , spillTarget = Nothing
+            , spillTarget = target #!! rTy
             , allocated = finalMapping #!! rTy
             }
 
+-- | Select a spill target.
+selectSpillTarget :: RegMultiple (Set RegID) -> RegMultiple RegGraph -> RegMultiple (Maybe RegID)
+selectSpillTarget blackList graph =
+    ( \rTy v ->
+        find (\v' -> v' `notMember` (blackList #!! rTy)) v
+    )
+        #$ sortedVertices
+  where
+    sortedVertices = const sortByDegree #$ graph :: RegMultiple [RegID]
+
 -- | Perform register allocation and apply the result to the graph.
-assignReg :: LivenessGraph -> (RegVariant RegAllocResult, PhiFreeGraph)
+assignReg :: LivenessGraph -> (RegMultiple RegAllocResult, PhiFreeGraph)
 assignReg graph = (result, phiFreeGraph)
   where
     -- Allocate registers.
     result = allocateReg graph
 
     -- Get register mapping.
-    mapping = const allocated #$ result :: RegVariant RegMapping
+    mapping = const allocated #$ result :: RegMultiple RegMapping
 
     -- Apply register mapping.
     mappedGraph =
@@ -137,6 +152,6 @@ removePhi block =
     toPhiFree IPhi{} = Nothing
 
 -- | Apply the phi mapping to the liveness information.
-applyMappingToLiveness :: RegVariant RegMapping -> RegMultiple Liveness -> RegMultiple Liveness
+applyMappingToLiveness :: RegMultiple RegMapping -> RegMultiple Liveness -> RegMultiple Liveness
 applyMappingToLiveness mapping live =
     (\rTy (Liveness live') -> Liveness $ S.map (applyMapping rTy mapping) live') #$ live

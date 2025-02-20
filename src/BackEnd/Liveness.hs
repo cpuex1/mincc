@@ -33,7 +33,6 @@ import Registers (
     RegID,
     RegMultiple,
     RegType (RFloat, RInt),
-    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
     buildRT,
@@ -81,10 +80,10 @@ type LivenessBlock = CodeBlock LivenessInstKind
 type LivenessGraph = BlockGraph LivenessInstKind
 
 -- | Constructs a registers graph from a list of liveness information.
-constructGraph :: [RegMultiple Liveness] -> RegVariant RegGraph
+constructGraph :: [RegMultiple Liveness] -> RegMultiple RegGraph
 constructGraph l = buildRT (\rTy -> toGraphEach (map (#!! rTy) l))
   where
-    toGraphEach :: [Liveness] -> RegGraph a
+    toGraphEach :: [Liveness] -> RegGraph
     toGraphEach states = RegGraph vertices' edges'
       where
         aliveSet = map alive states

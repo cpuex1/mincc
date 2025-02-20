@@ -19,7 +19,6 @@ import Registers (
     RegMapping (RegMapping),
     RegMultiple,
     RegTuple (createRT),
-    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
     updateRT,
@@ -33,11 +32,11 @@ import Prelude hiding (lookup)
 -- To calculate the phi groups, we should visit and analyze the phi instructions in the block graph.
 --
 
-newtype PhiGroups a
+newtype PhiGroups
     = PhiGroups [Set RegID]
     deriving (Show, Eq)
 
-addGroup :: Set RegID -> PhiGroups a -> PhiGroups a
+addGroup :: Set RegID -> PhiGroups -> PhiGroups
 addGroup reg (PhiGroups []) = PhiGroups [reg]
 addGroup reg (PhiGroups (group : remains)) =
     if disjoint reg group
@@ -47,7 +46,7 @@ addGroup reg (PhiGroups (group : remains)) =
         else addGroup (reg `union` group) (PhiGroups remains)
 
 -- | Convert the phi groups to a mapping from the registers to the single register.
-toPhiMapping :: RegVariant PhiGroups -> RegVariant RegMapping
+toPhiMapping :: RegMultiple PhiGroups -> RegMultiple RegMapping
 toPhiMapping groups =
     ( \_ (PhiGroups group) ->
         RegMapping $
@@ -64,14 +63,14 @@ toPhiMapping groups =
     )
         #$ groups
 
-type GroupState = State (RegVariant PhiGroups)
+type GroupState = State (RegMultiple PhiGroups)
 
 registerGroup :: RegMultiple (Set RegID) -> GroupState ()
 registerGroup group = do
     modify $ \groups -> (\rTy groups' -> addGroup (group #!! rTy) groups') #$ groups
 
 -- | Calculate the phi groups in the block graph
-phiGroups :: BlockGraph ty -> RegVariant PhiGroups
+phiGroups :: BlockGraph ty -> RegMultiple PhiGroups
 phiGroups graph =
     execState
         ( visitBlock
