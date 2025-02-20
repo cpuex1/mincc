@@ -1,4 +1,4 @@
-module BackEnd.Shuffle (
+module BackEnd.Algorithm.Shuffle (
     runDetectLoop,
     detectAllLoops,
     genCirc,

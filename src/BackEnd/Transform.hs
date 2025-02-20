@@ -3,8 +3,8 @@
 
 module BackEnd.Transform (transformCodeBlock, CodeBlockGenStateT) where
 
+import BackEnd.Algorithm.Shuffle (shuffleRegOrImm, shuffleRegs)
 import BackEnd.BackendEnv (BackendEnv (globals), BackendStateT)
-import BackEnd.Shuffle (shuffleRegOrImm, shuffleRegs)
 import Control.Monad.State (MonadTrans (lift), StateT, execStateT, gets, modify)
 import Data.Text (Text, isPrefixOf, pack)
 import IR (

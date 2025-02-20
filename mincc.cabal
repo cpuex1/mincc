@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       BackEnd.Algorithm.Graph
+      BackEnd.Algorithm.Shuffle
       BackEnd.Analysis.CodeBlock
       BackEnd.Analysis.IR
       BackEnd.Analysis.Liveness
@@ -40,7 +41,6 @@ library
       BackEnd.Optim.Unreachable
       BackEnd.Refuge
       BackEnd.RegisterAlloc
-      BackEnd.Shuffle
       BackEnd.Spill
       BackEnd.Transform
       Builtin
