@@ -126,10 +126,9 @@ test-suite mincc-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      BackEnd.Algorithm.ShuffleSpec
       BackEnd.Analysis.PhiSpec
-      BackEnd.ShuffleSpec
-      BackEnd.SpillSpec
-      ParserSpec
+      FrontEnd.ParserSpec
       Paths_mincc
   autogen-modules:
       Paths_mincc
