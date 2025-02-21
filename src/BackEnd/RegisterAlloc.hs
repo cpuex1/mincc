@@ -1,104 +1,160 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 
-module BackEnd.RegisterAlloc (assignRegister) where
+module BackEnd.RegisterAlloc (
+    RegAllocResult (..),
+    assignReg,
+) where
 
-import BackEnd.Liveness (LivenessCodeBlock, LivenessLoc (livenessLoc, livenessProp), RegGraph (RegGraph, edges), toGraph)
-import Control.Monad.State (State, execState, gets, modify)
-import Data.Map (Map, findWithDefault)
-import qualified Data.Map as M
-import Data.Maybe (listToMaybe)
-import Data.Set (Set, notMember, size, toDescList)
+import BackEnd.Algorithm.Graph (RegGraph, coloringByDegree, sortByDegree)
+import BackEnd.Analysis.Phi (phiGroups, toPhiMapping)
+import BackEnd.Liveness (
+    Liveness (Liveness),
+    LivenessGraph,
+    LivenessLoc (livenessLoc),
+    allLivenessInfo,
+    constructGraph,
+ )
+import CodeBlock (
+    CodeBlock (CodeBlock, blockInst, blockName, prevBlocks, terminator),
+    PhiFreeBlock,
+    PhiFreeGraph,
+    VirtualBlock,
+    VirtualBlockGraph,
+    mapRegGraph,
+    visitBlock,
+    visitInst,
+ )
+import Control.Monad.Identity (Identity (runIdentity))
+import Data.List (find)
+import Data.Map (elems, keys, lookup)
+import Data.Maybe (mapMaybe)
+import Data.Set (Set, fromList, notMember)
 import qualified Data.Set as S
 import IR (
-    AbstCodeBlock,
-    HCodeBlock (hInst),
-    getAllIState,
-    mapReg,
+    Inst (..),
+    PhiFreeInst,
+    VirtualInst,
     substIState,
  )
 import Registers (
     RegID,
-    RegVariant',
+    RegMapping (regMap),
+    RegMultiple,
     Register (Register),
     RegisterKind (SavedReg),
-    VariantItem (VariantItem),
+    applyMapping,
+    buildRT,
     savedReg,
     zeroReg,
     (#!!),
     (#$),
  )
+import Prelude hiding (lookup)
 
--- | Holds register mapping.
-newtype RegAllocEnv a = RegAllocEnv
-    { regMap :: Map RegID RegID
+data RegAllocResult = RegAllocResult
+    { numReg :: Int
+    , spillTarget :: Maybe RegID
+    , allocated :: RegMapping
     }
-    deriving (Show, Eq)
 
-type RegAllocState a = State (RegAllocEnv a)
-
--- | Maps all registers to their assigned registers.
-mapAll :: Set RegID -> RegAllocState a (Set (Maybe RegID))
-mapAll registers = do
-    regMap' <- gets regMap
-    pure $ S.map (`M.lookup` regMap') registers
-
--- | Assigns a register to another register.
-assign :: RegID -> RegID -> RegAllocState a ()
-assign reg1 reg2 = do
-    modify $ \env -> env{regMap = M.insert reg1 reg2 $ regMap env}
-
-{- | Gets the minimum register ID that is not used.
-Since register IDs has gaps, we can't just use the maximum register ID.
--}
-getMin :: Set (Maybe RegID) -> RegID
-getMin l = until ((`notMember` l) . Just) (+ 1) 0
-
--- | Sorts vertices with degree.
-sortByDegree :: RegGraph a -> [RegID]
-sortByDegree (RegGraph vertices edges') =
-    map snd $ toDescList degreeSet
+-- | Perform register allocation.
+allocateReg :: LivenessGraph -> RegMultiple RegAllocResult
+allocateReg graph = result
   where
-    degreeMap = M.map size edges'
-    degreeSet = S.map (\v -> (findWithDefault 0 v degreeMap, v)) vertices
+    -- Get the liveness information.
+    livenessInfo = allLivenessInfo graph
 
--- | Selects a target to be spilt.
-selectSpilt :: RegGraph a -> VariantItem (Maybe RegID) a
-selectSpilt = VariantItem . listToMaybe . sortByDegree
+    -- Calculate register mapping coming from the phi instructions.
+    phiMapping = toPhiMapping $ phiGroups graph
 
--- | Runs the register allocation algorithm.
-runRegisterAlloc :: RegGraph a -> RegAllocEnv a
-runRegisterAlloc graph = execState (registerAlloc graph) (RegAllocEnv M.empty)
+    -- Apply the mapping to the liveness information.
+    reflected = map (applyMappingToLiveness phiMapping) livenessInfo
+
+    -- Perform register coloring.
+    regGraph = constructGraph reflected
+    mapping = const coloringByDegree #$ regGraph
+
+    -- Combine two mappings.
+    finalMapping = mapping <> phiMapping
+
+    -- Find spill targets.
+    usedInPhi = const (fromList . keys . regMap) #$ phiMapping
+    target = selectSpillTarget usedInPhi regGraph
+
+    -- Create the result.
+    result = buildRT $ \rTy ->
+        RegAllocResult
+            { numReg =
+                1 + foldl max (-1) (elems $ regMap $ finalMapping #!! rTy)
+            , spillTarget = target #!! rTy
+            , allocated = finalMapping #!! rTy
+            }
+
+-- | Select a spill target.
+selectSpillTarget :: RegMultiple (Set RegID) -> RegMultiple RegGraph -> RegMultiple (Maybe RegID)
+selectSpillTarget blackList graph =
+    ( \rTy v ->
+        find (\v' -> v' `notMember` (blackList #!! rTy)) v
+    )
+        #$ sortedVertices
   where
-    registerAlloc :: RegGraph a -> RegAllocState a ()
-    registerAlloc graph' =
-        mapM_
-            ( \reg -> do
-                let neighborhood = findWithDefault S.empty reg $ edges graph'
-                mapped <- mapAll neighborhood
-                let minReg = getMin mapped
-                assign reg minReg
+    sortedVertices = const sortByDegree #$ graph :: RegMultiple [RegID]
+
+-- | Perform register allocation and apply the result to the graph.
+assignReg :: LivenessGraph -> (RegMultiple RegAllocResult, PhiFreeGraph)
+assignReg graph = (result, phiFreeGraph)
+  where
+    -- Allocate registers.
+    result = allocateReg graph
+
+    -- Get register mapping.
+    mapping = const allocated #$ result :: RegMultiple RegMapping
+
+    -- Apply register mapping.
+    mappedGraph =
+        mapRegGraph
+            ( \case
+                Register rTy (SavedReg regId) ->
+                    case lookup regId $ regMap $ mapping #!! rTy of
+                        Just target -> savedReg rTy target
+                        Nothing -> zeroReg rTy
+                reg -> reg
             )
-            sorted
-      where
-        sorted = sortByDegree graph'
+            graph
 
--- | Allocates registers.
-assignRegister :: LivenessCodeBlock -> (RegVariant' Int, RegVariant' (Maybe RegID), AbstCodeBlock)
-assignRegister block =
-    -- Accept the register allocation.
-    (used, spillTarget, block{hInst = map (substIState livenessLoc) mappedInst})
+    -- Purge liveness information from the graph.
+    purgedGraph = runIdentity (visitBlock (visitInst (pure . substIState livenessLoc)) mappedGraph) :: VirtualBlockGraph
+
+    -- Remove phi instructions.
+    phiFreeGraph = runIdentity (visitBlock (pure . removePhi) purgedGraph)
+
+-- | Remove phi instructions from a block.
+removePhi :: VirtualBlock -> PhiFreeBlock
+removePhi block =
+    CodeBlock
+        { blockName = blockName block
+        , blockInst =
+            mapMaybe toPhiFree $
+                blockInst block
+        , prevBlocks = prevBlocks block
+        , terminator = terminator block
+        }
   where
-    -- Enforces the register mapping.
-    enforceMapped :: Register RegID a -> Register RegID a
-    enforceMapped (Register rTy (SavedReg regId)) =
-        case M.lookup regId $ regMap $ mapped #!! rTy of
-            Just regId' -> savedReg rTy regId'
-            Nothing -> zeroReg rTy
-    enforceMapped reg = reg
+    toPhiFree :: VirtualInst -> Maybe PhiFreeInst
+    toPhiFree (ICompOp state op dest src1 src2) = Just $ ICompOp state op dest src1 src2
+    toPhiFree (IIntOp state op dest src1 src2) = Just $ IIntOp state op dest src1 src2
+    toPhiFree (IFOp state op dest src1 src2) = Just $ IFOp state op dest src1 src2
+    toPhiFree (ILoad state dest src offset) = Just $ ILoad state dest src offset
+    toPhiFree (IStore state dest src offset) = Just $ IStore state dest src offset
+    toPhiFree (IMov state dest src) = Just $ IMov state dest src
+    toPhiFree (ICall state func) = Just $ ICall state func
+    toPhiFree (ICallReg state cl) = Just $ ICallReg state cl
+    toPhiFree (ILMov state dest label) = Just $ ILMov state dest label
+    toPhiFree (IRawInst state name retTy iArgs fArgs) = Just $ IRawInst state name retTy iArgs fArgs
+    toPhiFree IPhi{} = Nothing
 
-    inst = hInst block
-    graph = toGraph $ concatMap (map livenessProp . getAllIState) inst
-    mapped = runRegisterAlloc #$ graph
-    used = VariantItem . (+ 1) . foldl max (-1) . M.elems . regMap #$ mapped
-    spillTarget = selectSpilt #$ graph
-    mappedInst = map (mapReg enforceMapped) inst
+-- | Apply the phi mapping to the liveness information.
+applyMappingToLiveness :: RegMultiple RegMapping -> RegMultiple Liveness -> RegMultiple Liveness
+applyMappingToLiveness mapping live =
+    (\rTy (Liveness live') -> Liveness $ S.map (applyMapping rTy mapping) live') #$ live

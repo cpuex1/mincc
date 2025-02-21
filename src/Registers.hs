@@ -1,20 +1,24 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Registers (
+    eachRegType,
     RegID,
     RegType (..),
     withRegType,
-    RegVariant (..),
-    RegVariant',
-    VariantItem (..),
-    updateVariant,
+    RegVariant,
+    RegMultiple,
+    RegTuple (..),
+    buildRT,
+    buildRTM,
+    updateRT,
     (#$),
-    (#!!),
     RegisterKind (..),
     Register (..),
     zeroReg,
@@ -29,11 +33,22 @@ module Registers (
     RegOrImm (..),
     compareReg,
     compareRegOrImm,
+    RegMapping (..),
+    applyMapping,
+    dcReg,
+    RegReplaceable (..),
+    weakSubstReg,
+    substReg,
+    coverImm,
+    replaceReg,
 ) where
 
+import Data.Map (Map, compose, lookup, union)
+import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 import Display (Display (display))
 import Typing (Ty, TypeKind (TFloat))
+import Prelude hiding (lookup)
 
 type RegID = Int
 
@@ -45,80 +60,118 @@ data RegType ty where
 deriving instance Show (RegType ty)
 deriving instance Eq (RegType ty)
 
+instance Display (RegType a) where
+    display RInt = "int"
+    display RFloat = "float"
+
 withRegType :: Ty -> (forall a. RegType a -> b) -> b
 withRegType TFloat f = f RFloat
 withRegType _ f = f RInt
 
+-- | Execute a function for each register type.
+eachRegType :: (Monad m) => (forall a. RegType a -> m ()) -> m ()
+eachRegType f = f RInt >> f RFloat
+
+-- | Holds two objects - one is for integer registers and the other is for float registers.
+class RegTuple f where
+    type RegTupleMap f rTy
+
+    infixl 9 #!!
+    (#!!) :: f -> RegType rTy -> RegTupleMap f rTy
+    createRT :: RegTupleMap f Int -> RegTupleMap f Float -> f
+
+buildRT :: (RegTuple f) => (forall rTy. RegType rTy -> RegTupleMap f rTy) -> f
+buildRT f = createRT (f RInt) (f RFloat)
+
+buildRTM :: (Monad m, RegTuple f) => (forall rTy. RegType rTy -> m (RegTupleMap f rTy)) -> m f
+buildRTM f = do
+    i' <- f RInt
+    f' <- f RFloat
+    pure $ createRT i' f'
+
+updateRT :: (RegTuple f) => RegType rTy -> (RegTupleMap f rTy -> RegTupleMap f rTy) -> f -> f
+updateRT RInt func rt = createRT (func $ rt #!! RInt) (rt #!! RFloat)
+updateRT RFloat func rt = createRT (rt #!! RInt) (func $ rt #!! RFloat)
+
+infixl 4 #$
+(#$) :: (RegTuple f, RegTuple g) => (forall rTy. RegType rTy -> RegTupleMap f rTy -> RegTupleMap g rTy) -> f -> g
+f #$ rt = buildRT $ \regTy -> f regTy $ rt #!! regTy
+
+infixl 6 #<>
+(#<>) :: (RegTuple f, Semigroup (RegTupleMap f Int), Semigroup (RegTupleMap f Float)) => f -> f -> f
+a #<> b = createRT (a #!! RInt <> b #!! RInt) (a #!! RFloat <> b #!! RFloat)
+
+memptyRT :: (RegTuple f, Monoid (RegTupleMap f Int), Monoid (RegTupleMap f Float)) => f
+memptyRT = createRT mempty mempty
+
+-- | Holds the same type of objects for both integer and float registers.
+data RegMultiple a
+    = RegMultiple a a
+
+deriving instance (Show a) => Show (RegMultiple a)
+deriving instance (Eq a) => Eq (RegMultiple a)
+
+instance (RegTuple (RegMultiple a)) where
+    type RegTupleMap (RegMultiple a) rTy = a
+
+    RegMultiple i _ #!! RInt = i
+    RegMultiple _ f #!! RFloat = f
+
+    createRT = RegMultiple
+
+instance (Semigroup a) => Semigroup (RegMultiple a) where
+    a <> b = a #<> b
+
+instance (Monoid a) => Monoid (RegMultiple a) where
+    mempty = memptyRT
+
 -- | Holds two objects - one is for integer registers and the other is for float registers.
 data RegVariant f
-    = RegVariant
-    { iVariant :: f Int
-    , fVariant :: f Float
-    }
+    = RegVariant (f Int) (f Float)
 
 deriving instance (Show (f Int), Show (f Float)) => Show (RegVariant f)
 deriving instance (Eq (f Int), Eq (f Float)) => Eq (RegVariant f)
 
-newtype VariantItem b a
-    = VariantItem {unwrap :: b}
-    deriving (Eq)
+instance RegTuple (RegVariant f) where
+    type RegTupleMap (RegVariant f) rTy = f rTy
 
-instance (Show b) => Show (VariantItem b a) where
-    show (VariantItem item) = show item
+    RegVariant i _ #!! RInt = i
+    RegVariant _ f #!! RFloat = f
 
-type RegVariant' a = RegVariant (VariantItem a)
-
-selectVariant :: RegType a -> RegVariant f -> f a
-selectVariant RInt (RegVariant i _) = i
-selectVariant RFloat (RegVariant _ f) = f
-
-infixl 9 #!!
-(#!!) :: RegVariant f -> RegType a -> f a
-(#!!) = flip selectVariant
-
-updateVariant :: RegType a -> (f a -> f a) -> RegVariant f -> RegVariant f
-updateVariant RInt func variant = variant{iVariant = func $ iVariant variant}
-updateVariant RFloat func variant = variant{fVariant = func $ fVariant variant}
-
-mapVariant :: (forall a. f a -> g a) -> RegVariant f -> RegVariant g
-mapVariant f (RegVariant i f') = RegVariant (f i) (f f')
-
-infixl 4 #$
-(#$) :: (forall a. f a -> g a) -> RegVariant f -> RegVariant g
-(#$) = mapVariant
+    createRT = RegVariant
 
 instance (Semigroup (f Int), Semigroup (f Float)) => Semigroup (RegVariant f) where
-    RegVariant i1 f1 <> RegVariant i2 f2 = RegVariant (i1 <> i2) (f1 <> f2)
+    a <> b = a #<> b
 
 instance (Monoid (f Int), Monoid (f Float)) => Monoid (RegVariant f) where
-    mempty = RegVariant mempty mempty
+    mempty = memptyRT
 
-data RegisterKind idTy ty where
-    ZeroReg :: RegisterKind idTy ty
-    ReturnReg :: RegisterKind idTy Int
-    RetReg :: RegisterKind idTy ty
-    HeapReg :: RegisterKind idTy Int
-    StackReg :: RegisterKind idTy Int
-    ArgsReg :: idTy -> RegisterKind idTy ty
-    TempReg :: idTy -> RegisterKind idTy ty
-    SavedReg :: idTy -> RegisterKind idTy ty
-    GeneralReg :: idTy -> RegisterKind idTy ty
+data RegisterKind ty where
+    ZeroReg :: RegisterKind ty
+    ReturnReg :: RegisterKind Int
+    RetReg :: RegisterKind ty
+    HeapReg :: RegisterKind Int
+    StackReg :: RegisterKind Int
+    ArgsReg :: RegID -> RegisterKind ty
+    TempReg :: RegID -> RegisterKind ty
+    SavedReg :: RegID -> RegisterKind ty
+    GeneralReg :: RegID -> RegisterKind ty
     -- | Used for marking it as a "don't care" register.
-    DCReg :: RegisterKind idTy ty
+    DCReg :: RegisterKind ty
 
-deriving instance (Show idTy) => Show (RegisterKind idTy ty)
-deriving instance (Eq idTy) => Eq (RegisterKind idTy ty)
+deriving instance Show (RegisterKind ty)
+deriving instance Eq (RegisterKind ty)
 
-data Register idTy ty
+data Register ty
     = Register
     { regType :: RegType ty
-    , regKind :: RegisterKind idTy ty
+    , regKind :: RegisterKind ty
     }
 
-deriving instance (Show idTy) => Show (Register idTy ty)
-deriving instance (Eq idTy) => Eq (Register idTy ty)
+deriving instance Show (Register ty)
+deriving instance Eq (Register ty)
 
-instance Display (Register RegID a) where
+instance Display (Register a) where
     display (Register RInt ZeroReg) = "zero"
     display (Register RFloat ZeroReg) = "fzero"
     display (Register _ ReturnReg) = "ra"
@@ -137,63 +190,112 @@ instance Display (Register RegID a) where
     display (Register RInt DCReg) = "zero" -- Don't care
     display (Register RFloat DCReg) = "fzero" -- Don't care
 
-compareReg :: (Eq idTy) => Register idTy ty1 -> Register idTy ty2 -> Bool
+compareReg :: Register ty1 -> Register ty2 -> Bool
 compareReg (Register RInt rKind1) (Register RInt rKind2) = rKind1 == rKind2
 compareReg (Register RFloat rKind1) (Register RFloat rKind2) = rKind1 == rKind2
 compareReg _ _ = False
 
-zeroReg :: RegType ty -> Register idTy ty
+weakSubstReg :: Register ty -> Register ty -> Register ty -> Register ty
+weakSubstReg beforeReg afterReg victim =
+    if victim == beforeReg then afterReg else victim
+
+substReg :: Register ty1 -> Register ty1 -> Register ty2 -> Register ty2
+substReg (Register RInt before) afterReg (Register RInt victim) =
+    weakSubstReg (Register RInt before) afterReg (Register RInt victim)
+substReg (Register RFloat before) afterReg (Register RFloat victim) =
+    weakSubstReg (Register RFloat before) afterReg (Register RFloat victim)
+substReg _ _ victim = victim
+
+coverImm :: (Register ty -> Register ty) -> (RegOrImm ty -> RegOrImm ty)
+coverImm _ (Imm rTy imm) = Imm rTy imm
+coverImm substR (Reg reg) = Reg $ substR reg
+
+zeroReg :: RegType ty -> Register ty
 zeroReg rTy = Register rTy ZeroReg
 
-returnReg :: Register idTy Int
+returnReg :: Register Int
 returnReg = Register RInt ReturnReg
 
-retReg :: RegType ty -> Register idTy ty
+retReg :: RegType ty -> Register ty
 retReg rTy = Register rTy RetReg
 
-heapReg :: Register idTy Int
+heapReg :: Register Int
 heapReg = Register RInt HeapReg
 
-stackReg :: Register idTy Int
+stackReg :: Register Int
 stackReg = Register RInt StackReg
 
-argsReg :: RegType ty -> idTy -> Register idTy ty
+argsReg :: RegType ty -> RegID -> Register ty
 argsReg rTy i = Register rTy (ArgsReg i)
 
-tempReg :: RegType ty -> idTy -> Register idTy ty
+tempReg :: RegType ty -> RegID -> Register ty
 tempReg rTy i = Register rTy (TempReg i)
 
-savedReg :: RegType ty -> idTy -> Register idTy ty
+savedReg :: RegType ty -> RegID -> Register ty
 savedReg rTy i = Register rTy (SavedReg i)
 
-generalReg :: RegType ty -> idTy -> Register idTy ty
+generalReg :: RegType ty -> RegID -> Register ty
 generalReg rTy i = Register rTy (GeneralReg i)
 
-data RegOrImm idTy ty where
-    Reg :: Register idTy ty -> RegOrImm idTy ty
-    Imm :: RegType ty -> ty -> RegOrImm idTy ty
+dcReg :: RegType ty -> Register ty
+dcReg rTy = Register rTy DCReg
 
-instance (Show idTy) => Show (RegOrImm idTy ty) where
+data RegOrImm ty where
+    Reg :: Register ty -> RegOrImm ty
+    Imm :: RegType ty -> ty -> RegOrImm ty
+
+instance Show (RegOrImm ty) where
     show (Reg reg) = show reg
     show (Imm RInt imm) = show imm
     show (Imm RFloat imm) = show imm
 
-instance (Eq idTy) => Eq (RegOrImm idTy ty) where
+instance Eq (RegOrImm ty) where
     Reg reg1 == Reg reg2 = reg1 == reg2
     Imm RInt imm1 == Imm RInt imm2 = imm1 == imm2
     Imm RFloat imm1 == Imm RFloat imm2 = imm1 == imm2
     _ == _ = False
 
-instance Display (RegOrImm RegID Int) where
+instance Display (RegOrImm Int) where
     display (Reg reg) = display reg
     display (Imm _ imm) = pack (show imm)
 
-instance Display (RegOrImm RegID Float) where
+instance Display (RegOrImm Float) where
     display (Reg reg) = display reg
     display (Imm _ imm) = pack (show imm)
 
-compareRegOrImm :: (Eq idTy) => RegOrImm idTy ty1 -> RegOrImm idTy ty2 -> Bool
+compareRegOrImm :: RegOrImm ty1 -> RegOrImm ty2 -> Bool
 compareRegOrImm (Reg reg1) (Reg reg2) = compareReg reg1 reg2
 compareRegOrImm (Imm RInt imm1) (Imm RInt imm2) = imm1 == imm2
 compareRegOrImm (Imm RFloat imm1) (Imm RFloat imm2) = imm1 == imm2
 compareRegOrImm _ _ = False
+
+{- | Represents a mapping from registers to registers.
+This mapping can be partial.
+-}
+newtype RegMapping
+    = RegMapping
+    { regMap :: Map RegID RegID
+    }
+    deriving (Show, Eq)
+
+instance Semigroup RegMapping where
+    RegMapping a <> RegMapping b =
+        -- It behaves like a composition of functions.
+        RegMapping $ compose a b `union` a
+
+instance Monoid RegMapping where
+    mempty = RegMapping mempty
+
+-- | Apply the register mapping to a register.
+applyMapping :: RegType a -> RegMultiple RegMapping -> RegID -> RegID
+applyMapping rTy mapping reg =
+    fromMaybe reg $ lookup reg $ regMap (mapping #!! rTy)
+
+-- | A class for replacing registers in a data structure.
+class RegReplaceable a where
+    -- | Map registers in a data structure.
+    mapReg :: (forall regTy1. Register regTy1 -> Register regTy1) -> a -> a
+
+-- | Replace a register with another register.
+replaceReg :: (RegReplaceable a) => Register regTy -> Register regTy -> a -> a
+replaceReg before after = mapReg (substReg before after)

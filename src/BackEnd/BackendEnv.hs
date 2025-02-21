@@ -32,27 +32,27 @@ import Display (display)
 import Error (CompilerError (OtherError))
 import MiddleEnd.Globals (GlobalProp (globalOffset), GlobalTable (globalTable))
 import Registers (
-    RegID,
     RegOrImm (Imm, Reg),
+    RegTuple (createRT),
     RegType (RInt),
-    RegVariant (..),
+    RegVariant,
     Register (Register),
     RegisterKind (SavedReg),
-    updateVariant,
+    buildRT,
+    updateRT,
     (#!!),
  )
 import Syntax (Ident (ExternalIdent))
 import Prelude hiding (lookup)
 
-newtype RegConfig ty
-    = RegConfig {regLimit :: Int}
+data RegConfig ty = RegConfig
     deriving (Show, Eq)
 
 data RegContext ty
     = RegContext
     { generatedReg :: Int
     , argsLength :: Int
-    , registerMap :: Map Ident (Register RegID ty)
+    , registerMap :: Map Ident (Register ty)
     , usedRegLen :: Int
     }
     deriving (Show, Eq)
@@ -71,13 +71,9 @@ newtype BackendConfig = BackendConfig
     }
     deriving (Show, Eq)
 
-createBackendConfig :: Int -> Int -> BackendConfig
-createBackendConfig iLimit fLimit =
-    BackendConfig $
-        RegVariant
-            { iVariant = RegConfig iLimit
-            , fVariant = RegConfig fLimit
-            }
+createBackendConfig :: BackendConfig
+createBackendConfig =
+    BackendConfig $ createRT RegConfig RegConfig
 
 data BackendEnv = BackendEnv
     { globals :: GlobalTable
@@ -90,10 +86,7 @@ defaultBackendEnv table =
     BackendEnv
         { globals = table
         , regContext =
-            RegVariant
-                { iVariant = defaultRegContext
-                , fVariant = defaultRegContext
-                }
+            buildRT (const defaultRegContext)
         }
 
 type BackendStateT m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv m))
@@ -106,13 +99,13 @@ runBackendStateT s config table =
 liftB :: (Monad m) => m a -> BackendStateT m a
 liftB = lift . lift . lift
 
-genTempReg :: (Monad m) => RegType a -> BackendStateT m (Register RegID a)
+genTempReg :: (Monad m) => RegType a -> BackendStateT m (Register a)
 genTempReg rTy = do
     ctx <- gets regContext
     modify $ \ctx' ->
         ctx'
             { regContext =
-                updateVariant
+                updateRT
                     rTy
                     ( \ctx'' ->
                         ctx''
@@ -123,13 +116,13 @@ genTempReg rTy = do
             }
     pure $ Register rTy $ SavedReg $ generatedReg $ ctx #!! rTy
 
-genReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
+genReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register a)
 genReg rTy ident = do
     reg <- genTempReg rTy
     modify $ \ctx ->
         ctx
             { regContext =
-                updateVariant
+                updateRT
                     rTy
                     ( \ctx' ->
                         ctx'
@@ -140,7 +133,7 @@ genReg rTy ident = do
             }
     pure reg
 
-findReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register RegID a)
+findReg :: (Monad m) => RegType a -> Ident -> BackendStateT m (Register a)
 findReg rTy ident = do
     regID <- gets ((lookup ident . registerMap) . (#!! rTy) . regContext)
     case regID of
@@ -148,17 +141,17 @@ findReg rTy ident = do
         Nothing -> do
             throwError $ OtherError $ "Detected an unknown identifier named " <> display ident <> "."
 
-findRegOrImm :: (Monad m) => RegType a -> Ident -> BackendStateT m (RegOrImm RegID a)
+findRegOrImm :: (Monad m) => RegType a -> Ident -> BackendStateT m (RegOrImm a)
 findRegOrImm RInt (ExternalIdent ext) =
     Imm RInt . globalOffset <$> findGlobal ext
 findRegOrImm rTy ident = Reg <$> findReg rTy ident
 
-registerReg :: (Monad m) => Ident -> Register RegID a -> BackendStateT m ()
+registerReg :: (Monad m) => Ident -> Register a -> BackendStateT m ()
 registerReg ident (Register rTy kind) = do
     modify $ \ctx ->
         ctx
             { regContext =
-                updateVariant
+                updateRT
                     rTy
                     ( \ctx' ->
                         ctx'
@@ -174,7 +167,7 @@ updateRegContext rTy f = do
     modify $ \ctx ->
         ctx
             { regContext =
-                updateVariant rTy f $ regContext ctx
+                updateRT rTy f $ regContext ctx
             }
 
 -- | Finds a global variable by its name.

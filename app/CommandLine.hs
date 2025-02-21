@@ -9,7 +9,7 @@ module CommandLine (
 ) where
 
 import BackEnd.Lowering (BackendIdentState)
-import BackEnd.Optim (BackEndOptimKind (MulElim))
+import BackEnd.Optim (BackEndOptimKind (Merging, MulElim, Unreachable))
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
 import Data.Set (Set, insert)
@@ -18,6 +18,7 @@ import MiddleEnd.Analysis.Identifier (IdentEnvT)
 import MiddleEnd.Optim (OptimKind (..))
 import MiddleEnd.Optim.Common (Threshold, toThreshold)
 import Options.Applicative
+import Registers (RegMultiple, RegTuple (createRT))
 import System.Console.ANSI (hNowSupportsANSI)
 import System.IO (stdout)
 
@@ -26,7 +27,7 @@ type IdentEnvIO = IdentEnvT ConfigIO
 type BackendIdentStateIO = BackendIdentState ConfigIO
 
 defaultMaxInlining :: Int
-defaultMaxInlining = 1
+defaultMaxInlining = 0
 
 data CompilerConfig = CompilerConfig
     { cInput :: [String]
@@ -37,8 +38,7 @@ data CompilerConfig = CompilerConfig
     , cMaxInlining :: Int
     , cActivatedOptim :: Set OptimKind
     , cActivatedBackEndOptim :: Set BackEndOptimKind
-    , cILimit :: Int
-    , cFLimit :: Int
+    , cRegLimit :: RegMultiple Int
     , cANSI :: Bool
     , cEmitParsed :: Bool
     , cEmitResolved :: Bool
@@ -228,8 +228,7 @@ toCompilerConfig arg = do
             , cMaxInlining = maxInlining arg
             , cActivatedOptim = selectedOptim
             , cActivatedBackEndOptim = selectedBackEndOptim
-            , cILimit = iLimit arg
-            , cFLimit = fLimit arg
+            , cRegLimit = createRT (iLimit arg) (fLimit arg)
             , cANSI = ansiSupported
             , cEmitParsed = emitAll arg || emitParsed arg
             , cEmitResolved = emitAll arg || emitResolved arg
@@ -260,4 +259,7 @@ toCompilerConfig arg = do
             $ mempty
 
     selectedBackEndOptim =
-        insert MulElim mempty
+        insert MulElim
+            . insert Unreachable
+            . insert Merging
+            $ mempty

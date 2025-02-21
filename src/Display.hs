@@ -5,10 +5,10 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Display (
-    display,
-    displayI,
     insertIndent,
+    display,
     Display,
+    displayI,
     DisplayI,
 ) where
 

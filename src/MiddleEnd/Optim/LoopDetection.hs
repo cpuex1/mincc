@@ -67,13 +67,13 @@ replaceWithLoops (Let state (PTuple values) expr body) = do
     body' <- replaceWithLoops body
     pure $ Let state (PTuple values) expr' body'
 replaceWithLoops (Let state (PRec func args) expr body) = do
+    expr' <- replaceWithLoops expr
+    let (isLoop, loopBody) = detectLoop func expr'
     when isLoop $ do
         modify $ \ctx ->
             ctx{loop = insert func (args, loopBody) (loop ctx)}
     body' <- replaceWithLoops body
-    pure $ Let state (PRec func args) expr body'
-  where
-    (isLoop, loopBody) = detectLoop func expr
+    pure $ Let state (PRec func args) expr' body'
 replaceWithLoops (If state cond then' else') = do
     then'' <- replaceWithLoops then'
     else'' <- replaceWithLoops else'

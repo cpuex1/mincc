@@ -1,4 +1,4 @@
-module BackEnd.Shuffle (
+module BackEnd.Algorithm.Shuffle (
     runDetectLoop,
     detectAllLoops,
     genCirc,
@@ -13,7 +13,6 @@ import Data.List ((\\))
 import Data.Map.Lazy (Map, alter, empty, insert, lookup)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Registers (
-    RegID,
     RegOrImm (Reg),
     RegType,
     Register (Register),
@@ -88,7 +87,7 @@ shuffle temp assign =
     resolve_in_loops = concat loops
     simple_args = args' \\ resolve_in_loops
 
-shuffleRegs :: RegType a -> [(Register RegID a, Register RegID a)] -> [(Register RegID a, Register RegID a)]
+shuffleRegs :: RegType a -> [(Register a, Register a)] -> [(Register a, Register a)]
 shuffleRegs rTy assign =
     map
         ( \(r1, r2) ->
@@ -118,7 +117,7 @@ shuffleRegs rTy assign =
             )
             assign
 
-shuffleRegOrImm :: RegType a -> [(Register RegID a, RegOrImm RegID a)] -> [(Register RegID a, RegOrImm RegID a)]
+shuffleRegOrImm :: RegType a -> [(Register a, RegOrImm a)] -> [(Register a, RegOrImm a)]
 shuffleRegOrImm rTy assign =
     map
         ( \(r1, r2) ->

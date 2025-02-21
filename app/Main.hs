@@ -19,16 +19,24 @@ import Options.Applicative (
     (<**>),
  )
 
+import BackEnd.Analysis.Liveness (runGraphLiveness)
 import BackEnd.BackendEnv (createBackendConfig, liftB, runBackendStateT)
+import BackEnd.CodeGen.Common (codeGen, exitGraph)
+import BackEnd.CodeGen.RINANA (CodeGenRINANA)
+import BackEnd.Lowering (generateBlockGraph)
+import BackEnd.Refuge (runRefugeBlock)
+import CodeBlock (asMermaidGraph)
 import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.State (evalStateT)
-import Control.Monad.Trans.Class
-import Error
-import Log
+import Control.Monad.Trans (lift)
+import Data.Proxy (Proxy (Proxy))
+import Error (CompilerError (OtherError), displayError)
+import Log (LogLevel (Debug, Done, Error), printLog, printTextLog)
 import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (defaultIdentContext, reportEnv)
-import Path
+import Path (changeExt, getExt)
+import RegisterAlloc (runRegAlloc)
 import Syntax (Function, ResolvedExpr)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 
@@ -138,9 +146,7 @@ execArgsWithIdent resolvedExpr = do
         liftIO $ TIO.writeFile (changeExt "closure.ml" outputFile) $ intercalate "\n" $ map display functions
         lift $ printLog Debug "Closure expressions are saved"
 
-    iLimit' <- lift $ asks cILimit
-    fLimit' <- lift $ asks cFLimit
-    blocks <- runBackendStateT (execArgsWithBackend functions) (createBackendConfig iLimit' fLimit') globals
+    blocks <- runBackendStateT (execArgsWithBackend functions) createBackendConfig globals
     case blocks of
         Left err -> lift $ throwError err
         Right _ -> pure ()
@@ -149,11 +155,12 @@ execArgsWithBackend :: [Function] -> BackendIdentStateIO ()
 execArgsWithBackend functions = do
     outputFile <- liftB' $ asks cOutput
 
-    blocks <- toInstructionsIO functions
+    blocks <- mapM generateBlockGraph functions
     liftB' $ printLog Done "Lowering succeeded"
     emitIR <- liftB' $ asks cEmitIR
     when emitIR $ do
         liftIO $ TIO.writeFile (changeExt "ir.s" outputFile) $ intercalate "\n" $ map display blocks
+        liftIO $ TIO.writeFile (changeExt "ir.md" outputFile) $ intercalate "\n" $ map asMermaidGraph blocks
         liftB' $ printLog Debug "Intermediate representation code was saved"
 
     optimBlocks <- optimInstIO blocks
@@ -161,23 +168,30 @@ execArgsWithBackend functions = do
     emitOptim <- liftB' $ asks cEmitOptim
     when emitOptim $ do
         liftIO $ TIO.writeFile (changeExt "optim.s" outputFile) $ intercalate "\n" $ map display optimBlocks
+        liftIO $ TIO.writeFile (changeExt "optim.md" outputFile) $ intercalate "\n" $ map asMermaidGraph optimBlocks
         liftB' $ printLog Debug "Optimized IR was saved"
 
-    liveness <- livenessIO optimBlocks
+    let livenessBlocks = map runGraphLiveness optimBlocks
     liftB' $ printLog Done "Liveness analysis succeeded"
     when emitIR $ do
-        liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display liveness
+        liftIO $ TIO.writeFile (changeExt "live.s" outputFile) $ intercalate "\n" $ map display livenessBlocks
         liftB' $ printLog Debug "The result of liveness analysis was saved"
 
-    assignedBlocks <- assignRegisterIO liveness
+    let refuged = map runRefugeBlock livenessBlocks
+    liftB' $ printLog Done "Register refuge succeeded"
+    when emitIR $ do
+        liftIO $ TIO.writeFile (changeExt "refuge.s" outputFile) $ intercalate "\n" $ map (display . runGraphLiveness) refuged
+        liftB' $ printLog Debug "The result of register refuge was saved"
+
+    phiFreeBlocks <- mapM runRegAlloc refuged
     liftB' $ printLog Done "Register allocation succeeded"
     when emitIR $ do
-        liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display assignedBlocks
+        liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display phiFreeBlocks
         liftB' $ printLog Debug "The result of register allocation was saved"
 
-    blocks' <- transformCodeBlockIO assignedBlocks
+    generatedBlocks <- mapM (codeGen (Proxy :: Proxy CodeGenRINANA)) (phiFreeBlocks <> [exitGraph])
     liftB' $ printLog Done "Code generation succeeded"
-    liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" $ map display blocks'
+    liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" generatedBlocks
     liftB' $ printLog Debug "Generated code was saved"
   where
     liftB' = liftB . lift

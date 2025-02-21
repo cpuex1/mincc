@@ -14,6 +14,7 @@ data CompilerError
     = ParserError (ParseErrorBundle Text Void)
     | TypeError (Maybe Loc) Text
     | AssertionError Loc Text
+    | UnexpectedError Text
     | OtherError Text
     deriving (Show, Eq)
 
@@ -32,6 +33,8 @@ displayError err =
             ["Type error: " <> msg]
         AssertionError pos msg ->
             ["Assertion failed: " <> msg <> displayLoc pos]
+        UnexpectedError msg ->
+            ["Unexpected error: " <> msg]
         OtherError msg ->
             [msg]
   where

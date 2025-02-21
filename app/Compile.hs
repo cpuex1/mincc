@@ -10,28 +10,13 @@ module Compile (
     optimIO,
     extractGlobalsIO,
     getFunctionsIO,
-    toInstructionsIO,
     optimInstIO,
-    transformCodeBlockIO,
-    livenessIO,
-    assignRegisterIO,
 ) where
 
-import BackEnd.BackendEnv (
-    BackendConfig (regConfig),
-    BackendEnv (regContext),
-    RegConfig (regLimit),
-    RegContext (generatedReg, usedRegLen),
-    liftB,
- )
-import BackEnd.FunctionCall (saveRegisters)
-import BackEnd.Liveness (LivenessCodeBlock, LivenessLoc (livenessLoc), liveness)
-import BackEnd.Lowering (toInstructions)
+import BackEnd.BackendEnv (liftB)
 import BackEnd.Optim (runBackEndOptim)
 import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndOptimStateT)
-import BackEnd.RegisterAlloc (assignRegister)
-import BackEnd.Spill (spill)
-import BackEnd.Transform (transformCodeBlock)
+import CodeBlock (VirtualBlockGraph)
 import CommandLine (
     BackendIdentStateIO,
     CompilerConfig (cActivatedBackEndOptim, cActivatedOptim, cEmitOptim, cInliningSize, cMaxInlining, cRecInliningSize),
@@ -43,7 +28,7 @@ import Control.Monad (foldM, when)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Reader (asks)
-import Control.Monad.State.Lazy (StateT (runStateT), evalStateT, gets, modify)
+import Control.Monad.State.Lazy (StateT (runStateT), evalStateT)
 import Control.Monad.Trans.Class (MonadTrans (lift))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -57,13 +42,6 @@ import FrontEnd.KNorm (kNormalize)
 import FrontEnd.NameRes (resolveNames)
 import FrontEnd.Parser (parseExpr, parsePartialExpr)
 import FrontEnd.TypeInferrer (inferType)
-import IR (
-    AbstCodeBlock,
-    HCodeBlock (hInst, hLabel),
-    RawCodeBlock,
-    exitBlock,
-    substIState,
- )
 import Log (LogLevel (..), printLog, printTextLog)
 import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, loadTypeEnv)
@@ -77,14 +55,6 @@ import MiddleEnd.Optim.Common (
  )
 import MiddleEnd.Validator (validate)
 import Path (changeExt)
-import Registers (
-    RegType (RFloat, RInt),
-    VariantItem (VariantItem, unwrap),
-    savedReg,
-    updateVariant,
-    (#!!),
-    (#$),
- )
 import Syntax (
     Function,
     KExpr,
@@ -202,14 +172,11 @@ extractGlobalsIO expr =
 getFunctionsIO :: KExpr -> IdentEnvIO [Function]
 getFunctionsIO = getFunctions
 
-toInstructionsIO :: [Function] -> BackendIdentStateIO [AbstCodeBlock]
-toInstructionsIO = mapM toInstructions
-
-optimInstIO :: [AbstCodeBlock] -> BackendIdentStateIO [AbstCodeBlock]
+optimInstIO :: [VirtualBlockGraph] -> BackendIdentStateIO [VirtualBlockGraph]
 optimInstIO inst = do
     evalStateT (mapM (optimInstIOLoop 1) inst) BackEndOptimContext
   where
-    optimInstIOLoop :: Int -> AbstCodeBlock -> BackEndOptimStateT (IdentEnvT ConfigIO) AbstCodeBlock
+    optimInstIOLoop :: Int -> VirtualBlockGraph -> BackEndOptimStateT (IdentEnvT ConfigIO) VirtualBlockGraph
     optimInstIOLoop roundCount beforeInst = do
         lift $ liftB $ lift $ printTextLog Debug $ "Optimization round " <> pack (show roundCount) <> " started"
 
@@ -234,105 +201,3 @@ optimInstIO inst = do
             else do
                 _ <- lift $ liftB $ lift $ printLog Info "Perform more optimization"
                 optimInstIOLoop (roundCount + 1) optimInst
-
-transformCodeBlockIO :: [AbstCodeBlock] -> BackendIdentStateIO [RawCodeBlock]
-transformCodeBlockIO blocks =
-    (\blocks' -> blocks' ++ [exitBlock]) . concat
-        <$> mapM
-            ( \block -> do
-                blocks' <- transformCodeBlock block
-                liftB $ lift $ printTextLog Debug $ "Generated " <> hLabel block
-                pure blocks'
-            )
-            blocks
-
-livenessIO :: [AbstCodeBlock] -> BackendIdentStateIO [LivenessCodeBlock]
-livenessIO = mapM livenessIO'
-  where
-    livenessIO' :: AbstCodeBlock -> BackendIdentStateIO LivenessCodeBlock
-    livenessIO' block =
-        pure $
-            block{hInst = liveness $ hInst block}
-
-assignRegisterIO :: [LivenessCodeBlock] -> BackendIdentStateIO [AbstCodeBlock]
-assignRegisterIO blocks = do
-    -- Report used registers.
-    usedIRegLen' <- gets (generatedReg . (#!! RInt) . regContext)
-    usedFRegLen' <- gets (generatedReg . (#!! RFloat) . regContext)
-    liftB $ lift $ printLog Debug $ "Before: int: " <> show usedIRegLen' <> ", float: " <> show usedFRegLen'
-
-    blocks' <-
-        mapM
-            ( \block -> do
-                liftB $ lift $ printTextLog Debug $ "Allocating registers for " <> hLabel block
-
-                block' <- assignRegisterLoop block
-
-                liftB $ lift $ printTextLog Debug $ "Allocated registers for " <> hLabel block
-                pure block'
-            )
-            blocks
-
-    -- Report used registers.
-    usedRegLen' <- gets ((VariantItem . generatedReg #$) . regContext)
-    liftB $ lift $ printLog Debug $ "After: int: " <> show (usedRegLen' #!! RInt) <> ", float: " <> show (usedRegLen' #!! RFloat)
-
-    -- Perform register saving.
-    let blocks'' = map saveRegisters blocks'
-    liftB $ lift $ printLog Debug "Refuge registers beyond function calls"
-
-    pure blocks''
-  where
-    assignRegisterLoop :: LivenessCodeBlock -> BackendIdentStateIO AbstCodeBlock
-    assignRegisterLoop block = do
-        let ~(used, spillTarget, block') = assignRegister block
-        let usedI = unwrap $ used #!! RInt
-        let usedF = unwrap $ used #!! RFloat
-        let iSpillTarget = unwrap $ spillTarget #!! RInt
-        let fSpillTarget = unwrap $ spillTarget #!! RFloat
-
-        liftB $
-            lift $
-                printTextLog Debug $
-                    "Required registers: "
-                        <> pack (show (used #!! RInt))
-                        <> ", "
-                        <> pack (show (used #!! RFloat))
-
-        iLimit <- asks (regLimit . (#!! RInt) . regConfig)
-        if iLimit < usedI
-            then do
-                case iSpillTarget of
-                    Just target -> do
-                        let livenessRemoved = map (substIState livenessLoc) $ hInst block
-                        spilt <- spill RInt target block{hInst = livenessRemoved}
-
-                        liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (savedReg RInt target)
-
-                        assignRegisterLoop spilt{hInst = liveness $ hInst spilt}
-                    Nothing -> do
-                        throwError $ OtherError "Failed to find a spill target for int registers."
-            else do
-                fLimit <- asks (regLimit . (#!! RFloat) . regConfig)
-                if fLimit < usedF
-                    then do
-                        case fSpillTarget of
-                            Just target -> do
-                                let livenessRemoved = map (substIState livenessLoc) $ hInst block
-                                spilt <- spill RFloat target block{hInst = livenessRemoved}
-
-                                liftB $ lift $ printTextLog Debug $ "Register spilt: " <> display (savedReg RFloat target)
-
-                                assignRegisterLoop spilt{hInst = liveness $ hInst spilt}
-                            Nothing -> do
-                                throwError $ OtherError "Failed to find a spill target for float registers."
-                    else do
-                        modify $ \env ->
-                            env
-                                { regContext = updateVariant RInt (\ctx -> ctx{usedRegLen = max usedI (usedRegLen ctx)}) $ regContext env
-                                }
-                        modify $ \env ->
-                            env
-                                { regContext = updateVariant RFloat (\ctx -> ctx{usedRegLen = max usedF (usedRegLen ctx)}) $ regContext env
-                                }
-                        pure block'

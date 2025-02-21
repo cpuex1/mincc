@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module ParserSpec (spec) where
+module FrontEnd.ParserSpec (spec) where
 
 import Data.Either (isLeft, isRight)
 import FrontEnd.Parser

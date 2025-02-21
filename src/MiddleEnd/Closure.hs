@@ -109,7 +109,8 @@ getFreeVars kExpr bounded = eFreeVars $ execState (getFreeVarState kExpr) (FreeA
     getFreeVarState (App _ func args) = do
         registerFreeVar func
         mapM_ registerFreeVar args
-    getFreeVarState (Loop _ _ values body) = do
+    getFreeVarState (Loop _ args values body) = do
+        mapM_ addBounded args
         mapM_ registerFreeVar values
         getFreeVarState body
     getFreeVarState (Continue _ values) = do

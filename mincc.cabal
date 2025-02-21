@@ -25,18 +25,27 @@ source-repository head
 
 library
   exposed-modules:
+      BackEnd.Algorithm.Graph
+      BackEnd.Algorithm.Shuffle
+      BackEnd.Analysis.CodeBlock
+      BackEnd.Analysis.IR
+      BackEnd.Analysis.Liveness
+      BackEnd.Analysis.Phi
       BackEnd.BackendEnv
-      BackEnd.FunctionCall
+      BackEnd.CodeGen.Common
+      BackEnd.CodeGen.RINANA
       BackEnd.Liveness
       BackEnd.Lowering
       BackEnd.Optim
       BackEnd.Optim.Common
+      BackEnd.Optim.Merging
       BackEnd.Optim.MulElim
+      BackEnd.Optim.Unreachable
+      BackEnd.Refuge
       BackEnd.RegisterAlloc
-      BackEnd.Shuffle
       BackEnd.Spill
-      BackEnd.Transform
       Builtin
+      CodeBlock
       Display
       Error
       FrontEnd.Flatten
@@ -90,6 +99,7 @@ executable mincc
       Compile
       Log
       Path
+      RegisterAlloc
       Paths_mincc
   autogen-modules:
       Paths_mincc
@@ -116,9 +126,9 @@ test-suite mincc-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      BackEnd.ShuffleSpec
-      BackEnd.SpillSpec
-      ParserSpec
+      BackEnd.Algorithm.ShuffleSpec
+      BackEnd.Analysis.PhiSpec
+      FrontEnd.ParserSpec
       Paths_mincc
   autogen-modules:
       Paths_mincc
