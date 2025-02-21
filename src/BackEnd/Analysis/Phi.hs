@@ -6,13 +6,14 @@ module BackEnd.Analysis.Phi (
     addGroup,
     phiGroups,
     toPhiMapping,
+    usedInPhi,
 ) where
 
 import CodeBlock (BlockGraph, visitBlock, visitInst)
 import Control.Monad.State (State, execState, modify)
 import Data.Map (elems, insert)
 import Data.Maybe (mapMaybe)
-import Data.Set (Set, disjoint, fromList, lookupMin, union)
+import Data.Set (Set, disjoint, fromList, lookupMin, union, unions)
 import IR (Inst (IPhi))
 import Registers (
     RegID,
@@ -33,7 +34,7 @@ import Prelude hiding (lookup)
 --
 
 newtype PhiGroups
-    = PhiGroups [Set RegID]
+    = PhiGroups {phiGroupsList :: [Set RegID]}
     deriving (Show, Eq)
 
 addGroup :: Set RegID -> PhiGroups -> PhiGroups
@@ -101,3 +102,7 @@ phiGroups graph =
                         )
                         srcs'
     toGroup _ = mempty
+
+-- | All registers used in phi instructions.
+usedInPhi :: BlockGraph ty -> RegMultiple (Set RegID)
+usedInPhi graph = unions . phiGroupsList <$> phiGroups graph
