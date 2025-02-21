@@ -19,8 +19,8 @@ import Data.Maybe (catMaybes, maybeToList)
 import Data.Set (Set, fromList, intersection, member)
 import qualified Data.Set as S
 import IR (
-    AbstInst,
     Inst (..),
+    VirtualInst,
     getIState,
     substIState,
  )
@@ -59,7 +59,7 @@ genLocalVar rTy regID = do
             }
     pure var
 
-fromLocalVar :: RegType a -> Loc -> RegID -> RegRefugeState (Maybe AbstInst)
+fromLocalVar :: RegType a -> Loc -> RegID -> RegRefugeState (Maybe VirtualInst)
 fromLocalVar rTy loc regID = do
     mapping <- gets $ \ctx -> localVarsMapping ctx #!! rTy
     load <- gets $ \ctx -> loaded ctx #!! rTy
@@ -114,13 +114,13 @@ refugeBlock block = do
             let shouldBeRestored = toList $ stillBound `intersection` alive (lastLivings' #!! rTy)
             catMaybes <$> mapM (fromLocalVar rTy dummyLoc) shouldBeRestored
         ) ::
-            RegRefugeState (RegMultiple [AbstInst])
+            RegRefugeState (RegMultiple [VirtualInst])
     let newInst = inst <> epilogue #!! RInt <> epilogue #!! RFloat
     pure $ CodeBlock (blockName block) newInst (prevBlocks block) (terminator block)
   where
     lastLivings' = lastLivings block
 
-refugeInst :: LivenessInst -> RegRefugeState [AbstInst]
+refugeInst :: LivenessInst -> RegRefugeState [VirtualInst]
 refugeInst (ICall (LivenessLoc loc l) label) = do
     inst <- refugeLivings loc l
     resetLoaded
@@ -142,14 +142,14 @@ refugeInst inst = do
             let (InOutSet inSet _) = inOut #!! rTy
             catMaybes <$> mapM (fromLocalVar rTy loc) (toList inSet)
         ) ::
-            RegRefugeState (RegMultiple [AbstInst])
+            RegRefugeState (RegMultiple [VirtualInst])
     pure $ generated #!! RInt <> generated #!! RFloat <> [substIState (const loc) inst]
   where
     loc = livenessLoc $ getIState inst
     inOut = inOutRegisters inst
 
 -- | Refuges all registers that are not bound to local variables.
-refugeLivings :: Loc -> RegMultiple Liveness -> RegRefugeState [AbstInst]
+refugeLivings :: Loc -> RegMultiple Liveness -> RegRefugeState [VirtualInst]
 refugeLivings loc l = do
     generated <-
         ( buildRTM $ \rTy -> do
@@ -163,5 +163,5 @@ refugeLivings loc l = do
                 )
                 shouldBeRefuged
         ) ::
-            RegRefugeState (RegMultiple [AbstInst])
+            RegRefugeState (RegMultiple [VirtualInst])
     pure $ generated #!! RInt <> generated #!! RFloat

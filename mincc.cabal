@@ -44,7 +44,6 @@ library
       BackEnd.Refuge
       BackEnd.RegisterAlloc
       BackEnd.Spill
-      BackEnd.Transform
       Builtin
       CodeBlock
       Display

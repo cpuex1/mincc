@@ -11,21 +11,11 @@ module Compile (
     extractGlobalsIO,
     getFunctionsIO,
     optimInstIO,
-    transformCodeBlockIO,
 ) where
 
-import BackEnd.BackendEnv (
-    BackendConfig (regConfig),
-    BackendEnv (regContext),
-    RegContext (generatedReg, usedRegLen),
-    liftB,
- )
-import BackEnd.Liveness (LivenessInstKind, LivenessLoc (livenessLoc), liveness)
+import BackEnd.BackendEnv (liftB)
 import BackEnd.Optim (runBackEndOptim)
 import BackEnd.Optim.Common (BackEndOptimContext (BackEndOptimContext), BackEndOptimStateT)
-import BackEnd.RegisterAlloc (assignReg)
-import BackEnd.Spill (spill)
-import BackEnd.Transform (transformCodeBlock)
 import CodeBlock (VirtualBlockGraph)
 import CommandLine (
     BackendIdentStateIO,
@@ -38,7 +28,7 @@ import Control.Monad (foldM, when)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Reader (asks)
-import Control.Monad.State.Lazy (StateT (runStateT), evalStateT, gets, modify)
+import Control.Monad.State.Lazy (StateT (runStateT), evalStateT)
 import Control.Monad.Trans.Class (MonadTrans (lift))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -52,13 +42,6 @@ import FrontEnd.KNorm (kNormalize)
 import FrontEnd.NameRes (resolveNames)
 import FrontEnd.Parser (parseExpr, parsePartialExpr)
 import FrontEnd.TypeInferrer (inferType)
-import IR (
-    AbstCodeBlock,
-    HCodeBlock (hInst, hLabel),
-    RawCodeBlock,
-    exitBlock,
-    substIState,
- )
 import Log (LogLevel (..), printLog, printTextLog)
 import MiddleEnd.Analysis.Constant (registerConstants)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, loadTypeEnv)
@@ -72,12 +55,6 @@ import MiddleEnd.Optim.Common (
  )
 import MiddleEnd.Validator (validate)
 import Path (changeExt)
-import Registers (
-    RegType (RFloat, RInt),
-    savedReg,
-    (#!!),
-    (#$),
- )
 import Syntax (
     Function,
     KExpr,
@@ -224,14 +201,3 @@ optimInstIO inst = do
             else do
                 _ <- lift $ liftB $ lift $ printLog Info "Perform more optimization"
                 optimInstIOLoop (roundCount + 1) optimInst
-
-transformCodeBlockIO :: [AbstCodeBlock] -> BackendIdentStateIO [RawCodeBlock]
-transformCodeBlockIO blocks =
-    (\blocks' -> blocks' ++ [exitBlock]) . concat
-        <$> mapM
-            ( \block -> do
-                blocks' <- transformCodeBlock block
-                liftB $ lift $ printTextLog Debug $ "Generated " <> hLabel block
-                pure blocks'
-            )
-            blocks

@@ -25,7 +25,7 @@ module CodeBlock (
 import Data.List (find)
 import Data.Text (Text, intercalate)
 import Display (Display (display), DisplayI (displayI), insertIndent)
-import IR (AbstInstKind, Inst, InstKind (InstStateTy), InstLabel, PhiFreeInstKind)
+import IR (Inst, InstKind (InstStateTy), InstLabel, PhiFreeInstKind, VirtualInstKind)
 import Registers (RegReplaceable (mapReg), RegType (RFloat, RInt), Register (Register))
 import Syntax (RelationBinOp (..))
 
@@ -165,8 +165,8 @@ asMermaidGraph graph =
   where
     blockToNode block = intercalate "\n" $ map (\n -> blockName block <> "-->" <> n) $ nextBlocks block
 
-type VirtualBlock = CodeBlock AbstInstKind
-type VirtualBlockGraph = BlockGraph AbstInstKind
+type VirtualBlock = CodeBlock VirtualInstKind
+type VirtualBlockGraph = BlockGraph VirtualInstKind
 
 type PhiFreeBlock = CodeBlock PhiFreeInstKind
 type PhiFreeGraph = BlockGraph PhiFreeInstKind

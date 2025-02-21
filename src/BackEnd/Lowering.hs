@@ -111,8 +111,8 @@ resolveArgs args = do
 
 data CodeBlockContext = CodeBlockContext
     { currentLabel :: InstLabel
-    , instBuf :: Seq AbstInst
-    , generatedBlocks :: [CodeBlock AbstInstKind]
+    , instBuf :: Seq VirtualInst
+    , generatedBlocks :: [CodeBlock VirtualInstKind]
     , contextName :: Text
     , generatedID :: Int
     , prevLabels :: [InstLabel]
@@ -123,11 +123,11 @@ data CodeBlockContext = CodeBlockContext
 
 type CodeBlockStateT m = StateT CodeBlockContext (BackendIdentState m)
 
-addInst :: (Monad m) => AbstInst -> CodeBlockStateT m ()
+addInst :: (Monad m) => VirtualInst -> CodeBlockStateT m ()
 addInst inst =
     modify $ \ctx -> ctx{instBuf = instBuf ctx |> inst}
 
-appendInst :: (Monad m) => [AbstInst] -> CodeBlockStateT m ()
+appendInst :: (Monad m) => [VirtualInst] -> CodeBlockStateT m ()
 appendInst insts =
     modify $ \ctx -> ctx{instBuf = instBuf ctx <> fromList insts}
 
@@ -750,7 +750,7 @@ generateCodeBlock (Function _ _ _ freeVars boundedVars body) = do
 generateBlockGraph ::
     (Monad m) =>
     Function ->
-    BackendIdentState m (BlockGraph AbstInstKind)
+    BackendIdentState m (BlockGraph VirtualInstKind)
 generateBlockGraph func = do
     ctx <-
         execStateT (generateCodeBlock func) $

@@ -10,8 +10,8 @@ import Control.Monad.Except (MonadError (throwError))
 import Data.Set (member)
 import Error (CompilerError (UnexpectedError))
 import IR (
-    AbstInst,
     Inst (..),
+    VirtualInst,
     getIState,
  )
 import Registers (
@@ -26,7 +26,7 @@ import Registers (
 import Syntax (dummyLoc)
 
 -- | Replace the register with a local variable.
-replaceRegWithMem :: (Monad m) => RegType a -> RegID -> Int -> AbstInst -> BackendStateT m [AbstInst]
+replaceRegWithMem :: (Monad m) => RegType a -> RegID -> Int -> VirtualInst -> BackendStateT m [VirtualInst]
 replaceRegWithMem rTy reg local inst = do
     let (InOutSet inSet outSet) = inOutRegisters inst #!! rTy
 

@@ -12,20 +12,11 @@ module IR (
     InstLabel,
     PrimitiveIntOp (..),
     fromIntBinOp,
-    HCodeBlock (..),
-    LCodeBlock (..),
-    exitBlock,
-    InstTerm (Return, Jmp, Branch, Nop),
-    isTerm,
     Inst (..),
-    AbstInst,
-    AbstInstKind,
-    AbstCodeBlock,
+    VirtualInst,
+    VirtualInstKind,
     PhiFreeInst,
     PhiFreeInstKind,
-    RawInst,
-    RawCodeBlock,
-    RawInstTerm,
     InstKind (..),
     getIState,
     substIState,
@@ -35,7 +26,7 @@ import Data.Kind (Type)
 import Data.Map (Map, toAscList)
 import qualified Data.Map as M
 import Data.Text (Text, intercalate, justifyLeft, pack)
-import Display (Display (display), DisplayI (displayI), insertIndent)
+import Display (Display (display), DisplayI (displayI))
 import Registers (RegOrImm (Imm, Reg), RegReplaceable (..), RegType (RFloat, RInt), Register (Register), coverImm)
 import Syntax (FloatBinOp (..), IntBinOp (..), Loc, RelationBinOp (..))
 
@@ -59,99 +50,17 @@ fromIntBinOp Sub = PSub
 fromIntBinOp Mul = PMul
 fromIntBinOp Div = PDiv
 
--- | Higher-level code block.
-data HCodeBlock ty where
-    HCodeBlock ::
-        { hLabel :: InstLabel
-        , localVars :: Int
-        , hInst :: [Inst ty]
-        } ->
-        HCodeBlock ty
-
-deriving instance (Show (Inst ty)) => Show (HCodeBlock ty)
-deriving instance (Eq (Inst ty)) => Eq (HCodeBlock ty)
-
-instance (Display (InstStateTy ty)) => Display (HCodeBlock ty) where
-    display (HCodeBlock label _ inst) =
-        label
-            <> ":\n"
-            <> intercalate "\n" (Prelude.map (\i -> insertIndent 1 <> displayI 1 i) inst)
-
--- | Lower-level code block.
-data LCodeBlock ty where
-    LCodeBlock ::
-        { lGetLabel :: InstLabel
-        , lInst :: [Inst ty]
-        , lTerm :: InstTerm ty
-        } ->
-        LCodeBlock ty
-
-deriving instance (Show (Inst ty), Show (InstTerm ty)) => Show (LCodeBlock ty)
-deriving instance (Eq (Inst ty), Eq (InstTerm ty)) => Eq (LCodeBlock ty)
-
-instance (Display (InstStateTy ty)) => Display (LCodeBlock ty) where
-    display (LCodeBlock label inst term) =
-        label
-            <> ":"
-            <> intercalate "" (Prelude.map (\i -> "\n" <> insertIndent 1 <> display i) inst)
-            <> ( case term of
-                    Nop -> ""
-                    _ -> "\n" <> insertIndent 1 <> display term
-               )
-
--- | The last block to be executed.
-exitBlock :: LCodeBlock ty
-exitBlock = LCodeBlock "__exit" [] Nop
-
-data InstTerm ty where
-    Return :: InstTerm ty
-    Jmp :: InstLabel -> InstTerm ty
-    Branch ::
-        (InstStateTy ty) ->
-        RelationBinOp ->
-        (Register a) ->
-        (Register a) ->
-        InstLabel ->
-        InstTerm ty
-    Nop :: InstTerm ty
-
-instance Display (InstTerm ty) where
-    display Return = "ret"
-    display (Jmp label) = "jmp " <> label
-    display (Branch _ Eq lhs@(Register RInt _) rhs label) =
-        "beq " <> display lhs <> ", " <> display rhs <> ", " <> label
-    display (Branch _ Ge lhs@(Register RInt _) rhs label) =
-        "bge " <> display lhs <> ", " <> display rhs <> ", " <> label
-    display (Branch _ Ne lhs@(Register RInt _) rhs label) =
-        "bne " <> display lhs <> ", " <> display rhs <> ", " <> label
-    display (Branch _ Lt lhs@(Register RInt _) rhs label) =
-        "blt " <> display lhs <> ", " <> display rhs <> ", " <> label
-    display (Branch _ Eq lhs@(Register RFloat _) rhs label) =
-        "bfeq " <> display lhs <> ", " <> display rhs <> ", " <> label
-    display (Branch _ Ge lhs@(Register RFloat _) rhs label) =
-        "bfge " <> display lhs <> ", " <> display rhs <> ", " <> label
-    display (Branch _ Ne lhs@(Register RFloat _) rhs label) =
-        "bfne " <> display lhs <> ", " <> display rhs <> ", " <> label
-    display (Branch _ Lt lhs@(Register RFloat _) rhs label) =
-        "bflt " <> display lhs <> ", " <> display rhs <> ", " <> label
-    display Nop = "nop"
-
-isTerm :: InstTerm ty -> Bool
-isTerm Nop = False
-isTerm _ = True
-
 class InstKind ty where
     type InstStateTy ty :: Type
     type AllowPhi ty :: Bool
 
-data AbstInstKind
+data VirtualInstKind
 
-instance InstKind AbstInstKind where
-    type InstStateTy AbstInstKind = Loc
-    type AllowPhi AbstInstKind = True
+instance InstKind VirtualInstKind where
+    type InstStateTy VirtualInstKind = Loc
+    type AllowPhi VirtualInstKind = True
 
-type AbstInst = Inst AbstInstKind
-type AbstCodeBlock = HCodeBlock AbstInstKind
+type VirtualInst = Inst VirtualInstKind
 
 data PhiFreeInstKind
 
@@ -160,16 +69,6 @@ instance InstKind PhiFreeInstKind where
     type AllowPhi PhiFreeInstKind = False
 
 type PhiFreeInst = Inst PhiFreeInstKind
-
-data RawInstKind
-
-instance InstKind RawInstKind where
-    type InstStateTy RawInstKind = Loc
-    type AllowPhi RawInstKind = False
-
-type RawInst = Inst RawInstKind
-type RawCodeBlock = LCodeBlock RawInstKind
-type RawInstTerm = InstTerm RawInstKind
 
 data Inst ty where
     ICompOp ::

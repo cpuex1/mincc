@@ -13,7 +13,6 @@ module BackEnd.Liveness (
     LivenessInstKind,
     constructGraph,
     allLivenessInfo,
-    liveness,
 ) where
 
 import BackEnd.Algorithm.Graph (RegGraph (RegGraph))
@@ -24,7 +23,6 @@ import Data.Set (Set, empty, toAscList, union, unions)
 import Data.Text (intercalate)
 import Display (Display (display))
 import IR (
-    AbstInst,
     Inst (..),
     InstKind (..),
     getIState,
@@ -104,6 +102,3 @@ allLivenessInfo graph =
             graph
         )
         []
-
-liveness :: [AbstInst] -> [LivenessInst]
-liveness _ = undefined

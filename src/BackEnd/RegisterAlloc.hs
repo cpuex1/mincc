@@ -32,9 +32,9 @@ import Data.Maybe (mapMaybe)
 import Data.Set (Set, fromList, notMember)
 import qualified Data.Set as S
 import IR (
-    AbstInst,
     Inst (..),
     PhiFreeInst,
+    VirtualInst,
     substIState,
  )
 import Registers (
@@ -141,7 +141,7 @@ removePhi block =
         , terminator = terminator block
         }
   where
-    toPhiFree :: AbstInst -> Maybe PhiFreeInst
+    toPhiFree :: VirtualInst -> Maybe PhiFreeInst
     toPhiFree (ICompOp state op dest src1 src2) = Just $ ICompOp state op dest src1 src2
     toPhiFree (IIntOp state op dest src1 src2) = Just $ IIntOp state op dest src1 src2
     toPhiFree (IFOp state op dest src1 src2) = Just $ IFOp state op dest src1 src2

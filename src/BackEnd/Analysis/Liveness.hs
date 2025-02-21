@@ -21,9 +21,9 @@ import qualified Data.Map as M
 import Data.Maybe (mapMaybe)
 import Data.Set (delete, insert, singleton, union, (\\))
 import IR (
-    AbstInst,
     Inst (..),
     InstLabel,
+    VirtualInst,
     getIState,
     substIState,
  )
@@ -114,7 +114,7 @@ terminatorLiveness (TBranch _ lhs rhs _ _) = do
     markUsed rhs
 terminatorLiveness _ = pure ()
 
-instLiveness :: AbstInst -> LivenessState LivenessInst
+instLiveness :: VirtualInst -> LivenessState LivenessInst
 instLiveness (IPhi state dest srcs) = do
     -- We should avoid to mark source registers as used
     -- because it should be resolved at higher level.
