@@ -125,6 +125,13 @@ instance (Semigroup a) => Semigroup (RegMultiple a) where
 instance (Monoid a) => Monoid (RegMultiple a) where
     mempty = memptyRT
 
+instance Functor RegMultiple where
+    fmap f (RegMultiple i f') = RegMultiple (f i) (f f')
+
+instance Applicative RegMultiple where
+    pure a = RegMultiple a a
+    RegMultiple i f <*> RegMultiple i' f' = RegMultiple (i i') (f f')
+
 -- | Holds two objects - one is for integer registers and the other is for float registers.
 data RegVariant f
     = RegVariant (f Int) (f Float)

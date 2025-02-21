@@ -9,7 +9,7 @@ module CommandLine (
 ) where
 
 import BackEnd.Lowering (BackendIdentState)
-import BackEnd.Optim (BackEndOptimKind (Merging, MulElim, Unreachable))
+import BackEnd.Optim (BackEndOptimKind (Merging, MulElim, Unreachable, UnusedReg))
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Reader
 import Data.Set (Set, insert)
@@ -262,4 +262,5 @@ toCompilerConfig arg = do
         insert MulElim
             . insert Unreachable
             . insert Merging
+            . insert UnusedReg
             $ mempty
