@@ -23,7 +23,7 @@ data CodeGenRINANA = CodeGenRINANA
 codeGenTerminator :: Maybe InstLabel -> Terminator -> Text
 codeGenTerminator _ (TJmp "__fin") =
     -- A special label for the end of the program.
-    ""
+    "\n" <> insertIndent 1 <> "hlt"
 codeGenTerminator nextLabel term@(TJmp label) =
     if nextLabel == Just label
         then
