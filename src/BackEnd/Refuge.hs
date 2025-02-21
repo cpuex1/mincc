@@ -4,18 +4,19 @@ module BackEnd.Refuge (runRefugeBlock) where
 
 import BackEnd.Analysis.IR (InOutSet (InOutSet), inOutRegisters)
 import BackEnd.Liveness (
-    Liveness (Liveness),
+    Liveness (Liveness, alive),
     LivenessBlock,
     LivenessGraph,
     LivenessInst,
-    LivenessLoc (LivenessLoc, livenessLoc),
+    LivenessLoc (LivenessLoc, livenessLoc, livenessProp),
  )
 import CodeBlock (BlockGraph (..), CodeBlock (..), VirtualBlock, VirtualBlockGraph)
 import Control.Monad.State (State, gets, modify, runState)
 import Data.Foldable (toList)
+import Data.List (unsnoc)
 import Data.Map (Map, insert, keys, lookup, notMember)
 import Data.Maybe (catMaybes, maybeToList)
-import Data.Set (Set, member)
+import Data.Set (Set, fromList, intersection, member)
 import qualified Data.Set as S
 import IR (
     AbstInst,
@@ -93,6 +94,13 @@ runRefugeBlock graph =
             $ RegRefugeContext mempty mempty
             $ localVars graph
 
+-- | Gets the liveness information of the last instruction.
+lastLivings :: LivenessBlock -> RegMultiple Liveness
+lastLivings block =
+    case unsnoc $ blockInst block of
+        Just (_, inst) -> livenessProp $ getIState inst
+        Nothing -> mempty
+
 refugeBlock :: LivenessBlock -> RegRefugeState VirtualBlock
 refugeBlock block = do
     inst <- concat <$> mapM refugeInst (blockInst block)
@@ -100,12 +108,17 @@ refugeBlock block = do
     -- Get back the registers that are still bound to local variables.
     epilogue <-
         ( buildRTM $ \rTy -> do
-            stillBound <- gets $ \ctx -> keys (localVarsMapping ctx #!! rTy)
-            catMaybes <$> mapM (fromLocalVar rTy dummyLoc) stillBound
+            stillBound <- gets $ \ctx -> fromList $ keys (localVarsMapping ctx #!! rTy)
+
+            -- The registers can be out-of-scope.
+            let shouldBeRestored = toList $ stillBound `intersection` alive (lastLivings' #!! rTy)
+            catMaybes <$> mapM (fromLocalVar rTy dummyLoc) shouldBeRestored
         ) ::
             RegRefugeState (RegMultiple [AbstInst])
     let newInst = inst <> epilogue #!! RInt <> epilogue #!! RFloat
     pure $ CodeBlock (blockName block) newInst (prevBlocks block) (terminator block)
+  where
+    lastLivings' = lastLivings block
 
 refugeInst :: LivenessInst -> RegRefugeState [AbstInst]
 refugeInst (ICall (LivenessLoc loc l) label) = do
@@ -140,9 +153,9 @@ refugeLivings :: Loc -> RegMultiple Liveness -> RegRefugeState [AbstInst]
 refugeLivings loc l = do
     generated <-
         ( buildRTM $ \rTy -> do
-            let (Liveness alive) = l #!! rTy
+            let (Liveness alive') = l #!! rTy
             mapping <- gets $ \ctx -> localVarsMapping ctx #!! rTy
-            let shouldBeRefuged = toList $ S.filter (`notMember` mapping) alive
+            let shouldBeRefuged = toList $ S.filter (`notMember` mapping) alive'
             mapM
                 ( \reg -> do
                     local <- genLocalVar rTy reg
