@@ -6,6 +6,7 @@ module BackEnd.CodeGen.Common (
     exitGraph,
 ) where
 
+import BackEnd.BackendEnv (BackendEnv (globals), BackendStateT)
 import CodeBlock (
     BlockGraph (..),
     CodeBlock (..),
@@ -15,11 +16,13 @@ import CodeBlock (
     visitBlock,
  )
 import Control.Monad.Identity (Identity (runIdentity))
+import Control.Monad.State (gets)
 import Data.List (unsnoc)
 import Data.Proxy (Proxy)
-import Data.Text (Text)
-import IR (Inst (ICall, IIntOp, ILoad, IStore), InstLabel, PrimitiveIntOp (PAdd))
-import Registers (RegOrImm (Imm), RegType (RInt), returnReg, stackReg)
+import Data.Text (Text, isPrefixOf)
+import IR (Inst (ICall, IIntOp, ILoad, IMov, IStore), InstLabel, PrimitiveIntOp (PAdd))
+import MiddleEnd.Globals (GlobalTable (endAddr))
+import Registers (RegOrImm (Imm), RegType (RInt), heapReg, returnReg, stackReg)
 import Syntax (dummyLoc)
 
 -- | A very simple class for code generation.
@@ -29,12 +32,28 @@ class CodeGen a where
     codeGenInternal :: Proxy a -> PhiFreeGraph -> Text
 
 -- | Generates a code.
-codeGen :: (CodeGen a) => Proxy a -> PhiFreeGraph -> Text
-codeGen proxy graph =
-    codeGenInternal proxy expanded
-  where
-    inserted = insertPrologueBlocks graph
-    expanded = runIdentity (visitBlock (pure . expandReturn (entryBlock graph) (localVars graph)) inserted)
+codeGen :: (Monad m, CodeGen a) => Proxy a -> PhiFreeGraph -> BackendStateT m Text
+codeGen proxy graph = do
+    initialized <- initGlobalTable graph
+    let inserted = insertPrologueBlocks initialized
+    let expanded = runIdentity (visitBlock (pure . expandReturn (entryBlock graph) (localVars graph)) inserted)
+    pure $ codeGenInternal proxy expanded
+
+-- | Initialize the global table.
+initGlobalTable :: (Monad m) => PhiFreeGraph -> BackendStateT m PhiFreeGraph
+initGlobalTable graph@(BlockGraph blocks "__entry" _) = do
+    blocks' <-
+        mapM
+            ( \block -> do
+                case blockName block of
+                    "__entry" -> do
+                        addr <- gets (endAddr . globals)
+                        pure $ block{blockInst = IMov dummyLoc heapReg (Imm RInt addr) : blockInst block}
+                    _ -> pure block
+            )
+            blocks
+    pure graph{graphBlocks = blocks'}
+initGlobalTable graph = pure graph
 
 -- | Inserts the prologue blocks.
 insertPrologueBlocks :: PhiFreeGraph -> PhiFreeGraph
@@ -83,22 +102,27 @@ insertPrologueBlocks graph =
 
 -- | Expands a return terminator.
 expandReturn :: InstLabel -> Int -> PhiFreeBlock -> PhiFreeBlock
-expandReturn _ _ block@(CodeBlock "__entry" _ _ TReturn) =
+expandReturn "__entry" _ block@(CodeBlock _ _ _ TReturn) =
     -- Go to the exit block.
     block{terminator = TJmp "__exit"}
 expandReturn entryLabel local block@(CodeBlock _ _ _ TReturn) =
     case unsnoc (blockInst block) of
         Just (inst, ICall _ func) ->
-            if func == entryLabel
+            if func `isPrefixOf` "__ext_"
                 then
-                    -- Remove a tail-recursive call.
-                    block{blockInst = inst, terminator = TJmp $ func <> "_rec"}
-                else
-                    -- Remove a tail call.
+                    -- The external function cannot be tail-recursive.
                     block
-                        { blockInst = inst ++ [IIntOp dummyLoc PAdd stackReg stackReg (Imm RInt local) | local > 0]
-                        , terminator = TJmp $ func <> "_start"
-                        }
+                else
+                    if func == entryLabel
+                        then
+                            -- Remove a tail-recursive call.
+                            block{blockInst = inst, terminator = TJmp $ func <> "_rec"}
+                        else
+                            -- Remove a tail call.
+                            block
+                                { blockInst = inst ++ [IIntOp dummyLoc PAdd stackReg stackReg (Imm RInt local) | local > 0]
+                                , terminator = TJmp $ func <> "_start"
+                                }
         _ ->
             -- Restore the ra register and the stack pointer.
             block

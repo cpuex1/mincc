@@ -189,7 +189,7 @@ execArgsWithBackend functions = do
         liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display phiFreeBlocks
         liftB' $ printLog Debug "The result of register allocation was saved"
 
-    let generatedBlocks = map (codeGen (Proxy :: Proxy CodeGenRINANA)) (phiFreeBlocks <> [exitGraph])
+    generatedBlocks <- mapM (codeGen (Proxy :: Proxy CodeGenRINANA)) (phiFreeBlocks <> [exitGraph])
     liftB' $ printLog Done "Code generation succeeded"
     liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" generatedBlocks
     liftB' $ printLog Debug "Generated code was saved"
