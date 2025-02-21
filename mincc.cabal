@@ -32,6 +32,8 @@ library
       BackEnd.Analysis.Liveness
       BackEnd.Analysis.Phi
       BackEnd.BackendEnv
+      BackEnd.CodeGen.Common
+      BackEnd.CodeGen.RINANA
       BackEnd.Liveness
       BackEnd.Lowering
       BackEnd.Optim

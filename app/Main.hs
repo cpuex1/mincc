@@ -21,6 +21,8 @@ import Options.Applicative (
 
 import BackEnd.Analysis.Liveness (runGraphLiveness)
 import BackEnd.BackendEnv (createBackendConfig, liftB, runBackendStateT)
+import BackEnd.CodeGen.Common (codeGen, exitGraph)
+import BackEnd.CodeGen.RINANA (CodeGenRINANA)
 import BackEnd.Lowering (generateBlockGraph)
 import BackEnd.Refuge (runRefugeBlock)
 import CodeBlock (asMermaidGraph)
@@ -28,6 +30,7 @@ import Control.Monad.Except (MonadError (catchError, throwError), runExceptT)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.State (evalStateT)
 import Control.Monad.Trans (lift)
+import Data.Proxy (Proxy (Proxy))
 import Error (CompilerError (OtherError), displayError)
 import Log (LogLevel (Debug, Done, Error), printLog, printTextLog)
 import MiddleEnd.Analysis.Constant (registerConstants)
@@ -177,7 +180,7 @@ execArgsWithBackend functions = do
     let refuged = map runRefugeBlock livenessBlocks
     liftB' $ printLog Done "Register refuge succeeded"
     when emitIR $ do
-        liftIO $ TIO.writeFile (changeExt "refuge.s" outputFile) $ intercalate "\n" $ map display refuged
+        liftIO $ TIO.writeFile (changeExt "refuge.s" outputFile) $ intercalate "\n" $ map (display . runGraphLiveness) refuged
         liftB' $ printLog Debug "The result of register refuge was saved"
 
     phiFreeBlocks <- mapM runRegAlloc refuged
@@ -185,16 +188,10 @@ execArgsWithBackend functions = do
     when emitIR $ do
         liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display phiFreeBlocks
         liftB' $ printLog Debug "The result of register allocation was saved"
+
+    let generatedBlocks = map (codeGen (Proxy :: Proxy CodeGenRINANA)) (phiFreeBlocks <> [exitGraph])
+    liftB' $ printLog Done "Code generation succeeded"
+    liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" generatedBlocks
+    liftB' $ printLog Debug "Generated code was saved"
   where
-    -- assignedBlocks <- assignRegisterIO liveness
-    -- liftB' $ printLog Done "Register allocation succeeded"
-    -- when emitIR $ do
-    --     liftIO $ TIO.writeFile (changeExt "alloc.s" outputFile) $ intercalate "\n" $ map display assignedBlocks
-    --     liftB' $ printLog Debug "The result of register allocation was saved"
-
-    -- blocks' <- transformCodeBlockIO assignedBlocks
-    -- liftB' $ printLog Done "Code generation succeeded"
-    -- liftIO $ TIO.writeFile (changeExt "s" outputFile) $ intercalate "\n" $ map display blocks'
-    -- liftB' $ printLog Debug "Generated code was saved"
-
     liftB' = liftB . lift
