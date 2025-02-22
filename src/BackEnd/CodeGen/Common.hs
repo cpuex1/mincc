@@ -36,7 +36,7 @@ codeGen :: (Monad m, CodeGen a) => Proxy a -> PhiFreeGraph -> BackendStateT m Te
 codeGen proxy graph = do
     initialized <- initGlobalTable graph
     let inserted = insertPrologueBlocks initialized
-    let expanded = runIdentity (visitBlock (pure . expandReturn (entryBlock graph) (localVars graph)) inserted)
+    let expanded = runIdentity (visitBlock (pure . expandReturn (entryBlock inserted) (localVars inserted)) inserted)
     pure $ codeGenInternal proxy expanded
 
 -- | Initialize the global table.
@@ -108,10 +108,16 @@ expandReturn "__entry" _ block@(CodeBlock _ _ _ TReturn) =
 expandReturn entryLabel local block@(CodeBlock _ _ _ TReturn) =
     case unsnoc (blockInst block) of
         Just (inst, ICall _ func) ->
-            if func `isPrefixOf` "__ext_"
+            if "__ext_" `isPrefixOf` func
                 then
                     -- The external function cannot be tail-recursive.
                     block
+                        { blockInst =
+                            blockInst block
+                                ++ [ ILoad dummyLoc returnReg stackReg local
+                                   , IIntOp dummyLoc PAdd stackReg stackReg (Imm RInt (local + 1))
+                                   ]
+                        }
                 else
                     if func == entryLabel
                         then
