@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module MiddleEnd.Analysis.Identifier (
-    IdentProp (IdentProp, typeOf, constant, isClosure),
+    IdentProp (..),
     IdentContext (..),
     IdentEnvT,
     defaultIdentContext,
@@ -31,6 +31,7 @@ data IdentProp
     { typeOf :: Ty
     , constant :: Maybe Literal
     , isClosure :: Bool
+    , containsLoop :: Maybe Bool
     }
     deriving (Show, Eq)
 
@@ -101,14 +102,14 @@ genNewVar ty = do
         env
             { nextIdent = nextIdent env + 1
             }
-    _ <- registerProp newIdent (IdentProp ty Nothing False)
+    _ <- registerProp newIdent (IdentProp ty Nothing False Nothing)
     pure newIdent
 
 loadTypeEnv :: (Monad m) => TypeEnv -> IdentEnvT m ()
 loadTypeEnv typeEnv = do
     mapM_
         ( \(ident, tId) ->
-            registerProp ident (IdentProp (removeVar typeEnv (TVar tId)) Nothing False)
+            registerProp ident (IdentProp (removeVar typeEnv (TVar tId)) Nothing False Nothing)
         )
         $ toList vars
   where
@@ -118,7 +119,7 @@ reportEnv :: (Monad m) => IdentEnvT m [Text]
 reportEnv =
     gets
         ( map
-            ( \(ident, IdentProp ty c isC) ->
+            ( \(ident, IdentProp ty c isC _) ->
                 display ident
                     <> " : "
                     <> display ty

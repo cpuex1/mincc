@@ -5,7 +5,8 @@ module MiddleEnd.Optim.LoopDetection (runReplaceWithLoops) where
 import Control.Monad (when)
 import Control.Monad.State (MonadTrans (lift), StateT, evalStateT, gets, modify)
 import Data.Map (Map, insert, lookup)
-import MiddleEnd.Analysis.Identifier (genNewVar, getTyOf)
+import MiddleEnd.Analysis.Common (exprSize)
+import MiddleEnd.Analysis.Identifier (IdentProp (containsLoop), genNewVar, getTyOf, searchProp, updateProp)
 import MiddleEnd.Optim.Common (OptimStateT, occur, withFreshVars)
 import Syntax (Expr (..), Ident, KExpr, Pattern (PRec, PTuple, PUnit, PVar), subst)
 import Prelude hiding (lookup)
@@ -16,6 +17,9 @@ newtype LoopContext = LoopContext
     deriving (Show, Eq)
 
 type LoopStateT m = StateT LoopContext (OptimStateT m)
+
+loopDetectionThreshold :: Int
+loopDetectionThreshold = 10
 
 detectLoop :: Ident -> KExpr -> (Bool, KExpr)
 detectLoop func (Let state PUnit expr body) =
@@ -68,10 +72,24 @@ replaceWithLoops (Let state (PTuple values) expr body) = do
     pure $ Let state (PTuple values) expr' body'
 replaceWithLoops (Let state (PRec func args) expr body) = do
     expr' <- replaceWithLoops expr
-    let (isLoop, loopBody) = detectLoop func expr'
-    when isLoop $ do
-        modify $ \ctx ->
-            ctx{loop = insert func (args, loopBody) (loop ctx)}
+    funcProp <- lift $ lift $ searchProp func
+    case containsLoop <$> funcProp of
+        Just (Just True) -> do
+            -- This function surely contains a loop.
+            let (_, loopBody) = detectLoop func expr'
+            modify $ \ctx ->
+                ctx{loop = insert func (args, loopBody) (loop ctx)}
+        Just (Just False) ->
+            -- This function does not contain a loop.
+            pure ()
+        _ -> do
+            -- Checks whether the function contains a loop.
+            let (isLoop, loopBody) = detectLoop func expr'
+            when (isLoop && exprSize loopBody <= loopDetectionThreshold) $ do
+                lift $ lift $ updateProp func $ \prop ->
+                    prop{containsLoop = Just True}
+                modify $ \ctx ->
+                    ctx{loop = insert func (args, loopBody) (loop ctx)}
     body' <- replaceWithLoops body
     pure $ Let state (PRec func args) expr' body'
 replaceWithLoops (If state cond then' else') = do

@@ -41,7 +41,7 @@ generateInitArrayFunc uniqueId valTy body = do
     incResult <- genNewVar TInt
 
     -- Registers variables.
-    registerProp uniqueId (IdentProp func_ty Nothing False)
+    registerProp uniqueId (IdentProp func_ty Nothing False Nothing)
 
     let func_body =
             If
