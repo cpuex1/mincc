@@ -27,7 +27,16 @@ import Data.Map (Map, toAscList)
 import qualified Data.Map as M
 import Data.Text (Text, intercalate, justifyLeft, pack)
 import Display (Display (display), DisplayI (displayI))
-import Registers (RegOrImm (Imm, Reg), RegReplaceable (..), RegType (RFloat, RInt), Register (Register), coverImm)
+import Registers (
+    RegList,
+    RegOrImm (Imm, Reg),
+    RegReplaceable (..),
+    RegType (RFloat, RInt),
+    Register (Register),
+    coverImm,
+    (#!!),
+    (#$),
+ )
 import Syntax (FloatBinOp (..), IntBinOp (..), Loc, RelationBinOp (..))
 
 type InstLabel = Text
@@ -126,8 +135,7 @@ data Inst ty where
         InstStateTy ty ->
         Text ->
         Register a ->
-        [RegOrImm Int] ->
-        [Register Float] ->
+        RegList ->
         Inst ty
     IPhi ::
         (AllowPhi ty ~ True) =>
@@ -165,10 +173,10 @@ instance (Eq (InstStateTy ty)) => Eq (Inst ty) where
         state1 == state2 && dest1 == dest2 && src1 == src2 && offset1 == offset2
     (IStore state1 dest1@(Register RFloat _) src1 offset1) == (IStore state2 dest2@(Register RFloat _) src2 offset2) =
         state1 == state2 && dest1 == dest2 && src1 == src2 && offset1 == offset2
-    (IRawInst state1 inst1 retTy1@(Register RInt _) iArgs1 fArgs1) == (IRawInst state2 inst2 retTy2@(Register RInt _) iArgs2 fArgs2) =
-        state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
-    (IRawInst state1 inst1 retTy1@(Register RFloat _) iArgs1 fArgs1) == (IRawInst state2 inst2 retTy2@(Register RFloat _) iArgs2 fArgs2) =
-        state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && iArgs1 == iArgs2 && fArgs1 == fArgs2
+    (IRawInst state1 inst1 retTy1@(Register RInt _) args1) == (IRawInst state2 inst2 retTy2@(Register RInt _) args2) =
+        state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && args1 == args2
+    (IRawInst state1 inst1 retTy1@(Register RFloat _) args1) == (IRawInst state2 inst2 retTy2@(Register RFloat _) args2) =
+        state1 == state2 && inst1 == inst2 && retTy1 == retTy2 && args1 == args2
     (IPhi state1 dest1@(Register RInt _) choices1) == (IPhi state2 dest2@(Register RInt _) choices2) =
         state1 == state2 && dest1 == dest2 && choices1 == choices2
     (IPhi state1 dest1@(Register RFloat _) choices1) == (IPhi state2 dest2@(Register RFloat _) choices2) =
@@ -250,10 +258,10 @@ instance (Display (InstStateTy ty)) => DisplayI (Inst ty) where
             "flw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
         withoutState (IStore _ lhs@(Register RFloat _) rhs offset) _ =
             "fsw " <> display lhs <> ", " <> pack (show offset) <> "(" <> display rhs <> ")"
-        withoutState (IRawInst _ name ret iArgs fArgs) _ =
+        withoutState (IRawInst _ name ret args) _ =
             name
                 <> " "
-                <> intercalate ", " (display ret : map display iArgs ++ map display fArgs)
+                <> intercalate ", " (display ret : map display (args #!! RInt) ++ map display (args #!! RFloat))
         withoutState (IPhi _ dest choices) _ =
             "phi! " <> display dest <> ", " <> intercalate ", " (map (\(l, r) -> l <> ": " <> display r) $ toAscList choices)
 
@@ -270,7 +278,7 @@ getIState (ICall state _) = state
 getIState (ICallReg state _) = state
 getIState (ILoad state _ _ _) = state
 getIState (IStore state _ _ _) = state
-getIState (IRawInst state _ _ _ _) = state
+getIState (IRawInst state _ _ _) = state
 getIState (IPhi state _ _) = state
 
 substIState ::
@@ -287,7 +295,7 @@ substIState f (ICall state label) = ICall (f state) label
 substIState f (ICallReg state reg) = ICallReg (f state) reg
 substIState f (ILoad state dest src offset) = ILoad (f state) dest src offset
 substIState f (IStore state dest src offset) = IStore (f state) dest src offset
-substIState f (IRawInst state inst retTy iArgs fArgs) = IRawInst (f state) inst retTy iArgs fArgs
+substIState f (IRawInst state inst retTy args) = IRawInst (f state) inst retTy args
 substIState f (IPhi state dest choices) = IPhi (f state) dest choices
 
 instance RegReplaceable (Inst ty) where
@@ -309,7 +317,7 @@ instance RegReplaceable (Inst ty) where
         ILoad state (substR dest) (substR src) offset
     mapReg substR (IStore state dest src offset) =
         IStore state (substR dest) (substR src) offset
-    mapReg substR (IRawInst state inst retReg iArgs fArgs) =
-        IRawInst state inst (substR retReg) (map (coverImm substR) iArgs) (map substR fArgs)
+    mapReg substR (IRawInst state inst retReg args) =
+        IRawInst state inst (substR retReg) (const (map substR) #$ args)
     mapReg substR (IPhi state dest choices) =
         IPhi state (substR dest) (M.map substR choices)

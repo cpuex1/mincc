@@ -12,10 +12,12 @@ import Registers (
     RegID,
     RegMultiple,
     RegOrImm (Reg),
+    RegType (RFloat, RInt),
     Register (Register),
     RegisterKind (SavedReg),
     buildRT,
     updateRT,
+    (#!!),
  )
 
 data InOutSet
@@ -78,10 +80,10 @@ inOutRegisters (IStore _ dest src _) =
     insertInReg dest
         . insertInReg src
         $ buildRT (const emptyInOutSet)
-inOutRegisters (IRawInst _ _ retTy iArgs fArgs) =
+inOutRegisters (IRawInst _ _ retTy args) =
     let set = buildRT (const emptyInOutSet)
-     in let set' = foldl (flip insertInRegOrImm) set iArgs
-         in let set'' = foldl (flip insertInReg) set' fArgs
+     in let set' = foldl (flip insertInReg) set (args #!! RInt)
+         in let set'' = foldl (flip insertInReg) set' (args #!! RFloat)
              in insertOutReg retTy set''
 inOutRegisters (IPhi _ dest srcs) =
     let set = buildRT (const emptyInOutSet)

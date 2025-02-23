@@ -15,6 +15,7 @@ module Registers (
     RegVariant,
     RegMultiple,
     RegTuple (..),
+    RegList,
     buildRT,
     buildRTM,
     updateRT,
@@ -47,7 +48,7 @@ import Data.Map (Map, compose, lookup, union)
 import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 import Display (Display (display))
-import Typing (Ty, TypeKind (TFloat))
+import Typing (Ty, TypeKind (TFloat, TUnit))
 import Prelude hiding (lookup)
 
 type RegID = Int
@@ -64,9 +65,11 @@ instance Display (RegType a) where
     display RInt = "int"
     display RFloat = "float"
 
-withRegType :: Ty -> (forall a. RegType a -> b) -> b
-withRegType TFloat f = f RFloat
-withRegType _ f = f RInt
+-- | Execute a function with a register type corresponding to the type given.
+withRegType :: Ty -> (forall a. Maybe (RegType a) -> b) -> b
+withRegType TUnit f = f Nothing
+withRegType TFloat f = f (Just RFloat)
+withRegType _ f = f (Just RInt)
 
 -- | Execute a function for each register type.
 eachRegType :: (Monad m) => (forall a. RegType a -> m ()) -> m ()
@@ -151,6 +154,27 @@ instance (Semigroup (f Int), Semigroup (f Float)) => Semigroup (RegVariant f) wh
     a <> b = a #<> b
 
 instance (Monoid (f Int), Monoid (f Float)) => Monoid (RegVariant f) where
+    mempty = memptyRT
+
+-- | A list of registers.
+data RegList = RegList
+    { iRegList :: [Register Int]
+    , fRegList :: [Register Float]
+    }
+    deriving (Show, Eq)
+
+instance RegTuple RegList where
+    type RegTupleMap RegList rTy = [Register rTy]
+
+    RegList i _ #!! RInt = i
+    RegList _ f #!! RFloat = f
+
+    createRT = RegList
+
+instance Semigroup RegList where
+    a <> b = a #<> b
+
+instance Monoid RegList where
     mempty = memptyRT
 
 data RegisterKind ty where

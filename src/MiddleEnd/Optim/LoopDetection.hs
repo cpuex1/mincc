@@ -19,7 +19,7 @@ newtype LoopContext = LoopContext
 type LoopStateT m = StateT LoopContext (OptimStateT m)
 
 loopDetectionThreshold :: Int
-loopDetectionThreshold = 10
+loopDetectionThreshold = 8
 
 detectLoop :: Ident -> KExpr -> (Bool, KExpr)
 detectLoop func (Let state PUnit expr body) =
@@ -82,7 +82,7 @@ replaceWithLoops (Let state (PRec func args) expr body) = do
         Just (Just False) ->
             -- This function does not contain a loop.
             pure ()
-        _ -> do
+        Just Nothing -> do
             -- Checks whether the function contains a loop.
             let (isLoop, loopBody) = detectLoop func expr'
             when (isLoop && exprSize loopBody <= loopDetectionThreshold) $ do
@@ -90,6 +90,8 @@ replaceWithLoops (Let state (PRec func args) expr body) = do
                     prop{containsLoop = Just True}
                 modify $ \ctx ->
                     ctx{loop = insert func (args, loopBody) (loop ctx)}
+        Nothing -> do
+            error "The function not found."
     body' <- replaceWithLoops body
     pure $ Let state (PRec func args) expr' body'
 replaceWithLoops (If state cond then' else') = do

@@ -151,7 +151,7 @@ removePhi block =
     toPhiFree (ICall state func) = Just $ ICall state func
     toPhiFree (ICallReg state cl) = Just $ ICallReg state cl
     toPhiFree (ILMov state dest label) = Just $ ILMov state dest label
-    toPhiFree (IRawInst state name retTy iArgs fArgs) = Just $ IRawInst state name retTy iArgs fArgs
+    toPhiFree (IRawInst state name retTy args) = Just $ IRawInst state name retTy args
     toPhiFree IPhi{} = Nothing
 
 -- | Apply the phi mapping to the liveness information.
