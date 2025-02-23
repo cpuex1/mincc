@@ -32,15 +32,17 @@ let rec floor x =
 
 (* Utility functions for sine and cosine *)
 let rec half_loop a p =
-  if a < c_PI *. 2.0 then
-    a
-  else
-    if a >= p then half_loop (a -. p) (fhalf p)
-    else half_loop a (fhalf p) in
+  let c_PI = 3.1415927410125732421875 in
+    if a < c_PI *. 2.0 then
+      a
+    else
+      if a >= p then half_loop (a -. p) (fhalf p)
+      else half_loop a (fhalf p) in
 let rec double_loop a p =
   if a < p then p else double_loop a (p *. 2.0) in
 let rec reduction_2pi a =
-  half_loop a (double_loop a (c_PI *. 2.0)) in
+  let c_PI = 3.1415927410125732421875 in
+    half_loop a (double_loop a (c_PI *. 2.0)) in
 let rec kernel_sin x =
   let x2 = x *. x in
     let x3 = x *. x2 in
@@ -98,17 +100,20 @@ let rec cos x =
                       else
                         -. kernel_sin (fhalf c_PI -. a) in
 
+
+let rec kernel_atan x =
+  let x2 = x *. x in
+    let x3 = x *. x2 in
+      let x5 = x3 *. x2 in
+        let x7 = x5 *. x2 in
+          let x9 = x7 *. x2 in
+            let x11 = x9 *. x2 in
+              let x13 = x11 *. x2 in
+                x -. 0.3333333 *. x3 +. 0.2 *. x5 -. 0.142857142 *. x7 +. 0.111111104 *. x9 -. 0.08976446 *. x11 +. 0.060035485 *. x13 in
+
 (* Calculate arc tangent *)
 let rec atan x =
-  let rec kernel_atan x =
-    let x2 = x *. x in
-      let x3 = x *. x2 in
-        let x5 = x3 *. x2 in
-          let x7 = x5 *. x2 in
-            let x9 = x7 *. x2 in
-              let x11 = x9 *. x2 in
-                let x13 = x11 *. x2 in
-                  x -. 0.3333333 *. x3 +. 0.2 *. x5 -. 0.142857142 *. x7 +. 0.111111104 *. x9 -. 0.08976446 *. x11 +. 0.060035485 *. x13 in
+  let c_PI = 3.1415927410125732421875 in
     let a = fabs x in
       if a < 0.4375 then
         kernel_atan x
