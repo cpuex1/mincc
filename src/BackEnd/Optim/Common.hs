@@ -1,9 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeOperators #-}
 
 module BackEnd.Optim.Common (
     mapPhi,
+    renameLabels,
     insertPhi,
     updatePhi,
     BackEndOptimContext (..),
@@ -11,12 +14,19 @@ module BackEnd.Optim.Common (
 ) where
 
 import BackEnd.BackendEnv (BackendStateT)
-import CodeBlock (CodeBlock (blockInst, prevBlocks))
+import CodeBlock (
+    BlockGraph (entryBlock),
+    CodeBlock (blockInst, prevBlocks, terminator),
+    Terminator (..),
+    visitBlock,
+    visitInst,
+ )
+import Control.Monad.Identity (Identity (runIdentity))
 import Control.Monad.State (MonadState (put), StateT, runState)
-import Data.Map (Map, fromList, insert, singleton, toAscList)
+import Data.Map (Map, fromList, insert, mapKeys, singleton, toAscList)
 import Data.Maybe (catMaybes)
 import qualified Data.Set as S
-import IR (Inst (IMov, IPhi), InstKind (AllowPhi, InstStateTy), InstLabel)
+import IR (Inst (ILMov, IMov, IPhi), InstKind (AllowPhi, InstStateTy), InstLabel)
 import Registers (RegOrImm (Reg), RegType (RFloat, RInt), Register (Register))
 
 -- | Search for a phi instruction and apply a function to it if found.
@@ -37,6 +47,36 @@ mapPhi target@(Register RFloat _) func inst@(IPhi state dest@(Register RFloat _)
             func state srcs
         else pure (Just inst)
 mapPhi _ _ inst = pure (Just inst)
+
+-- | Rename labels in the graph.
+renameLabels :: (InstLabel -> InstLabel) -> BlockGraph a -> BlockGraph a
+renameLabels f graph =
+    runIdentity
+        ( visitBlock
+            ( \block -> do
+                block' <-
+                    visitInst
+                        ( \case
+                            IPhi state dest srcs ->
+                                pure $ IPhi state dest $ mapKeys f srcs
+                            ILMov state dest src ->
+                                pure $ ILMov state dest (f src)
+                            inst -> pure inst
+                        )
+                        block
+                pure $
+                    block'
+                        { prevBlocks = map f (prevBlocks block')
+                        , terminator = renameTerminator (terminator block')
+                        }
+            )
+            $ graph{entryBlock = f (entryBlock graph)}
+        )
+  where
+    renameTerminator :: Terminator -> Terminator
+    renameTerminator (TJmp label) = TJmp (f label)
+    renameTerminator (TBranch op lhs rhs label1 label2) = TBranch op lhs rhs (f label1) (f label2)
+    renameTerminator TReturn = TReturn
 
 -- | Insert a phi instruction.
 insertPhi :: (AllowPhi ty ~ True) => InstStateTy ty -> Register a -> InstLabel -> Register a -> [Inst ty] -> [Inst ty]

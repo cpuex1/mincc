@@ -2,39 +2,44 @@
 
 module BackEnd.Optim.Merging (mergeBlocks) where
 
-import BackEnd.Analysis.CodeBlock (fillInPrevBlocks)
-import BackEnd.Optim.Common (BackEndOptimStateT)
-import CodeBlock (BlockGraph (graphBlocks), CodeBlock (CodeBlock, blockInst, blockName), Terminator (TJmp), lookupBlock)
-import Data.Map (delete, insert, lookup)
-import IR (Inst (IPhi), InstLabel)
+import BackEnd.Optim.Common (BackEndOptimStateT, renameLabels)
+import CodeBlock (
+    BlockGraph (graphBlocks),
+    CodeBlock (CodeBlock, blockName),
+    Terminator (TJmp),
+    VirtualBlock,
+    VirtualBlockGraph,
+    lookupBlock,
+ )
+import Data.Map (Map, insert, lookup)
+import Data.Maybe (fromMaybe)
+import IR (InstLabel)
 import Prelude hiding (lookup)
 
-mergeBlocks :: (Monad m) => BlockGraph a -> BackEndOptimStateT m (BlockGraph a)
+mergeBlocks :: (Monad m) => VirtualBlockGraph -> BackEndOptimStateT m VirtualBlockGraph
 mergeBlocks graph =
-    pure $ fillInPrevBlocks graph{graphBlocks = mergeBlockLoop (graphBlocks graph)}
+    let (merged, nameDict) = mergeBlockLoop (graphBlocks graph)
+     in let newGraph = graph{graphBlocks = merged}
+         in pure $
+                renameLabels
+                    ( \label -> fromMaybe label (lookup label nameDict)
+                    )
+                    newGraph
   where
-    mergeBlockLoop :: [CodeBlock a] -> [CodeBlock a]
-    mergeBlockLoop [] = []
+    mergeBlockLoop :: [VirtualBlock] -> ([VirtualBlock], Map InstLabel InstLabel)
+    mergeBlockLoop [] = ([], mempty)
     mergeBlockLoop (block@(CodeBlock beforeLabel beforeInst prev (TJmp nextLabel)) : remains) =
         case nextBlock of
             Just (CodeBlock _ afterInst [_] term) ->
                 -- The next block has only one predecessor.
                 let newBlock = CodeBlock beforeLabel (beforeInst ++ afterInst) prev term
-                 in mergeBlockLoop (newBlock : substituted)
-            _ -> block : mergeBlockLoop remains
+                 in let (remains'', nameDict') = mergeBlockLoop (newBlock : removed)
+                     in (remains'', insert nextLabel beforeLabel nameDict')
+            _ -> (block : remains', nameDict)
       where
         nextBlock = lookupBlock nextLabel remains
         removed = filter (\block' -> blockName block' /= nextLabel) remains
-        substituted =
-            map
-                ( \block' -> block'{blockInst = map (substPhi nextLabel beforeLabel) $ blockInst block'}
-                )
-                removed
-
-        substPhi :: InstLabel -> InstLabel -> Inst ty -> Inst ty
-        substPhi from to inst@(IPhi state dest srcs) =
-            case lookup from srcs of
-                Just reg -> IPhi state dest $ insert to reg $ delete from srcs
-                Nothing -> inst
-        substPhi _ _ inst = inst
-    mergeBlockLoop (block : remains) = block : mergeBlockLoop remains
+        (remains', nameDict) = mergeBlockLoop remains
+    mergeBlockLoop (block : remains) = (block : remains', nameDict)
+      where
+        (remains', nameDict) = mergeBlockLoop remains
