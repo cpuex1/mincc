@@ -645,15 +645,28 @@ generateInstructions outReg (Loop state args values body) = do
             { loopLabel = prevLoopLabel
             , loopArgs = prevLoopArgs
             }
-generateInstructions _ (Continue _ args) = do
+generateInstructions _ (Continue state args) = do
     loopReg <- gets loopArgs
     label <- gets loopLabel
 
     args' <- findRegAll args
 
+    -- To avoid different registers being merged by phi instructions,
+    -- we need to create new registers.
+    assigned <-
+        buildRTM $
+            \rTy ->
+                mapM
+                    ( \src -> do
+                        dest <- lift $ genTempReg rTy
+                        addInst $ IMov (getLoc state) dest (Reg src)
+                        pure dest
+                    )
+                    $ args' #!! rTy
+
     eachRegType $
         \rTy -> do
-            mapM_ (uncurry addLoopPhi) $ zip (loopReg #!! rTy) (args' #!! rTy)
+            mapM_ (uncurry addLoopPhi) $ zip (loopReg #!! rTy) ((assigned :: RegList) #!! rTy)
 
     terminate $ TJmp label
 
