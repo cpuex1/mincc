@@ -15,7 +15,7 @@ import CodeBlock (
     lookupBlock,
     nextBlocks,
  )
-import Control.Monad.State (State, evalState, gets, modify)
+import Control.Monad.State (State, gets, modify, runState)
 import Data.Map (Map, lookup)
 import qualified Data.Map as M
 import Data.Maybe (mapMaybe)
@@ -44,6 +44,7 @@ import Prelude hiding (lookup)
 data LivenessContext = LivenessContext
     { currentLiveness :: RegMultiple Liveness
     , analyzed :: Map InstLabel (RegMultiple Liveness)
+    , prevAnalyzed :: Map InstLabel (RegMultiple Liveness)
     }
     deriving (Show, Eq)
 
@@ -74,7 +75,19 @@ getState loc' =
     gets $ LivenessLoc loc' . currentLiveness
 
 runGraphLiveness :: VirtualBlockGraph -> LivenessGraph
-runGraphLiveness graph = evalState (graphLiveness graph) (LivenessContext mempty mempty)
+runGraphLiveness graph = runGraphLiveness' mempty
+  where
+    runGraphLiveness' :: Map InstLabel (RegMultiple Liveness) -> LivenessGraph
+    runGraphLiveness' prevAnalyzed' =
+        if analyzed ctx == prevAnalyzed'
+            then
+                -- The liveness converges.
+                livenessGraph
+            else
+                -- The liveness can be updated.
+                runGraphLiveness' $ analyzed ctx
+      where
+        (livenessGraph, ctx) = runState (graphLiveness graph) (LivenessContext mempty mempty prevAnalyzed')
 
 graphLiveness :: VirtualBlockGraph -> LivenessState LivenessGraph
 graphLiveness graph = do
@@ -82,11 +95,22 @@ graphLiveness graph = do
     blocks' <- reverse <$> mapM (blockLiveness graph) (reverse $ graphBlocks graph)
     pure $ BlockGraph blocks' (entryBlock graph) (localVars graph)
 
+-- | Get the liveness information from its label.
+livenessFromLabel :: InstLabel -> LivenessState (RegMultiple Liveness)
+livenessFromLabel label = do
+    live <- gets (lookup label . analyzed)
+    case live of
+        Just l -> pure l
+        Nothing -> do
+            live' <- gets (lookup label . prevAnalyzed)
+            case live' of
+                Just l -> pure l
+                Nothing -> pure mempty
+
 blockLiveness :: VirtualBlockGraph -> VirtualBlock -> LivenessState LivenessBlock
 blockLiveness graph block = do
     -- Retrieve the liveness information from next blocks.
-    already <- gets analyzed
-    let nextLiveness = mconcat $ mapMaybe (`lookup` already) next
+    nextLiveness <- mconcat <$> mapM livenessFromLabel next
     let startLiveness = nextLiveness <> phiLiveness
     modify $ \ctx -> ctx{currentLiveness = startLiveness}
 
