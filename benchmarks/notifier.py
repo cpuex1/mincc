@@ -27,8 +27,8 @@ print(f"[!] Webhook: {webhook}")
 #
 # Calculate hash.
 #
-with open(saved_file, "r") as f:
-    ppm_hash = hashlib.sha256(f.read().encode()).hexdigest()
+with open(saved_file, "rb") as f:
+    ppm_hash = hashlib.sha256(f.read()).hexdigest()
     print(f"[!] PPM hash: {ppm_hash}")
 
 #

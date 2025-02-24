@@ -19,7 +19,7 @@ newtype LoopContext = LoopContext
 type LoopStateT m = StateT LoopContext (OptimStateT m)
 
 loopDetectionThreshold :: Int
-loopDetectionThreshold = 8
+loopDetectionThreshold = 100
 
 detectLoop :: Ident -> KExpr -> (Bool, KExpr)
 detectLoop func (Let state PUnit expr body) =
