@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module BackEnd.Refuge (runRefugeBlock) where
 
@@ -18,6 +19,7 @@ import Data.Map (Map, insert, keys, lookup, notMember)
 import Data.Maybe (catMaybes, maybeToList)
 import Data.Set (Set, fromList, intersection, member)
 import qualified Data.Set as S
+import Data.Text (isPrefixOf)
 import IR (
     Inst (..),
     VirtualInst,
@@ -122,9 +124,14 @@ refugeBlock block = do
 
 refugeInst :: LivenessInst -> RegRefugeState [VirtualInst]
 refugeInst (ICall (LivenessLoc loc l) label) = do
-    inst <- refugeLivings loc l
-    resetLoaded
-    pure $ inst <> [ICall loc label]
+    if "__ext_" `isPrefixOf` label
+        then do
+            -- The external function should care about the registers by itself.
+            pure [ICall loc label]
+        else do
+            inst <- refugeLivings loc l
+            resetLoaded
+            pure $ inst <> [ICall loc label]
 refugeInst (ICallReg (LivenessLoc loc l) reg@(Register RInt (SavedReg cl))) = do
     -- The closure can be bound to a local variable.
     prologue <- fromLocalVar RInt loc cl
