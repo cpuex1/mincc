@@ -66,6 +66,7 @@ library
       MiddleEnd.Optim.CompMerging
       MiddleEnd.Optim.ConstFold
       MiddleEnd.Optim.CSE
+      MiddleEnd.Optim.IfMerging
       MiddleEnd.Optim.Inlining
       MiddleEnd.Optim.LoopDetection
       MiddleEnd.Optim.UnusedElim

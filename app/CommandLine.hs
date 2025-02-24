@@ -59,6 +59,7 @@ data CommandLineArg = CommandLineArg
     , maxInlining :: Int
     , disableFloatFold :: Bool
     , optCompMerging :: Bool
+    , optIfMerging :: Bool
     , optCSE :: Bool
     , optVarMerging :: Bool
     , optConstFold :: Bool
@@ -131,6 +132,10 @@ parseArg =
         <*> switch
             ( long "opt-comp-merging"
                 <> help "Enable comparison merging optimization"
+            )
+        <*> switch
+            ( long "opt-if-merging"
+                <> help "Enable if merging optimization"
             )
         <*> switch
             ( long "opt-cse"
@@ -249,6 +254,7 @@ toCompilerConfig arg = do
 
     selectedOptim =
         insertIf (optimize arg || optCompMerging arg) CompMerging
+            . insertIf (optimize arg || optIfMerging arg) IfMerging
             . insertIf (optimize arg || optCSE arg) CSE
             . insertIf (optimize arg || optVarMerging arg) VarMerging
             . insertIf (optimize arg || optConstFold arg) ConstFold

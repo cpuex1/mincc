@@ -5,6 +5,7 @@ module MiddleEnd.Optim.Common (
     withFreshVars,
     purge,
     occur,
+    repeatOptim,
     Threshold (..),
     toThreshold,
     OptimContext (..),
@@ -111,6 +112,14 @@ occur ident (Get _ array index) = ident == array || ident == index
 occur ident (Put _ array index value) = ident == array || ident == index || ident == value
 occur ident (Loop _ _ values body) = ident `elem` values || occur ident body
 occur ident (Continue _ values) = ident `elem` values
+
+-- | Repeatedly applies an optimization until the expression does not change.
+repeatOptim :: (Monad m) => (KExpr -> m KExpr) -> KExpr -> m KExpr
+repeatOptim f expr = do
+    expr' <- f expr
+    if expr == expr'
+        then pure expr'
+        else repeatOptim f expr'
 
 -- | Threshold for inlining.
 data Threshold
