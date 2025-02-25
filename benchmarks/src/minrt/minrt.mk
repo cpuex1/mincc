@@ -2,7 +2,7 @@ RENDER = contest.ppm
 
 minrt.s: ./src/minrt/minrt.ml
 	mkdir -p $(BUILD_DIR)
-	$(MINCC) $(MINCC_OPTION) -i ../stdlib/float.ml -i ./src/minrt/globals.ml -i $^ -o $(BUILD_DIR)/$@
+	$(MINCC) $(MINCC_OPTION) -i ../stdlib/io.ml -i ../stdlib/float.ml -i ./src/minrt/globals.ml -i $^ -o $(BUILD_DIR)/$@
 	cp $(BUILD_DIR)/$@ .
 
 %.ppm: minrt.bin
