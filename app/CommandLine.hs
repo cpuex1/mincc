@@ -58,6 +58,7 @@ data CommandLineArg = CommandLineArg
     , recInliningSize :: Int
     , maxInlining :: Int
     , disableFloatFold :: Bool
+    , optReadOnly :: Bool
     , optCompMerging :: Bool
     , optIfMerging :: Bool
     , optCSE :: Bool
@@ -128,6 +129,10 @@ parseArg =
         <*> switch
             ( long "disable-float-fold"
                 <> help "Disable constant folding for floating-point numbers"
+            )
+        <*> switch
+            ( long "opt-read-only"
+                <> help "Enable read-only arrays elimination"
             )
         <*> switch
             ( long "opt-comp-merging"
@@ -255,6 +260,7 @@ toCompilerConfig arg = do
     selectedOptim =
         insertIf (optimize arg || optCompMerging arg) CompMerging
             . insertIf (optimize arg || optIfMerging arg) IfMerging
+            . insertIf (optimize arg || optReadOnly arg) ReadOnly
             . insertIf (optimize arg || optCSE arg) CSE
             . insertIf (optimize arg || optVarMerging arg) VarMerging
             . insertIf (optimize arg || optConstFold arg) ConstFold

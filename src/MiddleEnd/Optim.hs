@@ -10,6 +10,7 @@ import MiddleEnd.Optim.ConstFold (constFold, constFoldFloat)
 import MiddleEnd.Optim.IfMerging (mergeIf)
 import MiddleEnd.Optim.Inlining (runInlining)
 import MiddleEnd.Optim.LoopDetection (runReplaceWithLoops)
+import MiddleEnd.Optim.ReadOnly (removeReadOnlyArrays)
 import MiddleEnd.Optim.UnusedElim (unusedElim)
 import MiddleEnd.Optim.VarMerging (mergeVars)
 import Syntax (KExpr)
@@ -22,6 +23,7 @@ data OptimKind
     | VarMerging
     | ConstFold
     | ConstFoldFloat
+    | ReadOnly
     | UnusedElim
     | Inlining
     | LoopDetection
@@ -36,6 +38,7 @@ runOptim VarMerging = mergeVars
 runOptim ConstFold = constFold
 runOptim ConstFoldFloat = constFoldFloat
 runOptim Inlining = runInlining
+runOptim ReadOnly = removeReadOnlyArrays
 runOptim UnusedElim = unusedElim
 runOptim LoopDetection = runReplaceWithLoops
 
@@ -48,4 +51,5 @@ instance Display OptimKind where
     display ConstFold = "Constant folding"
     display ConstFoldFloat = "Constant folding for floating-point numbers"
     display Inlining = "Function inlining"
+    display ReadOnly = "Read-only arrays elimination"
     display UnusedElim = "Unused variables elimination"

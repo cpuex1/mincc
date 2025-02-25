@@ -69,6 +69,7 @@ library
       MiddleEnd.Optim.IfMerging
       MiddleEnd.Optim.Inlining
       MiddleEnd.Optim.LoopDetection
+      MiddleEnd.Optim.ReadOnly
       MiddleEnd.Optim.UnusedElim
       MiddleEnd.Optim.VarMerging
       MiddleEnd.Validator
