@@ -210,7 +210,7 @@ instance DisplayI Function where
             <> unwords (map display (boundedArgs func))
             <> ":\n"
             <> insertIndent (depth + 1)
-            <> display (funcBody func)
+            <> displayI (depth + 1) (funcBody func)
 
 instance Display Function where
     display = displayI 0
