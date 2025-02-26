@@ -21,7 +21,6 @@ import CodeBlock (
     PhiFreeGraph,
     VirtualBlock,
     VirtualBlockGraph,
-    mapRegGraph,
     visitBlock,
     visitInst,
  )
@@ -41,6 +40,7 @@ import Registers (
     RegID,
     RegMapping (regMap),
     RegMultiple,
+    RegReplaceable (mapReg),
     Register (Register),
     RegisterKind (SavedReg),
     applyMapping,
@@ -113,7 +113,7 @@ assignReg graph = (result, phiFreeGraph)
 
     -- Apply register mapping.
     mappedGraph =
-        mapRegGraph
+        mapReg
             ( \case
                 Register rTy (SavedReg regId) ->
                     case lookup regId $ regMap $ mapping #!! rTy of

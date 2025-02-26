@@ -12,8 +12,6 @@ module CodeBlock (
     nextBlocks,
     visitInst,
     lookupBlock,
-    mapRegBlock,
-    mapRegGraph,
     asMermaidGraph,
     visitBlock,
     VirtualBlock,
@@ -103,6 +101,14 @@ instance (Display (InstStateTy ty)) => Display (CodeBlock ty) where
             <> insertIndent 1
             <> displayI 1 term
 
+instance (RegReplaceable (CodeBlock ty)) where
+    mapReg f (CodeBlock l inst prev term) =
+        CodeBlock l (map (mapReg f) inst) prev (mapRegTerm term)
+      where
+        mapRegTerm :: Terminator -> Terminator
+        mapRegTerm (TBranch op r1 r2 l1 l2) = TBranch op (f r1) (f r2) l1 l2
+        mapRegTerm t = t
+
 -- | Get the next blocks from a block.
 nextBlocks :: CodeBlock ty -> [InstLabel]
 nextBlocks (CodeBlock _ _ _ TReturn) = []
@@ -114,18 +120,6 @@ visitInst :: (Monad m) => (Inst ty1 -> m (Inst ty2)) -> CodeBlock ty1 -> m (Code
 visitInst f (CodeBlock l inst prev term) = do
     inst' <- mapM f inst
     return $ CodeBlock l inst' prev term
-
--- | Map registers in a block.
-mapRegBlock ::
-    (forall regTy1. Register regTy1 -> Register regTy1) ->
-    CodeBlock ty ->
-    CodeBlock ty
-mapRegBlock f (CodeBlock l inst prev term) =
-    CodeBlock l (map (mapReg f) inst) prev (mapRegTerm term)
-  where
-    mapRegTerm :: Terminator -> Terminator
-    mapRegTerm (TBranch op r1 r2 l1 l2) = TBranch op (f r1) (f r2) l1 l2
-    mapRegTerm t = t
 
 data BlockGraph ty = BlockGraph
     { graphBlocks :: [CodeBlock ty]
@@ -139,6 +133,9 @@ deriving instance (Eq (InstStateTy ty)) => Eq (BlockGraph ty)
 instance (Display (InstStateTy ty)) => Display (BlockGraph ty) where
     display graph = intercalate "\n" $ map display $ graphBlocks graph
 
+instance (RegReplaceable (BlockGraph ty)) where
+    mapReg f (BlockGraph b e l) = BlockGraph (map (mapReg f) b) e l
+
 -- | Lookup a block by its label.
 lookupBlock :: InstLabel -> [CodeBlock ty] -> Maybe (CodeBlock ty)
 lookupBlock l = find (\b -> blockName b == l)
@@ -148,10 +145,6 @@ visitBlock :: (Monad m) => (CodeBlock ty1 -> m (CodeBlock ty2)) -> BlockGraph ty
 visitBlock f (BlockGraph b e l) = do
     b' <- mapM f b
     return $ BlockGraph b' e l
-
--- | Map registers in a block graph.
-mapRegGraph :: (forall regTy1. Register regTy1 -> Register regTy1) -> BlockGraph ty -> BlockGraph ty
-mapRegGraph f (BlockGraph b e l) = BlockGraph (map (mapRegBlock f) b) e l
 
 -- | Export a block graph as a Mermaid-style graph.
 asMermaidGraph :: BlockGraph ty -> Text
