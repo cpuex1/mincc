@@ -9,6 +9,7 @@ import MiddleEnd.Optim.CompMerging (runMergeComp)
 import MiddleEnd.Optim.ConstFold (constFold, constFoldFloat)
 import MiddleEnd.Optim.IfMerging (mergeIf)
 import MiddleEnd.Optim.Inlining (runInlining)
+import MiddleEnd.Optim.LoopArgsElim (removeLoopArgs)
 import MiddleEnd.Optim.LoopDetection (runReplaceWithLoops)
 import MiddleEnd.Optim.ReadOnly (removeReadOnlyArrays)
 import MiddleEnd.Optim.UnusedElim (unusedElim)
@@ -27,6 +28,7 @@ data OptimKind
     | UnusedElim
     | Inlining
     | LoopDetection
+    | LoopArgsElim
     deriving (Show, Ord, Eq)
 
 -- | Run the optimization.
@@ -41,6 +43,7 @@ runOptim Inlining = runInlining
 runOptim ReadOnly = removeReadOnlyArrays
 runOptim UnusedElim = unusedElim
 runOptim LoopDetection = runReplaceWithLoops
+runOptim LoopArgsElim = removeLoopArgs
 
 instance Display OptimKind where
     display CompMerging = "Comparison merging"
@@ -53,3 +56,4 @@ instance Display OptimKind where
     display Inlining = "Function inlining"
     display ReadOnly = "Read-only arrays elimination"
     display UnusedElim = "Unused variables elimination"
+    display LoopArgsElim = "Loop arguments elimination"

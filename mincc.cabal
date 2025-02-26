@@ -68,6 +68,7 @@ library
       MiddleEnd.Optim.CSE
       MiddleEnd.Optim.IfMerging
       MiddleEnd.Optim.Inlining
+      MiddleEnd.Optim.LoopArgsElim
       MiddleEnd.Optim.LoopDetection
       MiddleEnd.Optim.ReadOnly
       MiddleEnd.Optim.UnusedElim
