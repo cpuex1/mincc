@@ -59,12 +59,12 @@ findZeroReg banned (IMov state (Register rTy (SavedReg dest)) (Imm RInt 0)) = do
             modify $ \ctx -> updateRT rTy (insert dest) ctx
             pure Nothing
         else do
-            pure $ Just $ IMov state (Register rTy (SavedReg dest)) (Imm rTy 0)
+            pure $ Just $ IMov state (Register rTy (SavedReg dest)) (Reg $ zeroReg rTy)
 findZeroReg banned (IMov state (Register rTy (SavedReg dest)) (Imm RFloat 0)) = do
     if dest `notMember` (banned #!! rTy)
         then do
             modify $ \ctx -> updateRT rTy (insert dest) ctx
             pure Nothing
         else do
-            pure $ Just $ IMov state (Register rTy (SavedReg dest)) (Imm rTy 0)
+            pure $ Just $ IMov state (Register rTy (SavedReg dest)) (Reg $ zeroReg rTy)
 findZeroReg _ inst = pure $ Just inst
