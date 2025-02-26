@@ -11,7 +11,6 @@ import CodeBlock (BlockGraph (graphBlocks), CodeBlock (blockInst, blockName, pre
 import Data.Map (Map, delete, insert, lookup, union)
 import Data.Maybe (mapMaybe)
 import Data.Set (disjoint, fromList)
-import Debug.Trace (traceShow)
 import IR (Inst (IPhi), InstLabel, VirtualInst)
 import Registers (RegTuple (createRT), RegVariant, Register (Register), updateRT, (#!!))
 import Prelude hiding (lookup)
@@ -42,7 +41,7 @@ modifyPhiInst label prevLabels info (IPhi state dest@(Register rTy _) srcs) =
                 _ ->
                     IPhi state dest $ foldl (\srcs' label' -> insert label' src srcs') (delete label srcs) prevLabels
         Nothing ->
-            error (traceShow (label, srcs) "The relation of two blocks is not valid.")
+            error "The relation of two blocks is not valid."
 modifyPhiInst _ _ _ inst = inst
 
 mergeEmptyBlockM :: (Monad m) => VirtualBlockGraph -> BackEndOptimStateT m VirtualBlockGraph
@@ -76,7 +75,7 @@ mergeEmptyBlockWithTarget block graph =
                             if fromList (prevBlocks nextBlock') `disjoint` fromList (prevBlocks block)
                                 then
                                     let modified = map (modifyPhiInst (blockName block) (prevBlocks block) phiInfo'') $ blockInst nextBlock'
-                                     in let modifiedNext = traceShow (blockName block, next) nextBlock'{blockInst = modified}
+                                     in let modifiedNext = nextBlock'{blockInst = modified}
                                          in let newBlocks =
                                                     mapMaybe
                                                         ( \block' ->
