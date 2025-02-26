@@ -33,6 +33,7 @@ library
       BackEnd.Analysis.Phi
       BackEnd.BackendEnv
       BackEnd.CodeGen.Common
+      BackEnd.CodeGen.Optim
       BackEnd.CodeGen.RINANA
       BackEnd.Liveness
       BackEnd.Lowering

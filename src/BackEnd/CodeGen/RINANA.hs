@@ -3,6 +3,7 @@
 module BackEnd.CodeGen.RINANA (CodeGenRINANA) where
 
 import BackEnd.CodeGen.Common (CodeGen (..))
+import BackEnd.CodeGen.Optim (removeMeaninglessAssignment)
 import CodeBlock (
     BlockGraph (..),
     CodeBlock (..),
@@ -57,5 +58,5 @@ instance CodeGen CodeGenRINANA where
     codeGenInternal _ graph =
         intercalate "\n" generated
       where
-        blocks = graphBlocks graph
+        blocks = graphBlocks $ removeMeaninglessAssignment graph
         generated = zipWith codeGenBlock (withNext blocks) blocks
