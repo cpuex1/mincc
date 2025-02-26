@@ -283,4 +283,5 @@ toCompilerConfig arg = do
             . insert EmptyBlockMerging
             . insert RegMerging
             . insert UnusedReg
+            . insert UseZeroReg
             $ mempty

@@ -13,6 +13,7 @@ import BackEnd.Optim.MulElim (elimMul)
 import BackEnd.Optim.RegMerging (regMerging)
 import BackEnd.Optim.Unreachable (removeUnreachable)
 import BackEnd.Optim.UnusedReg (removeUnusedReg)
+import BackEnd.Optim.UseZeroReg (replaceWithZeroReg)
 import CodeBlock (VirtualBlockGraph)
 import Display (Display (display))
 
@@ -24,6 +25,7 @@ data BackEndOptimKind
     | RegMerging
     | UnusedReg
     | MulElim
+    | UseZeroReg
     deriving (Show, Ord, Eq)
 
 -- | Run the optimization.
@@ -34,6 +36,7 @@ runBackEndOptim EmptyBlockMerging = mergeEmptyBlockM
 runBackEndOptim RegMerging = regMerging
 runBackEndOptim UnusedReg = removeUnusedReg
 runBackEndOptim MulElim = elimMul
+runBackEndOptim UseZeroReg = replaceWithZeroReg
 
 instance Display BackEndOptimKind where
     display Unreachable = "Remove unreachable blocks"
@@ -42,3 +45,4 @@ instance Display BackEndOptimKind where
     display RegMerging = "Register merging"
     display UnusedReg = "Remove unused registers"
     display MulElim = "Multiply elimination"
+    display UseZeroReg = "Replace registers with zero registers"

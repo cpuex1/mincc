@@ -44,6 +44,7 @@ library
       BackEnd.Optim.RegMerging
       BackEnd.Optim.Unreachable
       BackEnd.Optim.UnusedReg
+      BackEnd.Optim.UseZeroReg
       BackEnd.Refuge
       BackEnd.RegisterAlloc
       BackEnd.Spill
