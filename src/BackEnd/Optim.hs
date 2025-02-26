@@ -7,6 +7,7 @@ module BackEnd.Optim (
 ) where
 
 import BackEnd.Optim.Common (BackEndOptimStateT)
+import BackEnd.Optim.EmptyBlockMerging (mergeEmptyBlockM)
 import BackEnd.Optim.Merging (mergeBlocks)
 import BackEnd.Optim.MulElim (elimMul)
 import BackEnd.Optim.RegMerging (regMerging)
@@ -19,6 +20,7 @@ import Display (Display (display))
 data BackEndOptimKind
     = Unreachable
     | Merging
+    | EmptyBlockMerging
     | RegMerging
     | UnusedReg
     | MulElim
@@ -28,6 +30,7 @@ data BackEndOptimKind
 runBackEndOptim :: (Monad m) => BackEndOptimKind -> VirtualBlockGraph -> BackEndOptimStateT m VirtualBlockGraph
 runBackEndOptim Unreachable = removeUnreachable
 runBackEndOptim Merging = mergeBlocks
+runBackEndOptim EmptyBlockMerging = mergeEmptyBlockM
 runBackEndOptim RegMerging = regMerging
 runBackEndOptim UnusedReg = removeUnusedReg
 runBackEndOptim MulElim = elimMul
@@ -35,6 +38,7 @@ runBackEndOptim MulElim = elimMul
 instance Display BackEndOptimKind where
     display Unreachable = "Remove unreachable blocks"
     display Merging = "Code blocks merging"
+    display EmptyBlockMerging = "Empty block merging"
     display RegMerging = "Register merging"
     display UnusedReg = "Remove unused registers"
     display MulElim = "Multiply elimination"

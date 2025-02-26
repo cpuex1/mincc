@@ -62,6 +62,7 @@ data RegType ty where
 
 deriving instance Show (RegType ty)
 deriving instance Eq (RegType ty)
+deriving instance Ord (RegType ty)
 
 instance Display (RegType a) where
     display RInt = "int"
@@ -194,6 +195,7 @@ data RegisterKind ty where
 
 deriving instance Show (RegisterKind ty)
 deriving instance Eq (RegisterKind ty)
+deriving instance Ord (RegisterKind ty)
 
 data Register ty
     = Register
@@ -203,6 +205,7 @@ data Register ty
 
 deriving instance Show (Register ty)
 deriving instance Eq (Register ty)
+deriving instance Ord (Register ty)
 
 instance Display (Register a) where
     display (Register RInt ZeroReg) = "zero"

@@ -280,6 +280,7 @@ toCompilerConfig arg = do
         insert MulElim
             . insert Unreachable
             . insert Merging
+            . insert EmptyBlockMerging
             . insert RegMerging
             . insert UnusedReg
             $ mempty
