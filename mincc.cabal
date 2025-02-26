@@ -40,6 +40,7 @@ library
       BackEnd.Optim.Common
       BackEnd.Optim.Merging
       BackEnd.Optim.MulElim
+      BackEnd.Optim.RegMerging
       BackEnd.Optim.Unreachable
       BackEnd.Optim.UnusedReg
       BackEnd.Refuge

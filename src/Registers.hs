@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -42,9 +43,10 @@ module Registers (
     substReg,
     coverImm,
     replaceReg,
+    applyRegMapping,
 ) where
 
-import Data.Map (Map, compose, lookup, union)
+import Data.Map (Map, fromList, lookup, toList)
 import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 import Display (Display (display))
@@ -312,7 +314,9 @@ newtype RegMapping
 instance Semigroup RegMapping where
     RegMapping a <> RegMapping b =
         -- It behaves like a composition of functions.
-        RegMapping $ compose a b `union` a
+        RegMapping (a <> mappedB)
+      where
+        mappedB = fromList $ map (\(from, to) -> (from, fromMaybe to $ lookup to a)) $ toList b
 
 instance Monoid RegMapping where
     mempty = RegMapping mempty
@@ -330,3 +334,12 @@ class RegReplaceable a where
 -- | Replace a register with another register.
 replaceReg :: (RegReplaceable a) => Register regTy -> Register regTy -> a -> a
 replaceReg before after = mapReg (substReg before after)
+
+-- | Apply a register mapping to a data structure.
+applyRegMapping :: (RegReplaceable a) => RegMultiple RegMapping -> a -> a
+applyRegMapping mapping =
+    mapReg
+        ( \case
+            Register rTy (SavedReg regID) -> Register rTy (SavedReg $ applyMapping rTy mapping regID)
+            reg -> reg
+        )

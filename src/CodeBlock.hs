@@ -103,11 +103,7 @@ instance (Display (InstStateTy ty)) => Display (CodeBlock ty) where
 
 instance (RegReplaceable (CodeBlock ty)) where
     mapReg f (CodeBlock l inst prev term) =
-        CodeBlock l (map (mapReg f) inst) prev (mapRegTerm term)
-      where
-        mapRegTerm :: Terminator -> Terminator
-        mapRegTerm (TBranch op r1 r2 l1 l2) = TBranch op (f r1) (f r2) l1 l2
-        mapRegTerm t = t
+        CodeBlock l (map (mapReg f) inst) prev (mapReg f term)
 
 -- | Get the next blocks from a block.
 nextBlocks :: CodeBlock ty -> [InstLabel]
