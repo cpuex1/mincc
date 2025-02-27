@@ -75,6 +75,7 @@ library
       MiddleEnd.Optim.LoopArgsElim
       MiddleEnd.Optim.LoopDetection
       MiddleEnd.Optim.ReadOnly
+      MiddleEnd.Optim.StripCondition
       MiddleEnd.Optim.SwapIf
       MiddleEnd.Optim.UnusedElim
       MiddleEnd.Optim.VarMerging
