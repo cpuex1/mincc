@@ -66,6 +66,7 @@ library
       MiddleEnd.Desugar
       MiddleEnd.Globals
       MiddleEnd.Optim
+      MiddleEnd.Optim.BoolOperation
       MiddleEnd.Optim.Common
       MiddleEnd.Optim.CompMerging
       MiddleEnd.Optim.ConstFold

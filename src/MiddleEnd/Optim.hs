@@ -3,6 +3,7 @@
 module MiddleEnd.Optim (OptimKind (..), runOptim) where
 
 import Display (Display (display))
+import MiddleEnd.Optim.BoolOperation (boolOperation)
 import MiddleEnd.Optim.CSE (runCSE)
 import MiddleEnd.Optim.Common (OptimStateT)
 import MiddleEnd.Optim.CompMerging (runMergeComp)
@@ -20,7 +21,8 @@ import Syntax (KExpr)
 
 -- | List of optimizations.
 data OptimKind
-    = CompMerging
+    = BoolOperation
+    | CompMerging
     | IfMerging
     | StripCondition
     | CSE
@@ -37,6 +39,7 @@ data OptimKind
 
 -- | Run the optimization.
 runOptim :: (Monad m) => OptimKind -> KExpr -> OptimStateT m KExpr
+runOptim BoolOperation = boolOperation
 runOptim CompMerging = runMergeComp
 runOptim IfMerging = mergeIf
 runOptim StripCondition = stripConditionM
@@ -52,6 +55,7 @@ runOptim LoopDetection = runReplaceWithLoops
 runOptim LoopArgsElim = removeLoopArgs
 
 instance Display OptimKind where
+    display BoolOperation = "If expressions to boolean operations"
     display CompMerging = "Comparison merging"
     display IfMerging = "If expressions merging"
     display StripCondition = "Condition stripping"
