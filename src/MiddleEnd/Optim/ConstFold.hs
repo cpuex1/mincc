@@ -8,7 +8,7 @@ import MiddleEnd.Analysis.Identifier (asConstant)
 import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (
     BinaryOp (FloatOp, IntOp, RelationOp),
-    Cond (CComp, CIdentity),
+    Cond (CComp, CIdentity, CNeg),
     Expr (..),
     FloatBinOp (FAdd, FDiv, FMul, FSub),
     IntBinOp (Add, Div, Mul, Sub),
@@ -76,6 +76,15 @@ constFold (If state (CIdentity cond) t f) = do
             t' <- constFold t
             f' <- constFold f
             pure $ If state (CIdentity cond) t' f'
+constFold (If state (CNeg cond) t f) = do
+    cond' <- lift $ asConstant cond
+    case cond' of
+        Just (LBool True) -> constFold f
+        Just (LBool False) -> constFold t
+        _ -> do
+            t' <- constFold t
+            f' <- constFold f
+            pure $ If state (CNeg cond) t' f'
 constFold (If state (CComp op lhs rhs) t f) = do
     lhs' <- lift $ asConstant lhs
     rhs' <- lift $ asConstant rhs
@@ -146,6 +155,10 @@ constFoldFloat (If state (CIdentity cond) t f) = do
     t' <- constFoldFloat t
     f' <- constFoldFloat f
     pure $ If state (CIdentity cond) t' f'
+constFoldFloat (If state (CNeg cond) t f) = do
+    t' <- constFoldFloat t
+    f' <- constFoldFloat f
+    pure $ If state (CNeg cond) t' f'
 constFoldFloat (If state (CComp op lhs rhs) t f) = do
     lhs' <- lift $ asConstant lhs
     rhs' <- lift $ asConstant rhs

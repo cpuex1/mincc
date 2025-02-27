@@ -58,6 +58,7 @@ data CommandLineArg = CommandLineArg
     , recInliningSize :: Int
     , maxInlining :: Int
     , disableFloatFold :: Bool
+    , optSwapIf :: Bool
     , optLoopArgsElim :: Bool
     , optReadOnly :: Bool
     , optCompMerging :: Bool
@@ -130,6 +131,10 @@ parseArg =
         <*> switch
             ( long "disable-float-fold"
                 <> help "Disable constant folding for floating-point numbers"
+            )
+        <*> switch
+            ( long "opt-swap-if"
+                <> help "Enable if expressions swapping optimization"
             )
         <*> switch
             ( long "opt-loop-args-elim"
@@ -274,6 +279,7 @@ toCompilerConfig arg = do
             . insertIf (optimize arg || optInlining arg) Inlining
             . insertIf (optimize arg || optLoopDetection arg) LoopDetection
             . insertIf (optimize arg || optLoopArgsElim arg) LoopArgsElim
+            . insertIf (optimize arg || optSwapIf arg) SwapIf
             $ mempty
 
     selectedBackEndOptim =

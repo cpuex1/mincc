@@ -70,6 +70,10 @@ getFreeVars kExpr bounded = eFreeVars $ execState (getFreeVarState kExpr) (FreeA
         registerFreeVar cond
         getFreeVarState thenExpr
         getFreeVarState elseExpr
+    getFreeVarState (If _ (CNeg cond) thenExpr elseExpr) = do
+        registerFreeVar cond
+        getFreeVarState thenExpr
+        getFreeVarState elseExpr
     getFreeVarState (If _ (CComp _ lhs rhs) thenExpr elseExpr) = do
         registerFreeVar lhs
         registerFreeVar rhs

@@ -12,6 +12,7 @@ module Syntax (
     getLiteralType,
     UnaryOp (Not, Neg, FNeg),
     RelationBinOp (Eq, Ne, Lt, Ge),
+    negateRelation,
     IntBinOp (Add, Sub, Mul, Div),
     FloatBinOp (FAdd, FSub, FMul, FDiv),
     BinaryOp (RelationOp, IntOp, FloatOp),
@@ -80,6 +81,13 @@ instance Display UnaryOp where
 data RelationBinOp = Eq | Ne | Lt | Ge deriving (Show, Eq, Ord)
 data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq, Ord)
 data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq, Ord)
+
+negateRelation :: RelationBinOp -> RelationBinOp
+negateRelation Eq = Ne
+negateRelation Ne = Eq
+negateRelation Lt = Ge
+negateRelation Ge = Lt
+
 data BinaryOp
     = RelationOp RelationBinOp
     | IntOp IntBinOp
@@ -152,6 +160,7 @@ data Pattern identTy
 -- | A condition of an if-expression.
 data Cond operandTy (allowCompTy :: Bool) where
     CIdentity :: operandTy -> Cond operandTy allowCompTy
+    CNeg :: operandTy -> Cond operandTy True
     CComp :: RelationBinOp -> operandTy -> operandTy -> Cond operandTy True
 
 deriving instance
@@ -408,6 +417,18 @@ instance (Display (StateTy kind), Display (IdentTy kind), DisplayI (OperandTy ki
                 <> insertIndent (depth + 1)
                 <> displayI (depth + 1) elseExpr
                 <> ")"
+        withoutState (If _ (CNeg cond) thenExpr elseExpr) depth =
+            "(if neg "
+                <> displayI depth cond
+                <> " then\n"
+                <> insertIndent (depth + 1)
+                <> displayI (depth + 1) thenExpr
+                <> "\n"
+                <> insertIndent depth
+                <> "else\n"
+                <> insertIndent (depth + 1)
+                <> displayI (depth + 1) elseExpr
+                <> ")"
         withoutState (If _ (CComp op lhs rhs) thenExpr elseExpr) depth =
             "(if "
                 <> "("
@@ -554,6 +575,12 @@ visitExprM fState fIdent fOperand (If state (CIdentity cond) thenE elseE) = do
     thenE' <- visitExprM fState fIdent fOperand thenE
     elseE' <- visitExprM fState fIdent fOperand elseE
     pure $ If state' (CIdentity cond') thenE' elseE'
+visitExprM fState fIdent fOperand (If state (CNeg cond) thenE elseE) = do
+    state' <- fState state
+    cond' <- fOperand cond
+    thenE' <- visitExprM fState fIdent fOperand thenE
+    elseE' <- visitExprM fState fIdent fOperand elseE
+    pure $ If state' (CNeg cond') thenE' elseE'
 visitExprM fState fIdent fOperand (If state (CComp op lhs rhs) thenE elseE) = do
     state' <- fState state
     lhs' <- fOperand lhs

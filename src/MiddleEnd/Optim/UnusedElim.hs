@@ -9,7 +9,7 @@ import MiddleEnd.Analysis.Common (definitelyPure)
 import MiddleEnd.Analysis.Identifier (removeProp)
 import MiddleEnd.Optim.Common (OptimStateT)
 import Syntax (
-    Cond (CComp, CIdentity),
+    Cond (CComp, CIdentity, CNeg),
     Expr (..),
     Ident,
     KExpr,
@@ -41,6 +41,10 @@ searchUnused (Binary _ _ lhs rhs) = do
     markAsUsed lhs
     markAsUsed rhs
 searchUnused (If _ (CIdentity c) then' else') = do
+    markAsUsed c
+    searchUnused then'
+    searchUnused else'
+searchUnused (If _ (CNeg c) then' else') = do
     markAsUsed c
     searchUnused then'
     searchUnused else'

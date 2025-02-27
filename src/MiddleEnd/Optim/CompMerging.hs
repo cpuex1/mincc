@@ -6,7 +6,7 @@ import Control.Monad.State (StateT, evalStateT, gets, modify)
 import Data.Map (Map, empty, insert)
 import qualified Data.Map as M
 import MiddleEnd.Optim.Common (OptimStateT)
-import Syntax (BinaryOp (RelationOp), Cond (CComp, CIdentity), Expr (..), Ident, KExpr, Pattern (PVar), RelationBinOp)
+import Syntax (BinaryOp (RelationOp), Cond (CComp, CIdentity, CNeg), Expr (..), Ident, KExpr, Pattern (PVar), RelationBinOp, negateRelation)
 
 newtype CompContext = CompContext
     { comparison :: Map Ident (RelationBinOp, Ident, Ident)
@@ -35,6 +35,16 @@ mergeComp (If state (CIdentity cond) then' else') = do
             pure $ If state (CComp op lhs rhs) then'' else''
         Nothing ->
             pure $ If state (CIdentity cond) then'' else''
+mergeComp (If state (CNeg cond) then' else') = do
+    then'' <- mergeComp then'
+    else'' <- mergeComp else'
+
+    compMap <- gets comparison
+    case M.lookup cond compMap of
+        Just (op, lhs, rhs) ->
+            pure $ If state (CComp (negateRelation op) lhs rhs) then'' else''
+        Nothing ->
+            pure $ If state (CNeg cond) then'' else''
 mergeComp (Let state1 pattern expr body) = do
     expr' <- mergeComp expr
     body' <- mergeComp body

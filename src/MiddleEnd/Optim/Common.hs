@@ -17,7 +17,7 @@ import Control.Monad.State (StateT)
 import Control.Monad.Trans (lift)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar, getTyOf)
 import Syntax (
-    Cond (CComp, CIdentity),
+    Cond (CComp, CIdentity, CNeg),
     Expr (..),
     Ident,
     KExpr,
@@ -99,6 +99,7 @@ occur _ Const{} = False
 occur ident (Unary _ _ expr) = ident == expr
 occur ident (Binary _ _ lhs rhs) = ident == lhs || ident == rhs
 occur ident (If _ (CIdentity cond) then' else') = ident == cond || occur ident then' || occur ident else'
+occur ident (If _ (CNeg cond) then' else') = ident == cond || occur ident then' || occur ident else'
 occur ident (If _ (CComp _ lhs rhs) then' else') = ident == lhs || ident == rhs || occur ident then' || occur ident else'
 occur ident (Let _ PUnit expr body) = occur ident expr || occur ident body
 occur ident (Let _ (PVar _) expr body) = occur ident expr || occur ident body

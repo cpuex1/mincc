@@ -103,10 +103,13 @@ validateType (If (TypedState ty loc) cond lhs rhs) = do
     validateCond (CIdentity ident) = do
         identTy <- lift $ getTyOf ident
         check loc TBool identTy "if3"
+    validateCond (CNeg ident) = do
+        identTy <- lift $ getTyOf ident
+        check loc TBool identTy "if4"
     validateCond (CComp _ lhs' rhs') = do
         lhsTy' <- lift $ getTyOf lhs'
         rhsTy' <- lift $ getTyOf rhs'
-        check loc lhsTy' rhsTy' "if4"
+        check loc lhsTy' rhsTy' "if5"
 validateType (Let (TypedState ty loc) PUnit expr body) = do
     check loc TUnit exprTy "let unit1"
     check loc ty bodyTy "let unit2"

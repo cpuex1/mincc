@@ -53,7 +53,7 @@ import Registers (
 import Syntax (
     BinaryOp (FloatOp, IntOp, RelationOp),
     ClosureExpr,
-    Cond (CComp, CIdentity),
+    Cond (CComp, CIdentity, CNeg),
     Expr (
         ArrayCreate,
         Binary,
@@ -278,6 +278,9 @@ generateInstructions outReg (If state cond thenExpr elseExpr) = do
                         lhs' <- lift $ findReg rTy lhs
                         rhs' <- lift $ findReg rTy rhs
                         terminate $ TBranch op lhs' rhs' thenLabel elseLabel
+                    CNeg cond' -> do
+                        cond'' <- lift $ findReg rTy cond'
+                        terminate $ TBranch Eq cond'' (zeroReg rTy) thenLabel elseLabel
                     CIdentity cond' -> do
                         cond'' <- lift $ findReg rTy cond'
                         terminate $ TBranch Ne cond'' (zeroReg rTy) thenLabel elseLabel

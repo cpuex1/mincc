@@ -3,7 +3,6 @@
 module MiddleEnd.Optim.IfMerging (mergeIf) where
 
 import FrontEnd.Flatten (flattenExpr)
-import MiddleEnd.Analysis.Common (definitelyPure)
 import MiddleEnd.Optim.Common (OptimStateT, purge, repeatOptim)
 import Syntax (
     Expr (If, Let, Loop),
