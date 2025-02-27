@@ -9,7 +9,7 @@ module Builtin (
 
 import Data.Text (Text)
 import Syntax (Ident (ExternalIdent))
-import Typing (Ty, TypeKind (TFloat, TFun, TInt))
+import Typing (Ty, TypeBase (..))
 
 data BuiltinFunction
     = BuiltinFunction

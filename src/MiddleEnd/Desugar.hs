@@ -26,7 +26,7 @@ import Syntax (
     dummyLoc,
     getExprState,
  )
-import Typing (Ty, TypeKind (..))
+import Typing (Ty, TypeBase (..))
 
 -- Use List instead of Set because ordering is not defined for `KExpr -> IdentEnvT m KExpr`.
 type ArrayCreateStateT m = StateT [KExpr -> IdentEnvT m KExpr] (IdentEnvT m)

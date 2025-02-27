@@ -24,7 +24,7 @@ import Syntax (
     getExprState,
     getLiteralType,
  )
-import Typing (TypeKind (..))
+import Typing (TypeBase (..))
 
 type Validator m = ExceptT CompilerError (IdentEnvT m)
 

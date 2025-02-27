@@ -44,7 +44,7 @@ import Data.Text (Text, intercalate, pack, unwords)
 import Display (Display (display), DisplayI (displayI), insertIndent)
 import Numeric (showFFloat)
 import Text.Megaparsec.Pos (SourcePos, sourceColumn, sourceLine, sourceName, unPos)
-import Typing (Ty, TypeKind (TBool, TFloat, TInt, TUnit))
+import Typing (Ty, TypeBase (..))
 import Prelude hiding (unwords)
 
 data Literal

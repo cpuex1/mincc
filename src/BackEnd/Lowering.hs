@@ -83,7 +83,7 @@ import Syntax (
     dummyLoc,
     getExprState,
  )
-import Typing (TypeKind (TInt))
+import Typing (TypeBase (TInt))
 
 type BackendIdentState m = BackendStateT (IdentEnvT m)
 

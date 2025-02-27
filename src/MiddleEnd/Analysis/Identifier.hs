@@ -23,7 +23,7 @@ import Data.Text (Text, pack)
 import Display (display)
 import FrontEnd.TypeInferrer (TypeEnv (variables), removeVar)
 import Syntax
-import Typing (Ty, TypeKind (TUnit, TVar))
+import Typing (Ty, TypeBase (..))
 import Prelude hiding (lookup)
 
 data IdentProp

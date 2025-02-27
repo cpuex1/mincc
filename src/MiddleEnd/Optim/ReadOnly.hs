@@ -22,7 +22,7 @@ import Syntax (
     TypedState (TypedState),
     dummyLoc,
  )
-import Typing (TypeKind (TArray))
+import Typing (TypeBase (TArray))
 import Prelude hiding (lookup)
 
 data ArrayContext = ArrayContext

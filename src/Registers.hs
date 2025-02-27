@@ -50,7 +50,7 @@ import Data.Map (Map, fromList, lookup, toList)
 import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 import Display (Display (display))
-import Typing (Ty, TypeKind (TFloat, TUnit))
+import Typing (Ty, TypeBase (..))
 import Prelude hiding (lookup)
 
 type RegID = Int

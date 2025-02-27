@@ -17,7 +17,7 @@ import Data.Text (Text, pack)
 import Display (Display, display)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (IdentProp), asConstant, getTyOf, registerProp)
 import Syntax (Expr (App, ArrayCreate, If, Let, Loop, Tuple), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PUnit, PVar), TypedState (TypedState), dummyLoc, subst)
-import Typing (Ty, TypeKind (TUnit))
+import Typing (Ty, TypeBase (TUnit))
 import Prelude hiding (lookup)
 
 data GlobalProp = GlobalProp

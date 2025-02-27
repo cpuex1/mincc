@@ -6,7 +6,7 @@ import Control.Monad (unless)
 import Control.Monad.State (MonadTrans (lift), State, StateT (runStateT), execState, get, gets, modify)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar, getTyOf, identState)
 import Syntax
-import Typing (TypeKind (TUnit))
+import Typing (TypeBase (TUnit))
 
 newtype ClosureEnv = ClosureEnv
     { functions :: [Function]
