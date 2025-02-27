@@ -161,8 +161,8 @@ getFunctions expr = do
     (expr', funcList) <- runStateT (genFunctions expr) (ClosureEnv [])
     pure $ Function (getExprState expr') True (Entry dummyLoc) [] [] expr' : functions funcList
 
-dummyState :: TypedState
-dummyState = TypedState TUnit dummyLoc
+dummyState :: PTypedState
+dummyState = TState TUnit dummyLoc
 
 dummyExpr :: ClosureExpr
 dummyExpr = Const dummyState LUnit

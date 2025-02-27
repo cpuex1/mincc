@@ -78,7 +78,7 @@ import Syntax (
     Literal (LBool, LFloat, LInt, LUnit),
     Pattern (PRec, PTuple, PUnit, PVar),
     RelationBinOp (Eq, Ne),
-    TypedState (getLoc, getType),
+    TState (getLoc, getType),
     UnaryOp (FNeg, Neg, Not),
     dummyLoc,
     getExprState,

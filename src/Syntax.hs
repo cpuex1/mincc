@@ -10,6 +10,7 @@
 module Syntax (
     Literal (LUnit, LBool, LInt, LFloat),
     getLiteralType,
+    getLiteralPType,
     UnaryOp (Not, Neg, FNeg),
     RelationBinOp (Eq, Ne, Lt, Ge),
     negateRelation,
@@ -20,7 +21,9 @@ module Syntax (
     Pattern (PUnit, PVar, PRec, PTuple),
     Cond (..),
     RawIdent (RawIdent),
-    TypedState (TypedState, getType, getLoc),
+    TState (TState, getType, getLoc),
+    TypedState,
+    PTypedState,
     fromSourcePos,
     identLoc,
     Loc (Loc, locFileName, locLine, locColumn),
@@ -44,7 +47,7 @@ import Data.Text (Text, intercalate, pack, unwords)
 import Display (Display (display), DisplayI (displayI), insertIndent)
 import Numeric (showFFloat)
 import Text.Megaparsec.Pos (SourcePos, sourceColumn, sourceLine, sourceName, unPos)
-import Typing (Ty, TypeBase (..))
+import Typing (PTy, Ty, TypeBase (..))
 import Prelude hiding (unwords)
 
 data Literal
@@ -66,6 +69,12 @@ getLiteralType LUnit = TUnit
 getLiteralType (LBool _) = TBool
 getLiteralType (LInt _) = TInt
 getLiteralType (LFloat _) = TFloat
+
+getLiteralPType :: Literal -> PTy
+getLiteralPType LUnit = TUnit
+getLiteralPType (LBool _) = TInt
+getLiteralPType (LInt _) = TInt
+getLiteralPType (LFloat _) = TFloat
 
 data UnaryOp
     = Not
@@ -191,14 +200,21 @@ fromSourcePos pos = Loc (pack (sourceName pos)) (unPos (sourceLine pos)) (unPos 
 dummyLoc :: Loc
 dummyLoc = Loc "__dummy" 0 0
 
-data TypedState = TypedState {getType :: Ty, getLoc :: Loc}
+-- | A state that holds the type and the location.
+data TState ty = TState
+    { getType :: ty
+    , getLoc :: Loc
+    }
     deriving (Show, Eq, Ord)
 
-instance Display TypedState where
-    display (TypedState ty _) = ": " <> display ty
+instance (Display ty) => Display (TState ty) where
+    display (TState ty _) = ": " <> display ty
+
+type TypedState = TState Ty
+type PTypedState = TState PTy
 
 data Function = Function
-    { funcState :: TypedState
+    { funcState :: PTypedState
     , isDirect :: Bool
     , funcName :: Ident
     , freeVars :: [Ident]
@@ -279,7 +295,7 @@ type TypedExpr = Expr TypedExprKind
 data KExprKind
 
 instance ExprKind KExprKind where
-    type StateTy KExprKind = TypedState
+    type StateTy KExprKind = PTypedState
     type IdentTy KExprKind = Ident
     type OperandTy KExprKind = Ident
     type AllowBranch KExprKind = True
@@ -292,7 +308,7 @@ type KExpr = Expr KExprKind
 data ClosureExprKind
 
 instance ExprKind ClosureExprKind where
-    type StateTy ClosureExprKind = TypedState
+    type StateTy ClosureExprKind = PTypedState
     type IdentTy ClosureExprKind = Ident
     type OperandTy ClosureExprKind = Ident
     type AllowBranch ClosureExprKind = True

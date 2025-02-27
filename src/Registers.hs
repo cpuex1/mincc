@@ -50,7 +50,7 @@ import Data.Map (Map, fromList, lookup, toList)
 import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 import Display (Display (display))
-import Typing (Ty, TypeBase (..))
+import Typing (PTy, TypeBase (..))
 import Prelude hiding (lookup)
 
 type RegID = Int
@@ -69,7 +69,7 @@ instance Display (RegType a) where
     display RFloat = "float"
 
 -- | Execute a function with a register type corresponding to the type given.
-withRegType :: Ty -> (forall a. Maybe (RegType a) -> b) -> b
+withRegType :: PTy -> (forall a. Maybe (RegType a) -> b) -> b
 withRegType TUnit f = f Nothing
 withRegType TFloat f = f (Just RFloat)
 withRegType _ f = f (Just RInt)

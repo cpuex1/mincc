@@ -16,13 +16,22 @@ import Data.Map (Map, elems, empty, insert, lookup)
 import Data.Text (Text, pack)
 import Display (Display, display)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, IdentProp (IdentProp), asConstant, getTyOf, registerProp)
-import Syntax (Expr (App, ArrayCreate, If, Let, Loop, Tuple), Ident (ExternalIdent), KExpr, Literal (LInt), Pattern (PUnit, PVar), TypedState (TypedState), dummyLoc, subst)
-import Typing (Ty, TypeBase (TUnit))
+import Syntax (
+    Expr (App, ArrayCreate, If, Let, Loop, Tuple),
+    Ident (ExternalIdent),
+    KExpr,
+    Literal (LInt),
+    Pattern (PUnit, PVar),
+    TState (TState),
+    dummyLoc,
+    subst,
+ )
+import Typing (PTy, TypeBase (TUnit))
 import Prelude hiding (lookup)
 
 data GlobalProp = GlobalProp
     { globalName :: Text
-    , globalType :: Ty
+    , globalType :: PTy
     , globalSize :: Int
     , globalOffset :: Int
     }
@@ -44,7 +53,7 @@ startGlobalTableAddr = 0x40
 defaultGlobalTable :: GlobalTable
 defaultGlobalTable = GlobalTable empty startGlobalTableAddr startGlobalTableAddr
 
-addGlobalTable :: (Monad m) => Text -> Ty -> Int -> GlobalState m ()
+addGlobalTable :: (Monad m) => Text -> PTy -> Int -> GlobalState m ()
 addGlobalTable name ty size = do
     offset <- gets endAddr
     let prop = GlobalProp name ty size offset
@@ -90,7 +99,7 @@ extractGlobals (Let state1 (PVar v) (Tuple _ values) body) = do
     let body' = subst v newV body
 
     -- Replace it with builtin_mk_tuple.
-    let makingTuple = App (TypedState TUnit dummyLoc) builtinMakeTuple (newV : values)
+    let makingTuple = App (TState TUnit dummyLoc) builtinMakeTuple (newV : values)
     extractGlobals $ Let state1 PUnit makingTuple body'
 extractGlobals (Let state pattern expr body) = do
     -- Do not search for globals in the expression of let.

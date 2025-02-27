@@ -19,7 +19,7 @@ import Syntax (
     KExpr,
     Literal (LInt, LUnit),
     Pattern (PRec, PTuple, PVar),
-    TypedState (TypedState),
+    TState (TState),
     dummyLoc,
  )
 import Typing (TypeBase (TArray))
@@ -157,7 +157,7 @@ replaceReadOnly mapping inst@(Put state arr idx val) = do
             case lookup (arr, idx') mapping of
                 Just var -> do
                     vTy <- lift $ getTyOf val
-                    pure $ Let state (PVar var) (Var (TypedState vTy dummyLoc) val) (Const state LUnit)
+                    pure $ Let state (PVar var) (Var (TState vTy dummyLoc) val) (Const state LUnit)
                 Nothing -> pure inst
         _ -> pure inst
 replaceReadOnly mapping (If state cond thenExpr elseExpr) = do

@@ -19,10 +19,10 @@ import Syntax (
     KExpr,
     Loc,
     Pattern (PRec, PTuple, PUnit, PVar),
-    TypedState (TypedState, getType),
+    TState (TState, getType),
     UnaryOp (FNeg, Neg, Not),
     getExprState,
-    getLiteralType,
+    getLiteralPType,
  )
 import Typing (TypeBase (..))
 
@@ -38,7 +38,7 @@ validateFlatten :: (Monad m) => KExpr -> Validator m ()
 validateFlatten (Let _ (PRec _ _) expr body) = do
     validateFlatten expr
     validateFlatten body
-validateFlatten (Let (TypedState _ loc) _ (Let{}) _) = do
+validateFlatten (Let (TState _ loc) _ (Let{}) _) = do
     throwError $ AssertionError loc "The expression is not flatten."
 validateFlatten (Let _ _ expr body) = do
     validateFlatten expr
@@ -58,28 +58,28 @@ check loc expected actual msg = do
                 "Expected " <> display expected <> " but got " <> display actual <> " (info: " <> msg <> ")"
 
 validateType :: (Monad m) => KExpr -> Validator m ()
-validateType (Const (TypedState ty loc) lit) =
+validateType (Const (TState ty loc) lit) =
     check loc ty litTy "const"
   where
-    litTy = getLiteralType lit
-validateType (Unary (TypedState ty loc) op operand) = do
+    litTy = getLiteralPType lit
+validateType (Unary (TState ty loc) op operand) = do
     operandTy <- lift $ getTyOf operand
     case op of
         Not -> do
-            check loc TBool ty "unary not1"
-            check loc TBool operandTy "unary not2"
+            check loc TInt ty "unary not1"
+            check loc TInt operandTy "unary not2"
         Neg -> do
             check loc TInt ty "unary neg1"
             check loc TInt operandTy "unary neg2"
         FNeg -> do
             check loc TFloat ty "unary fneg1"
             check loc TFloat operandTy "unary fneg2"
-validateType (Binary (TypedState ty loc) op lhs rhs) = do
+validateType (Binary (TState ty loc) op lhs rhs) = do
     lhsTy <- lift $ getTyOf lhs
     rhsTy <- lift $ getTyOf rhs
     case op of
         RelationOp _ -> do
-            check loc TBool ty "binary relation1"
+            check loc TInt ty "binary relation1"
             check loc lhsTy rhsTy "binary relation2"
         IntOp _ -> do
             check loc TInt ty "binary int1"
@@ -89,7 +89,7 @@ validateType (Binary (TypedState ty loc) op lhs rhs) = do
             check loc TFloat ty "binary float1"
             check loc TFloat lhsTy "binary float2"
             check loc TFloat rhsTy "binary float3"
-validateType (If (TypedState ty loc) cond lhs rhs) = do
+validateType (If (TState ty loc) cond lhs rhs) = do
     validateCond cond
     validateType lhs
     validateType rhs
@@ -102,15 +102,15 @@ validateType (If (TypedState ty loc) cond lhs rhs) = do
     validateCond :: (Monad m) => Cond Ident True -> Validator m ()
     validateCond (CIdentity ident) = do
         identTy <- lift $ getTyOf ident
-        check loc TBool identTy "if3"
+        check loc TInt identTy "if3"
     validateCond (CNeg ident) = do
         identTy <- lift $ getTyOf ident
-        check loc TBool identTy "if4"
+        check loc TInt identTy "if4"
     validateCond (CComp _ lhs' rhs') = do
         lhsTy' <- lift $ getTyOf lhs'
         rhsTy' <- lift $ getTyOf rhs'
         check loc lhsTy' rhsTy' "if5"
-validateType (Let (TypedState ty loc) PUnit expr body) = do
+validateType (Let (TState ty loc) PUnit expr body) = do
     check loc TUnit exprTy "let unit1"
     check loc ty bodyTy "let unit2"
     validateType expr
@@ -118,7 +118,7 @@ validateType (Let (TypedState ty loc) PUnit expr body) = do
   where
     exprTy = getType $ getExprState expr
     bodyTy = getType $ getExprState body
-validateType (Let (TypedState ty loc) (PVar v) expr body) = do
+validateType (Let (TState ty loc) (PVar v) expr body) = do
     vTy <- lift $ getTyOf v
     check loc vTy exprTy "let var1"
     check loc ty bodyTy "let var2"
@@ -127,7 +127,7 @@ validateType (Let (TypedState ty loc) (PVar v) expr body) = do
   where
     exprTy = getType $ getExprState expr
     bodyTy = getType $ getExprState body
-validateType (Let (TypedState ty loc) (PTuple vals) expr body) = do
+validateType (Let (TState ty loc) (PTuple vals) expr body) = do
     vTy <- lift $ TTuple <$> mapM getTyOf vals
     check loc vTy exprTy "let tuple1"
     check loc ty bodyTy "let tuple2"
@@ -136,7 +136,7 @@ validateType (Let (TypedState ty loc) (PTuple vals) expr body) = do
   where
     exprTy = getType $ getExprState expr
     bodyTy = getType $ getExprState body
-validateType (Let (TypedState ty loc) (PRec func args) expr body) = do
+validateType (Let (TState ty loc) (PRec func args) expr body) = do
     funcTy <- lift $ getTyOf func
     funcTy' <- lift $ flip TFun exprTy <$> mapM getTyOf args
     check loc funcTy funcTy' "let rec1"
@@ -146,34 +146,34 @@ validateType (Let (TypedState ty loc) (PRec func args) expr body) = do
   where
     exprTy = getType $ getExprState expr
     bodyTy = getType $ getExprState body
-validateType (Var (TypedState ty loc) v) = do
+validateType (Var (TState ty loc) v) = do
     vTy <- lift $ getTyOf v
     check loc ty vTy "var"
-validateType (App (TypedState ty loc) func args) = do
+validateType (App (TState ty loc) func args) = do
     funcTy <- lift $ getTyOf func
     funcTy' <- lift $ flip TFun ty <$> mapM getTyOf args
     check loc funcTy funcTy' "app"
-validateType (Tuple (TypedState ty loc) vals) = do
+validateType (Tuple (TState ty loc) vals) = do
     vTy <- lift $ TTuple <$> mapM getTyOf vals
     check loc ty vTy "tuple"
-validateType (ArrayCreate (TypedState ty loc) size val) = do
+validateType (ArrayCreate (TState ty loc) size val) = do
     sizeTy <- lift $ getTyOf size
     arrTy <- lift $ TArray <$> getTyOf val
     check loc TInt sizeTy "array create1"
     check loc ty arrTy "array create2"
-validateType (Get (TypedState ty loc) arr idx) = do
+validateType (Get (TState ty loc) arr idx) = do
     arrTy <- lift $ getTyOf arr
     idxTy <- lift $ getTyOf idx
     check loc (TArray ty) arrTy "get1"
     check loc TInt idxTy "get2"
-validateType (Put (TypedState ty loc) arr idx val) = do
+validateType (Put (TState ty loc) arr idx val) = do
     arrTy <- lift $ getTyOf arr
     idxTy <- lift $ getTyOf idx
     valTy <- lift $ getTyOf val
     check loc TUnit ty "put1"
     check loc TInt idxTy "put2"
     check loc arrTy (TArray valTy) "put3"
-validateType (Loop (TypedState ty loc) args values body) = do
+validateType (Loop (TState ty loc) args values body) = do
     argsTy <- lift $ mapM getTyOf args
     valuesTy <- lift $ mapM getTyOf values
     check loc (length argsTy) (length valuesTy) "loop1"

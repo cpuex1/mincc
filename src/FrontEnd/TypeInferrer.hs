@@ -142,7 +142,7 @@ applyEnvE expr = do
     visitExprM fState pure applyEnvE expr
   where
     fState :: (ITy, Loc) -> TypingM TypedState
-    fState (ty, pos) = applyEnv ty >>= \ty' -> return (TypedState ty' pos)
+    fState (ty, pos) = applyEnv ty >>= \ty' -> return (TState ty' pos)
 
 occurCheck :: TypeId -> ITy -> TypingM ()
 occurCheck _ TUnit = pure ()

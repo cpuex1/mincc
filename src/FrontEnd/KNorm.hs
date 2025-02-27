@@ -6,6 +6,7 @@ module FrontEnd.KNorm (
 
 import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar)
 import Syntax
+import Typing (removeBoolTy)
 
 -- | Insert a let expression to a tail of the K-normalized expression.
 insertLet :: (Monad m) => KExpr -> (Ident -> IdentEnvT m KExpr) -> IdentEnvT m KExpr
@@ -23,62 +24,65 @@ insertLetAll = insertLetAll' []
     insertLetAll' idents (e : exprs) genBody = do
         insertLet e (\ident -> insertLetAll' (idents ++ [ident]) exprs genBody)
 
+{- | Converts an expression to a K-normalized expression.
+This function also marks bool-typed variables as int-typed ones.
+-}
 kNormalize :: (Monad m) => TypedExpr -> IdentEnvT m KExpr
-kNormalize (Const s lit) = pure (Const s lit)
-kNormalize (Unary s op expr) = do
+kNormalize (Const (TState ty loc) lit) = pure (Const (TState (removeBoolTy ty) loc) lit)
+kNormalize (Unary (TState ty loc) op expr) = do
     expr' <- kNormalize expr
-    insertLet expr' (pure . Unary s op)
-kNormalize (Binary s op lhs rhs) = do
+    insertLet expr' (pure . Unary (TState (removeBoolTy ty) loc) op)
+kNormalize (Binary (TState ty loc) op lhs rhs) = do
     lhs' <- kNormalize lhs
     rhs' <- kNormalize rhs
     insertLet
         lhs'
         ( \ident ->
-            insertLet rhs' (pure . Binary s op ident)
+            insertLet rhs' (pure . Binary (TState (removeBoolTy ty) loc) op ident)
         )
-kNormalize (If s (CIdentity cond) thenE elseE) = do
+kNormalize (If (TState ty loc) (CIdentity cond) thenE elseE) = do
     cond' <- kNormalize cond
     insertLet
         cond'
         ( \ident -> do
             thenE' <- kNormalize thenE
             elseE' <- kNormalize elseE
-            pure $ If s (CIdentity ident) thenE' elseE'
+            pure $ If (TState (removeBoolTy ty) loc) (CIdentity ident) thenE' elseE'
         )
-kNormalize (Let s pat value body) = do
+kNormalize (Let (TState ty loc) pat value body) = do
     value' <- kNormalize value
     body' <- kNormalize body
-    pure $ Let s pat value' body'
-kNormalize (Var s v) = do
-    pure $ Var s v
-kNormalize (App s func args) = do
+    pure $ Let (TState (removeBoolTy ty) loc) pat value' body'
+kNormalize (Var (TState ty loc) v) = do
+    pure $ Var (TState (removeBoolTy ty) loc) v
+kNormalize (App (TState ty loc) func args) = do
     func' <- kNormalize func
     args' <- mapM kNormalize args
     insertLet
         func'
         ( \fIdent ->
-            insertLetAll args' (pure . App s fIdent)
+            insertLetAll args' (pure . App (TState (removeBoolTy ty) loc) fIdent)
         )
-kNormalize (Tuple s values) = do
+kNormalize (Tuple (TState ty loc) values) = do
     values' <- mapM kNormalize values
-    insertLetAll values' (pure . Tuple s)
-kNormalize (ArrayCreate s size value) = do
+    insertLetAll values' (pure . Tuple (TState (removeBoolTy ty) loc))
+kNormalize (ArrayCreate (TState ty loc) size value) = do
     size' <- kNormalize size
     value' <- kNormalize value
     insertLet
         size'
         ( \sizeI ->
-            insertLet value' (pure . ArrayCreate s sizeI)
+            insertLet value' (pure . ArrayCreate (TState (removeBoolTy ty) loc) sizeI)
         )
-kNormalize (Get s array index) = do
+kNormalize (Get (TState ty loc) array index) = do
     array' <- kNormalize array
     index' <- kNormalize index
     insertLet
         array'
         ( \arrayI ->
-            insertLet index' (pure . Get s arrayI)
+            insertLet index' (pure . Get (TState (removeBoolTy ty) loc) arrayI)
         )
-kNormalize (Put s array index value) = do
+kNormalize (Put (TState ty loc) array index value) = do
     array' <- kNormalize array
     index' <- kNormalize index
     value' <- kNormalize value
@@ -88,6 +92,6 @@ kNormalize (Put s array index value) = do
             insertLet
                 index'
                 ( \indexI ->
-                    insertLet value' (pure . Put s arrayI indexI)
+                    insertLet value' (pure . Put (TState (removeBoolTy ty) loc) arrayI indexI)
                 )
         )

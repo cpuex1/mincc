@@ -12,6 +12,7 @@ module Typing (
     PTy,
     TypeBase (..),
     weakenTy,
+    removeBoolTy,
 ) where
 
 import Data.Text (intercalate, pack)
@@ -90,3 +91,13 @@ weakenTy TFloat = TFloat
 weakenTy (TFun args ret) = TFun (map weakenTy args) (weakenTy ret)
 weakenTy (TTuple vals) = TTuple (map weakenTy vals)
 weakenTy (TArray array) = TArray (weakenTy array)
+
+-- | Regards bool as int.
+removeBoolTy :: Ty -> PTy
+removeBoolTy TBool = TInt
+removeBoolTy TUnit = TUnit
+removeBoolTy TInt = TInt
+removeBoolTy TFloat = TFloat
+removeBoolTy (TFun args ret) = TFun (map removeBoolTy args) (removeBoolTy ret)
+removeBoolTy (TTuple vals) = TTuple (map removeBoolTy vals)
+removeBoolTy (TArray array) = TArray (removeBoolTy array)
