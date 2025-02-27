@@ -58,6 +58,9 @@ fromIntBinOp Add = PAdd
 fromIntBinOp Sub = PSub
 fromIntBinOp Mul = PMul
 fromIntBinOp Div = PDiv
+fromIntBinOp And = PAnd
+fromIntBinOp Or = POr
+fromIntBinOp Xor = PXor
 
 class InstKind ty where
     type InstStateTy ty :: Type

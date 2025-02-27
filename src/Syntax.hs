@@ -16,7 +16,7 @@ module Syntax (
     UnaryOp (Not, Neg, FNeg),
     RelationBinOp (Eq, Ne, Lt, Ge),
     negateRelation,
-    IntBinOp (Add, Sub, Mul, Div),
+    IntBinOp (..),
     FloatBinOp (FAdd, FSub, FMul, FDiv),
     BinaryOp (RelationOp, IntOp, FloatOp),
     Ident (Entry, UserDefined, CompilerGenerated, ExternalIdent),
@@ -98,7 +98,7 @@ instance Display UnaryOp where
     display FNeg = "-."
 
 data RelationBinOp = Eq | Ne | Lt | Ge deriving (Show, Eq, Ord)
-data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq, Ord)
+data IntBinOp = Add | Sub | Mul | Div | And | Or | Xor deriving (Show, Eq, Ord)
 data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq, Ord)
 
 negateRelation :: RelationBinOp -> RelationBinOp
@@ -122,6 +122,9 @@ instance Display BinaryOp where
     display (IntOp Sub) = "-"
     display (IntOp Mul) = "*"
     display (IntOp Div) = "/"
+    display (IntOp And) = "&"
+    display (IntOp Or) = "|"
+    display (IntOp Xor) = "^"
     display (FloatOp FAdd) = "+."
     display (FloatOp FSub) = "-."
     display (FloatOp FMul) = "*."

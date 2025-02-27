@@ -11,7 +11,7 @@ import Syntax (
     Cond (CComp, CIdentity, CNeg),
     Expr (..),
     FloatBinOp (FAdd, FDiv, FMul, FSub),
-    IntBinOp (Add, Div, Mul, Sub),
+    IntBinOp (..),
     KExpr,
     Literal (LFloat, LInt),
     RelationBinOp (Eq, Ge, Lt, Ne),
@@ -66,6 +66,9 @@ constFold (Binary state (IntOp op) lhs rhs) = do
     performOp Sub lhs' rhs' = lhs' - rhs'
     performOp Mul lhs' rhs' = lhs' * rhs'
     performOp Div lhs' rhs' = lhs' `div` rhs'
+    performOp And lhs' rhs' = if lhs' == 1 && rhs' == 1 then 1 else 0
+    performOp Or lhs' rhs' = if lhs' == 1 || rhs' == 1 then 1 else 0
+    performOp Xor lhs' rhs' = if lhs' /= rhs' then 1 else 0
 constFold (Binary state (FloatOp op) lhs rhs) = pure $ Binary state (FloatOp op) lhs rhs
 constFold (If state (CIdentity cond) t f) = do
     cond' <- lift $ asConstant cond
