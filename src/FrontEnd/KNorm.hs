@@ -28,7 +28,10 @@ insertLetAll = insertLetAll' []
 This function also marks bool-typed variables as int-typed ones.
 -}
 kNormalize :: (Monad m) => TypedExpr -> IdentEnvT m KExpr
-kNormalize (Const (TState ty loc) lit) = pure (Const (TState (removeBoolTy ty) loc) lit)
+kNormalize (Const (TState ty loc) LUnit) = pure (Const (TState (removeBoolTy ty) loc) LUnit)
+kNormalize (Const (TState ty loc) (LBool b)) = pure (Const (TState (removeBoolTy ty) loc) (LInt $ if b then 1 else 0))
+kNormalize (Const (TState ty loc) (LInt i)) = pure (Const (TState (removeBoolTy ty) loc) (LInt i))
+kNormalize (Const (TState ty loc) (LFloat f)) = pure (Const (TState (removeBoolTy ty) loc) (LFloat f))
 kNormalize (Unary (TState ty loc) op expr) = do
     expr' <- kNormalize expr
     insertLet expr' (pure . Unary (TState (removeBoolTy ty) loc) op)

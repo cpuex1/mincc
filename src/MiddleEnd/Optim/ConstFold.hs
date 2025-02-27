@@ -13,7 +13,7 @@ import Syntax (
     FloatBinOp (FAdd, FDiv, FMul, FSub),
     IntBinOp (Add, Div, Mul, Sub),
     KExpr,
-    Literal (LBool, LFloat, LInt),
+    Literal (LFloat, LInt),
     RelationBinOp (Eq, Ge, Lt, Ne),
     UnaryOp (FNeg, Neg, Not),
  )
@@ -32,8 +32,8 @@ constFold (Const state lit) = pure $ Const state lit
 constFold (Unary state Not ident) = do
     c <- lift $ asConstant ident
     case c of
-        Just (LBool b) ->
-            pure $ Const state (LBool $ not b)
+        Just (LInt b) ->
+            pure $ Const state (LInt $ 1 - b)
         _ ->
             pure $ Unary state Not ident
 constFold (Unary state Neg ident) = do
@@ -49,7 +49,7 @@ constFold (Binary state (RelationOp op) lhs rhs) = do
     rhs' <- lift $ asConstant rhs
     case (lhs', rhs') of
         (Just (LInt lhs''), Just (LInt rhs'')) ->
-            pure $ Const state (LBool $ performRelationOp op lhs'' rhs'')
+            pure $ Const state (LInt $ if performRelationOp op lhs'' rhs'' then 1 else 0)
         _ ->
             pure $ Binary state (RelationOp op) lhs rhs
 constFold (Binary state (IntOp op) lhs rhs) = do
@@ -70,8 +70,8 @@ constFold (Binary state (FloatOp op) lhs rhs) = pure $ Binary state (FloatOp op)
 constFold (If state (CIdentity cond) t f) = do
     cond' <- lift $ asConstant cond
     case cond' of
-        Just (LBool True) -> constFold t
-        Just (LBool False) -> constFold f
+        Just (LInt 1) -> constFold t
+        Just (LInt 0) -> constFold f
         _ -> do
             t' <- constFold t
             f' <- constFold f
@@ -79,8 +79,8 @@ constFold (If state (CIdentity cond) t f) = do
 constFold (If state (CNeg cond) t f) = do
     cond' <- lift $ asConstant cond
     case cond' of
-        Just (LBool True) -> constFold f
-        Just (LBool False) -> constFold t
+        Just (LInt 1) -> constFold f
+        Just (LInt 0) -> constFold t
         _ -> do
             t' <- constFold t
             f' <- constFold f
@@ -133,7 +133,7 @@ constFoldFloat (Binary state (RelationOp op) lhs rhs) = do
     rhs' <- lift $ asConstant rhs
     case (lhs', rhs') of
         (Just (LFloat lhs''), Just (LFloat rhs'')) ->
-            pure $ Const state (LBool $ performRelationOp op lhs'' rhs'')
+            pure $ Const state (LInt $ if performRelationOp op lhs'' rhs'' then 1 else 0)
         _ ->
             pure $ Binary state (RelationOp op) lhs rhs
 constFoldFloat (Binary state (IntOp op) lhs rhs) = pure $ Binary state (IntOp op) lhs rhs

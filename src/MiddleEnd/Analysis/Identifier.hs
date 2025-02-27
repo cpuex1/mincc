@@ -29,7 +29,7 @@ import Prelude hiding (lookup)
 data IdentProp
     = IdentProp
     { typeOf :: PTy
-    , constant :: Maybe Literal
+    , constant :: Maybe PLiteral
     , isClosure :: Bool
     , containsLoop :: Maybe Bool
     }
@@ -75,7 +75,7 @@ getTyOf ident = do
         Nothing -> pure TUnit
 
 -- | Try to get the constant value of an identifier.
-asConstant :: (Monad m) => Ident -> IdentEnvT m (Maybe Literal)
+asConstant :: (Monad m) => Ident -> IdentEnvT m (Maybe PLiteral)
 asConstant ident = do
     found <- searchProp ident
     case found of
