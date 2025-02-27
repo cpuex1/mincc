@@ -23,13 +23,13 @@ import Data.Text (Text, pack)
 import Display (display)
 import FrontEnd.TypeInferrer (TypeEnv (variables), removeVar)
 import Syntax
-import Typing (Ty, TypeKind (TUnit, TVar))
+import Typing (PTy, TypeBase (..), removeBoolTy)
 import Prelude hiding (lookup)
 
 data IdentProp
     = IdentProp
-    { typeOf :: Ty
-    , constant :: Maybe Literal
+    { typeOf :: PTy
+    , constant :: Maybe PLiteral
     , isClosure :: Bool
     , containsLoop :: Maybe Bool
     }
@@ -67,7 +67,7 @@ removeProp ident =
 {- | Get the type of an identifier.
 If the identifier is not found, return `TUnit`.
 -}
-getTyOf :: (Monad m) => Ident -> IdentEnvT m Ty
+getTyOf :: (Monad m) => Ident -> IdentEnvT m PTy
 getTyOf ident = do
     found <- searchProp ident
     case found of
@@ -75,7 +75,7 @@ getTyOf ident = do
         Nothing -> pure TUnit
 
 -- | Try to get the constant value of an identifier.
-asConstant :: (Monad m) => Ident -> IdentEnvT m (Maybe Literal)
+asConstant :: (Monad m) => Ident -> IdentEnvT m (Maybe PLiteral)
 asConstant ident = do
     found <- searchProp ident
     case found of
@@ -83,10 +83,10 @@ asConstant ident = do
         Nothing -> pure Nothing
 
 -- | Get the state of an identifier.
-identState :: (Monad m) => Ident -> IdentEnvT m TypedState
+identState :: (Monad m) => Ident -> IdentEnvT m PTypedState
 identState ident = do
     ty <- getTyOf ident
-    pure $ TypedState ty $ identLoc ident
+    pure $ TState ty $ identLoc ident
 
 updateProp :: (Monad m) => Ident -> (IdentProp -> IdentProp) -> IdentEnvT m ()
 updateProp ident f =
@@ -95,7 +95,7 @@ updateProp ident f =
             { identProps = adjust f ident (identProps env)
             }
 
-genNewVar :: (Monad m) => Ty -> IdentEnvT m Ident
+genNewVar :: (Monad m) => PTy -> IdentEnvT m Ident
 genNewVar ty = do
     newIdent <- gets (CompilerGenerated . nextIdent)
     modify $ \env ->
@@ -109,7 +109,7 @@ loadTypeEnv :: (Monad m) => TypeEnv -> IdentEnvT m ()
 loadTypeEnv typeEnv = do
     mapM_
         ( \(ident, tId) ->
-            registerProp ident (IdentProp (removeVar typeEnv (TVar tId)) Nothing False Nothing)
+            registerProp ident (IdentProp (removeBoolTy $ removeVar typeEnv (TVar tId)) Nothing False Nothing)
         )
         $ toList vars
   where

@@ -6,7 +6,7 @@ import Control.Monad (unless)
 import Control.Monad.State (MonadTrans (lift), State, StateT (runStateT), execState, get, gets, modify)
 import MiddleEnd.Analysis.Identifier (IdentEnvT, genNewVar, getTyOf, identState)
 import Syntax
-import Typing (TypeKind (TUnit))
+import Typing (TypeBase (TUnit))
 
 newtype ClosureEnv = ClosureEnv
     { functions :: [Function]
@@ -161,8 +161,8 @@ getFunctions expr = do
     (expr', funcList) <- runStateT (genFunctions expr) (ClosureEnv [])
     pure $ Function (getExprState expr') True (Entry dummyLoc) [] [] expr' : functions funcList
 
-dummyState :: TypedState
-dummyState = TypedState TUnit dummyLoc
+dummyState :: PTypedState
+dummyState = TState TUnit dummyLoc
 
 dummyExpr :: ClosureExpr
 dummyExpr = Const dummyState LUnit

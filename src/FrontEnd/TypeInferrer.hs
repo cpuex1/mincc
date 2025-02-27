@@ -30,6 +30,7 @@ instance ExprKind ITypedExprKind where
     type StateTy ITypedExprKind = (ITy, Loc)
     type IdentTy ITypedExprKind = Ident
     type OperandTy ITypedExprKind = ITypedExpr
+    type AllowBool ITypedExprKind = True
     type AllowBranch ITypedExprKind = False
     type AllowLoop ITypedExprKind = False
     type AllowClosure ITypedExprKind = False
@@ -142,7 +143,7 @@ applyEnvE expr = do
     visitExprM fState pure applyEnvE expr
   where
     fState :: (ITy, Loc) -> TypingM TypedState
-    fState (ty, pos) = applyEnv ty >>= \ty' -> return (TypedState ty' pos)
+    fState (ty, pos) = applyEnv ty >>= \ty' -> return (TState ty' pos)
 
 occurCheck :: TypeId -> ITy -> TypingM ()
 occurCheck _ TUnit = pure ()

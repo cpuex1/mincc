@@ -73,7 +73,7 @@ parseKeyword word =
     lexeme $ string word >> notFollowedBy (alphaNumChar <|> char '_')
 
 -- | A literal parser
-parseLiteral :: Parser Literal
+parseLiteral :: Parser RLiteral
 parseLiteral =
     lexeme
         ( (cSymbol '(' >> cSymbol ')' >> return LUnit)

@@ -9,18 +9,23 @@
 
 module Syntax (
     Literal (LUnit, LBool, LInt, LFloat),
+    RLiteral,
+    PLiteral,
     getLiteralType,
+    getLiteralPType,
     UnaryOp (Not, Neg, FNeg),
     RelationBinOp (Eq, Ne, Lt, Ge),
     negateRelation,
-    IntBinOp (Add, Sub, Mul, Div),
+    IntBinOp (..),
     FloatBinOp (FAdd, FSub, FMul, FDiv),
     BinaryOp (RelationOp, IntOp, FloatOp),
     Ident (Entry, UserDefined, CompilerGenerated, ExternalIdent),
     Pattern (PUnit, PVar, PRec, PTuple),
     Cond (..),
     RawIdent (RawIdent),
-    TypedState (TypedState, getType, getLoc),
+    TState (TState, getType, getLoc),
+    TypedState,
+    PTypedState,
     fromSourcePos,
     identLoc,
     Loc (Loc, locFileName, locLine, locColumn),
@@ -44,28 +49,42 @@ import Data.Text (Text, intercalate, pack, unwords)
 import Display (Display (display), DisplayI (displayI), insertIndent)
 import Numeric (showFFloat)
 import Text.Megaparsec.Pos (SourcePos, sourceColumn, sourceLine, sourceName, unPos)
-import Typing (Ty, TypeKind (TBool, TFloat, TInt, TUnit))
+import Typing (PTy, Ty, TypeBase (..))
 import Prelude hiding (unwords)
 
-data Literal
-    = LUnit
-    | LBool Bool
-    | LInt Int
-    | LFloat Float
-    deriving (Show, Eq, Ord)
+data Literal allowBool where
+    LUnit :: Literal allowBool
+    LBool :: Bool -> Literal True
+    LInt :: Int -> Literal allowBool
+    LFloat :: Float -> Literal allowBool
 
-instance Display Literal where
+deriving instance Show (Literal allowBool)
+deriving instance Eq (Literal allowBool)
+deriving instance Ord (Literal allowBool)
+
+-- | A rich literal.
+type RLiteral = Literal True
+
+-- | A primitive literal.
+type PLiteral = Literal False
+
+instance Display (Literal allowBool) where
     display LUnit = "()"
     display (LBool True) = "true"
     display (LBool False) = "false"
     display (LInt n) = pack $ show n
     display (LFloat f) = pack $ showFFloat Nothing f ""
 
-getLiteralType :: Literal -> Ty
+getLiteralType :: RLiteral -> Ty
 getLiteralType LUnit = TUnit
 getLiteralType (LBool _) = TBool
 getLiteralType (LInt _) = TInt
 getLiteralType (LFloat _) = TFloat
+
+getLiteralPType :: PLiteral -> PTy
+getLiteralPType LUnit = TUnit
+getLiteralPType (LInt _) = TInt
+getLiteralPType (LFloat _) = TFloat
 
 data UnaryOp
     = Not
@@ -79,7 +98,7 @@ instance Display UnaryOp where
     display FNeg = "-."
 
 data RelationBinOp = Eq | Ne | Lt | Ge deriving (Show, Eq, Ord)
-data IntBinOp = Add | Sub | Mul | Div deriving (Show, Eq, Ord)
+data IntBinOp = Add | Sub | Mul | Div | And | Or | Xor deriving (Show, Eq, Ord)
 data FloatBinOp = FAdd | FSub | FMul | FDiv deriving (Show, Eq, Ord)
 
 negateRelation :: RelationBinOp -> RelationBinOp
@@ -103,6 +122,9 @@ instance Display BinaryOp where
     display (IntOp Sub) = "-"
     display (IntOp Mul) = "*"
     display (IntOp Div) = "/"
+    display (IntOp And) = "&"
+    display (IntOp Or) = "|"
+    display (IntOp Xor) = "^"
     display (FloatOp FAdd) = "+."
     display (FloatOp FSub) = "-."
     display (FloatOp FMul) = "*."
@@ -191,14 +213,21 @@ fromSourcePos pos = Loc (pack (sourceName pos)) (unPos (sourceLine pos)) (unPos 
 dummyLoc :: Loc
 dummyLoc = Loc "__dummy" 0 0
 
-data TypedState = TypedState {getType :: Ty, getLoc :: Loc}
+-- | A state that holds the type and the location.
+data TState ty = TState
+    { getType :: ty
+    , getLoc :: Loc
+    }
     deriving (Show, Eq, Ord)
 
-instance Display TypedState where
-    display (TypedState ty _) = ": " <> display ty
+instance (Display ty) => Display (TState ty) where
+    display (TState ty _) = ": " <> display ty
+
+type TypedState = TState Ty
+type PTypedState = TState PTy
 
 data Function = Function
-    { funcState :: TypedState
+    { funcState :: PTypedState
     , isDirect :: Bool
     , funcName :: Ident
     , freeVars :: [Ident]
@@ -229,6 +258,7 @@ class ExprKind ty where
     type StateTy ty :: Type
     type IdentTy ty :: Type
     type OperandTy ty :: Type
+    type AllowBool ty :: Bool
     type AllowBranch ty :: Bool
     type AllowLoop ty :: Bool
     type AllowClosure ty :: Bool
@@ -239,6 +269,7 @@ instance ExprKind ParsedExprKind where
     type StateTy ParsedExprKind = Loc
     type IdentTy ParsedExprKind = RawIdent
     type OperandTy ParsedExprKind = ParsedExpr
+    type AllowBool ParsedExprKind = True
     type AllowBranch ParsedExprKind = False
     type AllowLoop ParsedExprKind = False
     type AllowClosure ParsedExprKind = False
@@ -254,6 +285,7 @@ instance ExprKind ResolvedExprKind where
     type StateTy ResolvedExprKind = Loc
     type IdentTy ResolvedExprKind = Ident
     type OperandTy ResolvedExprKind = ResolvedExpr
+    type AllowBool ResolvedExprKind = True
     type AllowBranch ResolvedExprKind = False
     type AllowLoop ResolvedExprKind = False
     type AllowClosure ResolvedExprKind = False
@@ -269,6 +301,7 @@ instance ExprKind TypedExprKind where
     type StateTy TypedExprKind = TypedState
     type IdentTy TypedExprKind = Ident
     type OperandTy TypedExprKind = TypedExpr
+    type AllowBool TypedExprKind = True
     type AllowBranch TypedExprKind = False
     type AllowLoop TypedExprKind = False
     type AllowClosure TypedExprKind = False
@@ -279,9 +312,10 @@ type TypedExpr = Expr TypedExprKind
 data KExprKind
 
 instance ExprKind KExprKind where
-    type StateTy KExprKind = TypedState
+    type StateTy KExprKind = PTypedState
     type IdentTy KExprKind = Ident
     type OperandTy KExprKind = Ident
+    type AllowBool KExprKind = False
     type AllowBranch KExprKind = True
     type AllowLoop KExprKind = True
     type AllowClosure KExprKind = False
@@ -292,9 +326,10 @@ type KExpr = Expr KExprKind
 data ClosureExprKind
 
 instance ExprKind ClosureExprKind where
-    type StateTy ClosureExprKind = TypedState
+    type StateTy ClosureExprKind = PTypedState
     type IdentTy ClosureExprKind = Ident
     type OperandTy ClosureExprKind = Ident
+    type AllowBool ClosureExprKind = False
     type AllowBranch ClosureExprKind = True
     type AllowLoop ClosureExprKind = True
     type AllowClosure ClosureExprKind = True
@@ -306,7 +341,7 @@ type ClosureExpr = Expr ClosureExprKind
 data Expr kind where
     Const ::
         StateTy kind ->
-        Literal ->
+        Literal (AllowBool kind) ->
         Expr kind
     Unary ::
         StateTy kind ->
@@ -548,6 +583,7 @@ subst before after expr =
 
 visitExprM ::
     ( Monad m
+    , AllowBool a ~ AllowBool b
     , AllowBranch a ~ AllowBranch b
     , AllowLoop a ~ AllowLoop b
     , AllowClosure a ~ AllowClosure b

@@ -14,7 +14,7 @@ import Syntax (
     Ident,
     KExpr,
     Pattern (PRec, PVar),
-    TypedState (TypedState, getLoc),
+    TState (TState, getLoc),
     getExprState,
  )
 import Prelude hiding (lookup)
@@ -84,7 +84,7 @@ commonSElim expr = do
         Just v -> do
             -- The expression is already bounded.
             ty <- lift $ lift $ getTyOf v
-            pure $ Var (TypedState ty loc) v
+            pure $ Var (TState ty loc) v
         Nothing ->
             -- The expression has not been appeared yet.
             pure expr

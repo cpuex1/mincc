@@ -12,6 +12,7 @@ import MiddleEnd.Optim.Inlining (runInlining)
 import MiddleEnd.Optim.LoopArgsElim (removeLoopArgs)
 import MiddleEnd.Optim.LoopDetection (runReplaceWithLoops)
 import MiddleEnd.Optim.ReadOnly (removeReadOnlyArrays)
+import MiddleEnd.Optim.StripCondition (stripConditionM)
 import MiddleEnd.Optim.SwapIf (swapIfM)
 import MiddleEnd.Optim.UnusedElim (unusedElim)
 import MiddleEnd.Optim.VarMerging (mergeVars)
@@ -21,6 +22,7 @@ import Syntax (KExpr)
 data OptimKind
     = CompMerging
     | IfMerging
+    | StripCondition
     | CSE
     | VarMerging
     | ConstFold
@@ -37,6 +39,7 @@ data OptimKind
 runOptim :: (Monad m) => OptimKind -> KExpr -> OptimStateT m KExpr
 runOptim CompMerging = runMergeComp
 runOptim IfMerging = mergeIf
+runOptim StripCondition = stripConditionM
 runOptim CSE = runCSE
 runOptim VarMerging = mergeVars
 runOptim ConstFold = constFold
@@ -51,6 +54,7 @@ runOptim LoopArgsElim = removeLoopArgs
 instance Display OptimKind where
     display CompMerging = "Comparison merging"
     display IfMerging = "If expressions merging"
+    display StripCondition = "Condition stripping"
     display LoopDetection = "Loop detection"
     display CSE = "Common subexpression elimination"
     display VarMerging = "Variable merging"

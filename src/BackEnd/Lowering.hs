@@ -75,15 +75,15 @@ import Syntax (
     Function (Function, funcName),
     Ident (ExternalIdent),
     IntBinOp (Sub),
-    Literal (LBool, LFloat, LInt, LUnit),
+    Literal (LFloat, LInt, LUnit),
     Pattern (PRec, PTuple, PUnit, PVar),
     RelationBinOp (Eq, Ne),
-    TypedState (getLoc, getType),
+    TState (getLoc, getType),
     UnaryOp (FNeg, Neg, Not),
     dummyLoc,
     getExprState,
  )
-import Typing (TypeKind (TInt))
+import Typing (TypeBase (TInt))
 
 type BackendIdentState m = BackendStateT (IdentEnvT m)
 
@@ -215,8 +215,6 @@ generateInstructions _ (Const _ LUnit) =
     pure ()
 generateInstructions outReg (Const state (LInt i)) =
     addInst $ IMov (getLoc state) (outReg #!! RInt) (Imm RInt i)
-generateInstructions outReg (Const state (LBool b)) =
-    addInst $ IMov (getLoc state) (outReg #!! RInt) (Imm RInt $ if b then 1 else 0)
 generateInstructions outReg (Const state (LFloat f)) =
     addInst $ IMov (getLoc state) (outReg #!! RFloat) (Imm RFloat f)
 generateInstructions outReg (Unary state Not operand) = do

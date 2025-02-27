@@ -1,43 +1,76 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Typing (
     TypeId,
     ITy,
     Ty,
-    TypeKind (TUnit, TBool, TInt, TFloat, TFun, TTuple, TArray, TVar),
+    PTy,
+    TypeBase (..),
     weakenTy,
+    removeBoolTy,
 ) where
 
 import Data.Text (intercalate, pack)
 import Display (Display (display))
 
-data TypeNotResolved = TypeNotResolved
-    deriving (Show, Eq, Ord)
-data TypeResolved = TypeResolved
-    deriving (Show, Eq, Ord)
-
 type TypeId = Int
 
-type ITy = TypeKind TypeNotResolved
-type Ty = TypeKind TypeResolved
+class TypeKind ty where
+    type TypeResolved ty :: Bool
+    type AllowBoolType ty :: Bool
 
-data TypeKind resolvedTy where
-    TUnit :: TypeKind resolvedTy
-    TBool :: TypeKind resolvedTy
-    TInt :: TypeKind resolvedTy
-    TFloat :: TypeKind resolvedTy
-    TFun :: [TypeKind resolvedTy] -> TypeKind resolvedTy -> TypeKind resolvedTy
-    TTuple :: [TypeKind resolvedTy] -> TypeKind resolvedTy
-    TArray :: TypeKind resolvedTy -> TypeKind resolvedTy
-    TVar :: TypeId -> TypeKind TypeNotResolved
+data TyKind
 
-deriving instance (Show a) => Show (TypeKind a)
-deriving instance (Eq a) => Eq (TypeKind a)
-deriving instance (Ord a) => Ord (TypeKind a)
+instance TypeKind TyKind where
+    type TypeResolved TyKind = True
+    type AllowBoolType TyKind = True
 
-instance Display (TypeKind a) where
+-- | The type.
+type Ty = TypeBase TyKind
+
+data PTyKind
+
+instance TypeKind PTyKind where
+    type TypeResolved PTyKind = True
+    type AllowBoolType PTyKind = False
+
+-- | The primitive type.
+type PTy = TypeBase PTyKind
+
+data ITyKind
+
+instance TypeKind ITyKind where
+    type TypeResolved ITyKind = False
+    type AllowBoolType ITyKind = True
+
+-- | The intermediate type.
+type ITy = TypeBase ITyKind
+
+data TypeBase ty where
+    TUnit :: TypeBase ty
+    TBool ::
+        (AllowBoolType ty ~ True) =>
+        TypeBase ty
+    TInt :: TypeBase ty
+    TFloat :: TypeBase ty
+    TFun :: [TypeBase ty] -> TypeBase ty -> TypeBase ty
+    TTuple :: [TypeBase ty] -> TypeBase ty
+    TArray :: TypeBase ty -> TypeBase ty
+    TVar ::
+        (TypeResolved ty ~ False) =>
+        TypeId ->
+        TypeBase ty
+
+deriving instance Show (TypeBase a)
+deriving instance Eq (TypeBase a)
+deriving instance Ord (TypeBase a)
+
+instance Display (TypeBase a) where
     display TUnit = "unit"
     display TBool = "bool"
     display TInt = "int"
@@ -58,3 +91,13 @@ weakenTy TFloat = TFloat
 weakenTy (TFun args ret) = TFun (map weakenTy args) (weakenTy ret)
 weakenTy (TTuple vals) = TTuple (map weakenTy vals)
 weakenTy (TArray array) = TArray (weakenTy array)
+
+-- | Regards bool as int.
+removeBoolTy :: Ty -> PTy
+removeBoolTy TBool = TInt
+removeBoolTy TUnit = TUnit
+removeBoolTy TInt = TInt
+removeBoolTy TFloat = TFloat
+removeBoolTy (TFun args ret) = TFun (map removeBoolTy args) (removeBoolTy ret)
+removeBoolTy (TTuple vals) = TTuple (map removeBoolTy vals)
+removeBoolTy (TArray array) = TArray (removeBoolTy array)

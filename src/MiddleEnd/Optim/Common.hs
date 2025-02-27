@@ -22,7 +22,7 @@ import Syntax (
     Ident,
     KExpr,
     Pattern (PRec, PTuple, PUnit, PVar),
-    TypedState (getLoc),
+    TState (getLoc),
     dummyLoc,
     subst,
     visitExprM,
