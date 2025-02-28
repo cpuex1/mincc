@@ -6,6 +6,7 @@ module BackEnd.Optim (
     Display,
 ) where
 
+import BackEnd.Optim.ArgsReg (replaceSavedRegInGraph)
 import BackEnd.Optim.Common (BackEndOptimStateT)
 import BackEnd.Optim.EmptyBlockMerging (mergeEmptyBlockM)
 import BackEnd.Optim.Merging (mergeBlocks)
@@ -25,6 +26,7 @@ data BackEndOptimKind
     | RegMerging
     | UnusedReg
     | MulElim
+    | ArgsRegReplacement
     | UseZeroReg
     deriving (Show, Ord, Eq)
 
@@ -36,6 +38,7 @@ runBackEndOptim EmptyBlockMerging = mergeEmptyBlockM
 runBackEndOptim RegMerging = regMerging
 runBackEndOptim UnusedReg = removeUnusedReg
 runBackEndOptim MulElim = elimMul
+runBackEndOptim ArgsRegReplacement = replaceSavedRegInGraph
 runBackEndOptim UseZeroReg = replaceWithZeroReg
 
 instance Display BackEndOptimKind where
@@ -45,4 +48,5 @@ instance Display BackEndOptimKind where
     display RegMerging = "Register merging"
     display UnusedReg = "Remove unused registers"
     display MulElim = "Multiply elimination"
+    display ArgsRegReplacement = "Replace saved registers with argument registers"
     display UseZeroReg = "Replace registers with zero registers"

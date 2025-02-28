@@ -38,6 +38,7 @@ library
       BackEnd.Liveness
       BackEnd.Lowering
       BackEnd.Optim
+      BackEnd.Optim.ArgsReg
       BackEnd.Optim.Common
       BackEnd.Optim.EmptyBlockMerging
       BackEnd.Optim.Merging

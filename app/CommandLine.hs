@@ -302,4 +302,5 @@ toCompilerConfig arg = do
             . insert RegMerging
             . insert UnusedReg
             . insert UseZeroReg
+            . insert ArgsRegReplacement
             $ mempty
