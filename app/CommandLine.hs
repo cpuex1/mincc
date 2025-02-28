@@ -58,6 +58,7 @@ data CommandLineArg = CommandLineArg
     , recInliningSize :: Int
     , maxInlining :: Int
     , disableFloatFold :: Bool
+    , fusion :: Bool
     , optBoolOp :: Bool
     , optStripCondition :: Bool
     , optSwapIf :: Bool
@@ -133,6 +134,10 @@ parseArg =
         <*> switch
             ( long "disable-float-fold"
                 <> help "Disable constant folding for floating-point numbers"
+            )
+        <*> switch
+            ( long "fusion"
+                <> help "Enable instruction fusion"
             )
         <*> switch
             ( long "opt-bool-op"
@@ -304,4 +309,5 @@ toCompilerConfig arg = do
             . insert UseZeroReg
             . insert ArgsRegReplacement
             . insert CloneRet
+            . insertIf (fusion arg) Fusion
             $ mempty

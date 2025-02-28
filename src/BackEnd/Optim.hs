@@ -11,6 +11,7 @@ import BackEnd.Optim.ArgsRegRev (replaceSavedRegRevInGraph)
 import BackEnd.Optim.CloneRet (cloneRet)
 import BackEnd.Optim.Common (BackEndOptimStateT)
 import BackEnd.Optim.EmptyBlockMerging (mergeEmptyBlockM)
+import BackEnd.Optim.Fusion (runFusion)
 import BackEnd.Optim.Merging (mergeBlocks)
 import BackEnd.Optim.MulElim (elimMul)
 import BackEnd.Optim.RegMerging (regMerging)
@@ -31,6 +32,7 @@ data BackEndOptimKind
     | ArgsRegReplacement
     | UseZeroReg
     | CloneRet
+    | Fusion
     deriving (Show, Ord, Eq)
 
 -- | Run the optimization.
@@ -47,6 +49,7 @@ runBackEndOptim ArgsRegReplacement =
         replaceSavedRegRevInGraph graph'
 runBackEndOptim UseZeroReg = replaceWithZeroReg
 runBackEndOptim CloneRet = cloneRet
+runBackEndOptim Fusion = runFusion
 
 instance Display BackEndOptimKind where
     display Unreachable = "Remove unreachable blocks"
@@ -58,3 +61,4 @@ instance Display BackEndOptimKind where
     display ArgsRegReplacement = "Replace saved registers with argument registers"
     display UseZeroReg = "Replace registers with zero registers"
     display CloneRet = "Clone return blocks"
+    display Fusion = "Instruction fusion"

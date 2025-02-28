@@ -43,6 +43,7 @@ library
       BackEnd.Optim.CloneRet
       BackEnd.Optim.Common
       BackEnd.Optim.EmptyBlockMerging
+      BackEnd.Optim.Fusion
       BackEnd.Optim.Merging
       BackEnd.Optim.MulElim
       BackEnd.Optim.RegMerging
