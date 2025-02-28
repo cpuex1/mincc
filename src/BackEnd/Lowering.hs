@@ -39,6 +39,7 @@ import Registers (
     RegType (RFloat, RInt),
     RegVariant,
     Register (Register),
+    RegisterKind (DCReg),
     argsReg,
     buildRTM,
     dcReg,
@@ -560,7 +561,10 @@ generateInstructions outReg (DirectApp state func args) = do
                         \rTy ->
                             mapM_
                                 ( \(v, num) -> do
-                                    addInst $ IMov (getLoc state) (argsReg rTy num) (Reg v)
+                                    case v of
+                                        (Register _ DCReg) -> pure ()
+                                        _ ->
+                                            addInst $ IMov (getLoc state) (argsReg rTy num) (Reg v)
                                 )
                                 $ zip (args' #!! rTy) [0 ..]
 
