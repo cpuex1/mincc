@@ -303,4 +303,5 @@ toCompilerConfig arg = do
             . insert UnusedReg
             . insert UseZeroReg
             . insert ArgsRegReplacement
+            . insert CloneRet
             $ mempty

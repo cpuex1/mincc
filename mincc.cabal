@@ -39,6 +39,7 @@ library
       BackEnd.Lowering
       BackEnd.Optim
       BackEnd.Optim.ArgsReg
+      BackEnd.Optim.CloneRet
       BackEnd.Optim.Common
       BackEnd.Optim.EmptyBlockMerging
       BackEnd.Optim.Merging

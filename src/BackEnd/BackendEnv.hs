@@ -19,6 +19,7 @@ module BackEnd.BackendEnv (
     findRegOrImm,
     updateRegContext,
     findGlobal,
+    genFreshID,
 ) where
 
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
@@ -78,6 +79,7 @@ createBackendConfig =
 data BackendEnv = BackendEnv
     { globals :: GlobalTable
     , regContext :: RegVariant RegContext
+    , freshID :: Int
     }
     deriving (Show, Eq)
 
@@ -87,6 +89,7 @@ defaultBackendEnv table =
         { globals = table
         , regContext =
             buildRT (const defaultRegContext)
+        , freshID = 0
         }
 
 type BackendStateT m = ReaderT BackendConfig (ExceptT CompilerError (StateT BackendEnv m))
@@ -98,6 +101,15 @@ runBackendStateT s config table =
 
 liftB :: (Monad m) => m a -> BackendStateT m a
 liftB = lift . lift . lift
+
+genFreshID :: (Monad m) => BackendStateT m Int
+genFreshID = do
+    ctx <- gets freshID
+    modify $ \ctx' ->
+        ctx'
+            { freshID = ctx + 1
+            }
+    pure ctx
 
 genTempReg :: (Monad m) => RegType a -> BackendStateT m (Register a)
 genTempReg rTy = do

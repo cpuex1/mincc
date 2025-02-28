@@ -7,6 +7,7 @@ module BackEnd.Optim (
 ) where
 
 import BackEnd.Optim.ArgsReg (replaceSavedRegInGraph)
+import BackEnd.Optim.CloneRet (cloneRet)
 import BackEnd.Optim.Common (BackEndOptimStateT)
 import BackEnd.Optim.EmptyBlockMerging (mergeEmptyBlockM)
 import BackEnd.Optim.Merging (mergeBlocks)
@@ -28,6 +29,7 @@ data BackEndOptimKind
     | MulElim
     | ArgsRegReplacement
     | UseZeroReg
+    | CloneRet
     deriving (Show, Ord, Eq)
 
 -- | Run the optimization.
@@ -40,6 +42,7 @@ runBackEndOptim UnusedReg = removeUnusedReg
 runBackEndOptim MulElim = elimMul
 runBackEndOptim ArgsRegReplacement = replaceSavedRegInGraph
 runBackEndOptim UseZeroReg = replaceWithZeroReg
+runBackEndOptim CloneRet = cloneRet
 
 instance Display BackEndOptimKind where
     display Unreachable = "Remove unreachable blocks"
@@ -50,3 +53,4 @@ instance Display BackEndOptimKind where
     display MulElim = "Multiply elimination"
     display ArgsRegReplacement = "Replace saved registers with argument registers"
     display UseZeroReg = "Replace registers with zero registers"
+    display CloneRet = "Clone return blocks"
