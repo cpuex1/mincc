@@ -73,4 +73,10 @@ findMergeableReg banned defined inst@(IMov state (Register rTy (SavedReg dest)) 
                     pure Nothing
                 else
                     pure $ Just $ substIState livenessLoc inst
+findMergeableReg _ _ inst@(IMov _ reg1 (Reg reg2)) =
+    if reg1 == reg2
+        then
+            pure Nothing
+        else
+            pure $ Just $ substIState livenessLoc inst
 findMergeableReg _ _ inst = pure $ Just $ substIState livenessLoc inst

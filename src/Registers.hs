@@ -25,7 +25,6 @@ module Registers (
     Register (..),
     zeroReg,
     returnReg,
-    retReg,
     heapReg,
     stackReg,
     argsReg,
@@ -44,6 +43,7 @@ module Registers (
     coverImm,
     replaceReg,
     applyRegMapping,
+    weakMapReg,
 ) where
 
 import Data.Map (Map, fromList, lookup, toList)
@@ -183,7 +183,6 @@ instance Monoid RegList where
 data RegisterKind ty where
     ZeroReg :: RegisterKind ty
     ReturnReg :: RegisterKind Int
-    RetReg :: RegisterKind ty
     HeapReg :: RegisterKind Int
     StackReg :: RegisterKind Int
     ArgsReg :: RegID -> RegisterKind ty
@@ -211,8 +210,6 @@ instance Display (Register a) where
     display (Register RInt ZeroReg) = "zero"
     display (Register RFloat ZeroReg) = "fzero"
     display (Register _ ReturnReg) = "ra"
-    display (Register RInt RetReg) = "a0"
-    display (Register RFloat RetReg) = "fa0"
     display (Register _ HeapReg) = "hp"
     display (Register _ StackReg) = "sp"
     display (Register RInt (ArgsReg idTy)) = "a" <> pack (show idTy)
@@ -251,9 +248,6 @@ zeroReg rTy = Register rTy ZeroReg
 
 returnReg :: Register Int
 returnReg = Register RInt ReturnReg
-
-retReg :: RegType ty -> Register ty
-retReg rTy = Register rTy RetReg
 
 heapReg :: Register Int
 heapReg = Register RInt HeapReg
@@ -337,6 +331,23 @@ class RegReplaceable a where
 -- | Replace a register with another register.
 replaceReg :: (RegReplaceable a) => Register regTy -> Register regTy -> a -> a
 replaceReg before after = mapReg (substReg before after)
+
+-- | Map registers in a data structure.
+weakMapReg :: (RegReplaceable a) => RegType regTy -> (Register regTy -> Register regTy) -> a -> a
+weakMapReg RInt f =
+    mapReg
+        ( \case
+            reg@(Register RInt _) ->
+                f reg
+            reg -> reg
+        )
+weakMapReg RFloat f =
+    mapReg
+        ( \case
+            reg@(Register RFloat _) ->
+                f reg
+            reg -> reg
+        )
 
 -- | Apply a register mapping to a data structure.
 applyRegMapping :: (RegReplaceable a) => RegMultiple RegMapping -> a -> a

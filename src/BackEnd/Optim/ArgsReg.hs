@@ -4,7 +4,7 @@ module BackEnd.Optim.ArgsReg (replaceSavedRegInGraph) where
 
 import BackEnd.Optim.Common (BackEndOptimStateT)
 import CodeBlock (BlockGraph (graphBlocks), CodeBlock (terminator), VirtualBlock, VirtualBlockGraph, visitInst)
-import Control.Monad.State (MonadState (get, put), State, modify, runState)
+import Control.Monad.State (MonadState (get), State, modify, runState)
 import Data.Map (Map, fromList, insert, lookup, toList)
 import IR (Inst (..), VirtualInst)
 import Registers (
@@ -49,12 +49,15 @@ replaceSavedRegInBlock block =
     (block', state) = runState (visitInst replaceSavedRegInInst block) mempty
 
 replaceSavedRegInInst :: VirtualInst -> ArgsRegState VirtualInst
-replaceSavedRegInInst inst@(IMov _ (Register rTy (SavedReg regID)) (Reg (Register _ (ArgsReg arg)))) =
-    modify (updateRT rTy (insert regID arg)) >> pure inst
-replaceSavedRegInInst inst@(ICall{}) =
-    put mempty >> pure inst
-replaceSavedRegInInst inst@(ICallReg{}) =
-    put mempty >> pure inst
+replaceSavedRegInInst inst@(IMov _ (Register rTy (SavedReg regID)) (Reg (Register _ (ArgsReg arg)))) = do
+    modify (updateRT rTy (insert regID arg))
+    pure inst
+replaceSavedRegInInst inst@(ICall{}) = do
+    modify (const mempty)
+    pure inst
+replaceSavedRegInInst inst@(ICallReg{}) = do
+    modify (const mempty)
+    pure inst
 replaceSavedRegInInst inst@(IPhi{}) =
     pure inst
 replaceSavedRegInInst inst@(ICompOp _ _ dest _ _) = do

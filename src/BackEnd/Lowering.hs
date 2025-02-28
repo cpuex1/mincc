@@ -45,7 +45,6 @@ import Registers (
     dcReg,
     eachRegType,
     heapReg,
-    retReg,
     updateRT,
     withRegType,
     zeroReg,
@@ -575,7 +574,7 @@ generateInstructions outReg (DirectApp state func args) = do
                     withRegType (getType state) $
                         \case
                             Just rTy ->
-                                addInst $ IMov (getLoc state) (outReg #!! rTy) (Reg $ retReg rTy)
+                                addInst $ IMov (getLoc state) (outReg #!! rTy) (Reg $ argsReg rTy 0)
                             Nothing -> pure ()
 generateInstructions outReg (ClosureApp state closure args) = do
     closure' <- lift $ findReg RInt closure
@@ -600,7 +599,7 @@ generateInstructions outReg (ClosureApp state closure args) = do
     withRegType (getType state) $
         \case
             Just rTy ->
-                addInst $ IMov (getLoc state) (outReg #!! rTy) (Reg $ retReg rTy)
+                addInst $ IMov (getLoc state) (outReg #!! rTy) (Reg $ argsReg rTy 0)
             Nothing -> pure ()
 generateInstructions outReg (Loop state args values body) = do
     prevLoopLabel <- gets loopLabel
@@ -696,7 +695,7 @@ generateCodeBlock (Function _ _ _ freeVars boundedVars body) = do
                 out <- lift $ genTempReg rTy
                 generateInstructions (weakenReg out) body
 
-                addInst $ IMov dummyLoc (retReg rTy) (Reg out)
+                addInst $ IMov dummyLoc (argsReg rTy 0) (Reg out)
             Nothing ->
                 generateInstructions (createRT (dcReg RInt) (dcReg RFloat)) body
 

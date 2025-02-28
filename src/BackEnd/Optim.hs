@@ -7,6 +7,7 @@ module BackEnd.Optim (
 ) where
 
 import BackEnd.Optim.ArgsReg (replaceSavedRegInGraph)
+import BackEnd.Optim.ArgsRegRev (replaceSavedRegRevInGraph)
 import BackEnd.Optim.CloneRet (cloneRet)
 import BackEnd.Optim.Common (BackEndOptimStateT)
 import BackEnd.Optim.EmptyBlockMerging (mergeEmptyBlockM)
@@ -40,7 +41,10 @@ runBackEndOptim EmptyBlockMerging = mergeEmptyBlockM
 runBackEndOptim RegMerging = regMerging
 runBackEndOptim UnusedReg = removeUnusedReg
 runBackEndOptim MulElim = elimMul
-runBackEndOptim ArgsRegReplacement = replaceSavedRegInGraph
+runBackEndOptim ArgsRegReplacement =
+    \graph -> do
+        graph' <- replaceSavedRegInGraph graph
+        replaceSavedRegRevInGraph graph'
 runBackEndOptim UseZeroReg = replaceWithZeroReg
 runBackEndOptim CloneRet = cloneRet
 
