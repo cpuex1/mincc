@@ -220,8 +220,8 @@ instance Display (Register a) where
     display (Register RFloat (SavedReg idTy)) = "fs" <> pack (show idTy)
     display (Register RInt (GeneralReg idTy)) = "r" <> pack (show idTy)
     display (Register RFloat (GeneralReg idTy)) = "fr" <> pack (show idTy)
-    display (Register RInt DCReg) = "dc" -- Don't care
-    display (Register RFloat DCReg) = "fdc" -- Don't care
+    display (Register RInt DCReg) = "zero" -- Don't care
+    display (Register RFloat DCReg) = "fzero" -- Don't care
 
 compareReg :: Register ty1 -> Register ty2 -> Bool
 compareReg (Register RInt rKind1) (Register RInt rKind2) = rKind1 == rKind2
