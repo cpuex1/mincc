@@ -31,6 +31,9 @@ import Typing (PTy, TypeBase (..))
 -- Use List instead of Set because ordering is not defined for `KExpr -> IdentEnvT m KExpr`.
 type ArrayCreateStateT m = StateT [KExpr -> IdentEnvT m KExpr] (IdentEnvT m)
 
+constSizeLimit :: Int
+constSizeLimit = 256
+
 generateInitArrayFunc :: (Monad m) => Ident -> PTy -> KExpr -> IdentEnvT m KExpr
 generateInitArrayFunc uniqueId valTy body = do
     array <- genNewVar (TArray valTy)
@@ -84,34 +87,43 @@ expandArrayCreate expr = do
         body' <- expandArrayCreate' body
 
         size' <- lift $ asConstant size
-        case size' of
+        optimized <- case size' of
             Just (LInt constSize) -> do
-                assignment <-
-                    lift $
-                        foldM
-                            ( \child idx -> do
-                                idxVar <- genNewVar TInt
-                                pure $
-                                    Let
-                                        state1
-                                        (PVar idxVar)
-                                        (Const (TState TInt loc) (LInt idx))
-                                        ( Let
-                                            state1
-                                            PUnit
-                                            (Put (TState TUnit loc) v idxVar val)
-                                            child
-                                        )
-                            )
-                            body'
-                            [0 .. constSize - 1]
-                pure $
-                    Let
-                        state1
-                        (PVar v)
-                        (ArrayCreate (TState (TArray valTy) loc) size val)
-                        assignment
-            _ -> do
+                if constSize < constSizeLimit
+                    then do
+                        assignment <-
+                            lift $
+                                foldM
+                                    ( \child idx -> do
+                                        idxVar <- genNewVar TInt
+                                        pure $
+                                            Let
+                                                state1
+                                                (PVar idxVar)
+                                                (Const (TState TInt loc) (LInt idx))
+                                                ( Let
+                                                    state1
+                                                    PUnit
+                                                    (Put (TState TUnit loc) v idxVar val)
+                                                    child
+                                                )
+                                    )
+                                    body'
+                                    [0 .. constSize - 1]
+                        pure $
+                            Just $
+                                Let
+                                    state1
+                                    (PVar v)
+                                    (ArrayCreate (TState (TArray valTy) loc) size val)
+                                    assignment
+                    else
+                        pure Nothing
+            _ -> pure Nothing
+
+        case optimized of
+            Just expr'' -> pure expr''
+            Nothing -> do
                 let funcGen = generateInitArrayFunc uniqueId valTy
                 modify $ \ctx -> funcGen : ctx
                 zero <- lift $ genNewVar TInt

@@ -30,6 +30,12 @@ builtinFunctions =
     , BuiltinFunction (ExternalIdent "fabs") (TFun [TFloat] TFloat) "fabs"
     , BuiltinFunction (ExternalIdent "fhalf") (TFun [TFloat] TFloat) "fhalf"
     , BuiltinFunction (ExternalIdent "floor") (TFun [TFloat] TFloat) "ffloor"
+    , BuiltinFunction (ExternalIdent "p_and") (TFun [TInt, TInt] TInt) "and"
+    , BuiltinFunction (ExternalIdent "p_or") (TFun [TInt, TInt] TInt) "or"
+    , BuiltinFunction (ExternalIdent "p_xor") (TFun [TInt, TInt] TInt) "xor"
+    , BuiltinFunction (ExternalIdent "p_sll") (TFun [TInt, TInt] TInt) "sll"
+    , BuiltinFunction (ExternalIdent "p_srl") (TFun [TInt, TInt] TInt) "srl"
+    , BuiltinFunction (ExternalIdent "p_sra") (TFun [TInt, TInt] TInt) "sra"
     ]
 
 findBuiltin :: Ident -> Maybe BuiltinFunction
